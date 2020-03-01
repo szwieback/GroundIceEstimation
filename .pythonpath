@@ -1,0 +1,3 @@
+#!/bin/bash
+export PYTHONPATH=$PYTHONPATH:$PWD:$(readlink -f $PWD/../InterferometricSpeckle)
+echo "MODIFIED PYTHONPATH"
