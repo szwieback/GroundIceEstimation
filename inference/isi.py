@@ -185,7 +185,7 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6):
     assert C_obs.shape == (M, P, P)
     assert y_ref.shape[1] == P
 
-    lw = np.zeros((N, M))
+    lw = np.zeros((M, N))
     lam_isqr, U, ind = _sqr_eigen(C_obs, cond_thresh=cond_thresh, invert=True)
     C_obs_isqrT = U * lam_isqr[:, np.newaxis, :]
     logdetfac, normfac = _nondata_terms_mvnormal(lam_isqr, ind_singular=ind['singular'])
@@ -193,32 +193,11 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6):
     for n in np.arange(N):
         prod = np.einsum('mqp, mq -> mp', C_obs_isqrT, y_obs - y_ref[n, :][np.newaxis, :])
         maha = -0.5 * np.sum(prod ** 2, axis=1)
-        lw[n, :] = maha + logdetfac + normfac
+        lw[:, n] = maha + logdetfac + normfac
 
-    lw[:, ind['invalid']] = np.nan
+    lw[ind['invalid'], :] = np.nan
     return lw
 
 if __name__ == '__main__':
-    P = 11
-    M = 200
-    N = 1000
-    C_obs = np.stack([np.diag(np.arange(P) + 1) + 0.0 * np.ones((P, P))] * M, axis=0)
-    C_obs[1, 0, 0] = 1e-9
-    C_obs[2, 0, 0] = -1
-
-    y_obs = np.ones((M, P))
-    y_ref = np.zeros((N, P)) + 2
-
-    lw = lw_mvnormal(y_obs, C_obs, y_ref)
-    from scipy.stats import multivariate_normal
-
-    G = 0
-    n = 2
-
-    # check positive semidefinite: firx normfac (rank)
-    print(lw[n, G])
-    C = C_obs[G, ...]
-    lpdf = multivariate_normal.logpdf(y_obs[n, :], y_ref[G, :], C_obs[G, ...],
-                                      allow_singular=True)
-    print(lpdf)
+    pass
 

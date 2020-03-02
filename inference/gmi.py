@@ -8,7 +8,8 @@ from sklearn.mixture import BayesianGaussianMixture
 from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
-from inference.sampling import _sqr_eigen, _nondata_terms_mvnormal, invert_nonzero, sumlogs
+from inference.isi import _sqr_eigen, _nondata_terms_mvnormal
+from inference import invert_nonzero, sumlogs
 
 def fit_gaussian_mixture(
         samples, weight_concentration_prior=1e-3, random_state=None,
@@ -128,35 +129,4 @@ def posterior_gm_mvnormal(y_obs, C_obs, gm, H=None, cond_thresh=1e-6,
     return mu_p, Sigma_p, pi_p
 
 if __name__ == '__main__':
-    Q = 20
-    P = 9
-    N = 1000
-    M = 200**2
-    Sigma0 = np.eye(Q)
-
-    C_obs = np.stack([np.diag(np.arange(P) + 3) + 0.0 * np.ones((P, P))] * M, axis=0)
-    C_obs[1, 0, 0] = 1e-9
-    C_obs[2, 0, 0] = -1
-
-    sigma2s = (1.0, 3.0)
-    pis = (0.3, 0.7)
-    mus = (np.zeros(Q), 2 * np.ones(Q))
-
-    rs = np.random.RandomState(seed=1)
-    samples = []
-    for jcomp in np.arange(len(sigma2s)):
-        samples.append(
-            rs.multivariate_normal(mean=mus[jcomp], cov=sigma2s[jcomp] * Sigma0,
-                                   size=(int(pis[jcomp] * N),)))
-    samples = np.concatenate(samples, axis=0)
-
-    gm = fit_gaussian_mixture(samples, random_state=rs, n_init=2)
-    y_obs = np.ones((M, P))
-
-    import timeit
-
-    testrun = lambda: posterior_gm_mvnormal(y_obs, C_obs, gm)
-    print(timeit.timeit(stmt=testrun, number=1))
-#     import matplotlib.pyplot as plt
-#     plt.scatter(samples[:, 0], samples[:, 1])
-#     plt.show()
+    pass

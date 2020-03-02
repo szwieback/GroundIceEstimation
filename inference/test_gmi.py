@@ -57,6 +57,7 @@ class PosteriorGMMvNormalTestDiagonal(unittest.TestCase):
         self.assertLess(np.nanmean(np.abs(1 - np.nansum(self.pi_p, axis=1))), 1e-6)
 
 class PosteriorGMMvNormalTestInvalid(PosteriorGMMvNormalTestDiagonal):
+    
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
