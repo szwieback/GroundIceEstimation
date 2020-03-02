@@ -41,6 +41,11 @@ def _condition_gm(
     mu = gm.means_
     Sigma = gm.covariances_
     pi = gm.weights_
+    
+    P = y_obs.shape[1]
+    M = y_obs.shape[0]
+    Q = mu.shape[1]  # dimension of prior RV considered
+    
     if V is None and ind_V is None:
         V, V_invT, ind_V, V_lam_sqr = _sqr(C_obs, cond_thresh=cond_thresh)
 
@@ -120,18 +125,16 @@ def posterior_gm_mvnormal(y_obs, C_obs, gm, H=None, cond_thresh=1e-6,
     mu_p[ind_invalid, ...] = np.nan
     Sigma_p[ind_invalid, ...] = np.nan
     pi_p[ind_invalid, ...] = np.nan
-    
     return mu_p, Sigma_p, pi_p
-
 
 if __name__ == '__main__':
     Q = 20
     P = 9
     N = 1000
-    M = 200
+    M = 200**2
     Sigma0 = np.eye(Q)
 
-    C_obs = np.stack([np.diag(np.arange(P) + 1) + 0.0 * np.ones((P, P))] * M, axis=0)
+    C_obs = np.stack([np.diag(np.arange(P) + 3) + 0.0 * np.ones((P, P))] * M, axis=0)
     C_obs[1, 0, 0] = 1e-9
     C_obs[2, 0, 0] = -1
 
