@@ -50,9 +50,9 @@ import numpy as np
 
 def psislw(lw, Reff=1.0):
     # operates on log weights lw (normalization not required)
-    # lw: 2 dimensional; dim 1: samples, dim 2: replicates
+    # lw: 2 dimensional; dim 1: replicates, dim 2: samples [i.e. different to original]
     assert lw.ndim == 2
-    N, M = lw.shape
+    M, N = lw.shape
 
     lw_out = np.copy(lw)
     k_min = 1 / 3
@@ -60,54 +60,47 @@ def psislw(lw, Reff=1.0):
     # precalculate constants
     cutoff_ind = N - int(np.ceil(min(0.2 * N, 3 * np.sqrt(N / Reff))))
     N_large = N - cutoff_ind
-    lw_out -= np.max(lw_out, axis=0)[np.newaxis, :]
-    ind_sort = np.argsort(lw_out, axis=0)
+    lw_out -= np.max(lw_out, axis=1)[:, np.newaxis]
+    ind_sort = np.argsort(lw_out, axis=1)
     if N_large <= 4:
         k = np.zeros(M) + np.nan
     else:
         # those > cutoff; a copy
-        lw_out_large = lw_out[(ind_sort[cutoff_ind:, :], np.arange(M))]
-        cutoff = lw_out[(ind_sort[cutoff_ind - 1, :], np.arange(M))]
+        lw_out_large = lw_out[(np.arange(M)[:, np.newaxis], ind_sort[:, cutoff_ind:])]
+        cutoff = lw_out[(np.arange(M), ind_sort[:, cutoff_ind - 1])]
         expcutoff = np.exp(cutoff)
-        w_out_large = np.exp(lw_out_large) - expcutoff[np.newaxis, :]
-#         k, sigma = gpdfitnew(w_out_large[:, 0], sort=False)
-        k, sigma = gpdfitvec(w_out_large)
+        w_out_large = np.exp(lw_out_large) - expcutoff[:, np.newaxis]
+        k, sigma = gpdfit(w_out_large)
         # find out where smoothing does not makes sense
-        ind_nonsmooth_m = np.nonzero(np.logical_or(k < k_min, np.logical_not(np.isfinite(k))))
-#         ind_m = np.nonzero(np.logical_and(k >= k_min, np.isfinite(k)))
+        ind_nonsmooth_m = np.nonzero(
+            np.logical_or(k < k_min, np.logical_not(np.isfinite(k))))
         sti = np.arange(0.5, N_large) / N_large
-        qq = np.log(gpinv_vec(sti, k, sigma) + expcutoff)
-        qq[:, ind_nonsmooth_m[0]] = lw_out_large[:, ind_nonsmooth_m[0]]
-        lw_out[(ind_sort[cutoff_ind:, :], np.arange(M))] = qq
+        qq = np.log(gpinv(sti, k, sigma) + expcutoff[:, np.newaxis])
+        qq[ind_nonsmooth_m[0], :] = lw_out_large[ind_nonsmooth_m[0], :]
+        lw_out[(np.arange(M)[:, np.newaxis], ind_sort[:, cutoff_ind:])] = qq
         lw_out[lw_out > 0] = 0
-    lw_out -= sumlogs(lw_out, axis=0)[np.newaxis, :]
+    lw_out -= sumlogs(lw_out, axis=1)[:, np.newaxis]
     return lw_out, k
 
-def gpdfitvec(w):
+def gpdfit(w):
     # w assumed to be sorted, 2 dimensional
-    # axis 0 is samples
-    N = w.shape[0]
-
+    N = w.shape[1]
     prior = 3
-    m = 30 + int(np.sqrt(N))
-
-    b = (1 - np.sqrt(m / (np.arange(1, m + 1, dtype=float) - 0.5)))[:, np.newaxis]
-    bs = (b / (prior * w[int(N / 4 + 0.5) - 1, :]))
-    bs += 1 / w[-1, :]
-    ks = np.mean(np.log1p(-bs[:, np.newaxis, :] * w[np.newaxis, ...]), axis=1)
-
+    G = 30 + int(np.sqrt(N))
+    b = (1 - np.sqrt(G / (np.arange(1, G + 1, dtype=float) - 0.5)))[np.newaxis, :]
+    bs = (b / (prior * w[:, int(N / 4 + 0.5) - 1][:, np.newaxis]))
+    bs += 1 / w[:, -1][:, np.newaxis]
+    ks = np.mean(np.log1p(-bs[:, np.newaxis, :] * w[..., np.newaxis]), axis=1)
     L = N * (np.log(-bs / ks) - ks - 1)
     wsum = np.empty_like(L)
-    for jm in range(m):
-        wsum[jm, :] = 1/(np.sum(np.exp(L - L[jm, ...][np.newaxis, ...]), axis=0))
-
-    wsum /= np.sum(wsum, axis=0)[np.newaxis, ...]
+    for jG in range(G):
+        wsum[:, jG] = 1/(np.sum(np.exp(L - L[:, jG][:, np.newaxis]), axis=1))
+    wsum /= np.sum(wsum, axis=1)[..., np.newaxis]
     # posterior mean for b
-    b = np.sum(bs * wsum, axis=0)
+    b = np.sum(bs * wsum, axis=1)
     # Estimate for k, note that we return a negative of Zhang and
     # Stephens's k, because it is more common parameterisation.
-    k = np.mean(np.log1p((-b) * w), axis=0)
-
+    k = np.mean(np.log1p(-b[:, np.newaxis] * w), axis=1)
     # estimate for sigma
     sigma = -k / b * N / (N - 0)
     # weakly informative prior for k
@@ -116,15 +109,15 @@ def gpdfitvec(w):
 
     return k, sigma
 
-def gpinv_vec(p, k, sigma):
+def gpinv(p, k, sigma):
     """Inverse Generalised Pareto distribution function."""
     assert p.ndim == 1
     assert k.ndim == 1
     assert k.shape == sigma.shape
-    x = (sigma[np.newaxis, ...] * np.expm1(-k[np.newaxis, ...] * np.log1p(-p[..., np.newaxis]))
-         / k[np.newaxis, ...])
-    x2 = -sigma[np.newaxis, ...] * np.log1p(-p[..., np.newaxis])
-    x = np.where((np.abs(k) < 10 * np.finfo(float).eps)[np.newaxis, ...], x2, x)
+    x = (sigma[:, np.newaxis] * np.expm1(-k[:, np.newaxis] * np.log1p(-p[np.newaxis, :]))
+         / k[:, np.newaxis])
+    x2 = -sigma[:, np.newaxis] * np.log1p(-p[np.newaxis, :])
+    x = np.where((np.abs(k) < 10 * np.finfo(float).eps)[:, np.newaxis], x2, x)
     return x
 
 def sumlogs(x, axis=None, out=None):
@@ -219,13 +212,13 @@ if __name__ == '__main__':
     lw = lw_mvnormal(y_obs, C_obs, y_ref)
     from scipy.stats import multivariate_normal
 
-    m = 0
+    G = 0
     n = 2
 
     # check positive semidefinite: firx normfac (rank)
-    print(lw[n, m])
-    C = C_obs[m, ...]
-    lpdf = multivariate_normal.logpdf(y_obs[n, :], y_ref[m, :], C_obs[m, ...],
+    print(lw[n, G])
+    C = C_obs[G, ...]
+    lpdf = multivariate_normal.logpdf(y_obs[n, :], y_ref[G, :], C_obs[G, ...],
                                       allow_singular=True)
     print(lpdf)
 
