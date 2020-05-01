@@ -8,8 +8,7 @@ from sklearn.mixture import BayesianGaussianMixture
 from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
-from inference.isi import _sqr_eigen, _nondata_terms_mvnormal
-from inference import invert_nonzero, sumlogs
+from inference.isi import _sqr_eigen, _nondata_terms_mvnormal, invert_nonzero, sumlogs
 
 def fit_gaussian_mixture(
         samples, weight_concentration_prior=1e-3, random_state=None,
