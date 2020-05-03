@@ -6,6 +6,7 @@ from scipy.stats import beta
 from numpy.random import RandomState
 
 from pathnames import paths
+from simulation.stefan import stefan_ens, constants
 
 def load_forcing(year=2019):
     assert year == 2019
@@ -62,23 +63,25 @@ class SoilParameterEnsemble():
 
 class StefanParameterEnsemble():
     def __init__(self, rs=None):
-        self.depth = 3.0
+        self.depth = 1.5
         self.dy = 2e-3
-        self.Ne = 1000
+        self.Ne = 10000
         self.Nb = 15
         self.expb = 2
         self.rs = rs if rs is not None else RandomState(1)
         self.e_params = {'alpha_shape': 1.0, 'beta_shape': 2.0, 'high_scale': 0.8,
                          'alpha_shift': 0.1, 'beta_shift': 2.0}
-        self.wsat_params = {'low_above': 0.3, 'high_above': 0.7, 'low_below': 0.8,
+        self.wsat_params = {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8,
                             'high_below': 1.0}
         # soil only; i.e. without excess ice
         self.soil_params = {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
                             'mineral_above': 0.05, 'mineral_below': 0.3,
                             'organic_below': 0.05}
+        # also includes correction factor (Ste > 0, T0 < 0)
         self.n_factor_params = {'high': 0.9, 'low': 0.7, 'alphabeta': 2.0}
+        self.constants = constants
         self.stratigraphy = {}
-        
+
     def _cpoints(self):
         cpoints = np.linspace(0.08, 1.0, num=self.Nb - 1) ** self.expb * self.depth
         cpoints[0] = 0
@@ -138,11 +141,28 @@ class StefanParameterEnsemble():
 
     def _draw_n_factor(self):
         beta = self.rs.beta(self.n_factor_params['alphabeta'],
-                            self.n_factor_params['alphabeta'], size=(Ne,))
+                            self.n_factor_params['alphabeta'], size=(self.Ne,))
         n_factor = (self.n_factor_params['low']
-                    + beta * (self.n_factor_params['high'] - self.n_factor_params['low']))
+                    +beta * (self.n_factor_params['high'] - self.n_factor_params['low']))
         return n_factor
-        
+
+    def _thermal_conductivity_thawed(self):
+        if any([con not in self.stratigraphy for con in ['m', 'o', 'w']]):
+            raise AttributeError('Stratigraphy needs to be assigned first')
+        # Cosenza; neglect air
+        depthf = (1 - self.stratigraphy['e'])
+        # actually each constituent should be divided by depthf
+        k = (((self.constants['km']) ** 0.5 * self.stratigraphy['m'] +
+             (self.constants['ko']) ** 0.5 * self.stratigraphy['o'] +
+             (self.constants['kw']) ** 0.5 * self.stratigraphy['w']
+             ) ** 2) / depthf
+        ikg = k ** (-1)
+        ik = np.cumsum(ikg * depthf, axis=1) / np.cumsum(depthf, axis=1)
+        k0 = k[:, 1]
+        k0ik = k0[:, np.newaxis] * ik
+        dict_k = {'k0ik': k0ik, 'k0': k0}
+        return dict_k
+
     def draw_stratigraphy(self):
         e = spe._draw_e()
         od = spe._draw_organic_depth()
@@ -150,10 +170,11 @@ class StefanParameterEnsemble():
         n_factor = spe._draw_n_factor()
         self.stratigraphy = {'e': e, 'm': m, 'o': o, 'w': w, 'od': od,
                              'n_factor': n_factor}
+        self.stratigraphy.update(self._thermal_conductivity_thawed())
 
     @property
-    def params_ens(self):
-        return {**self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
+    def params(self):
+        return {**self.stratigraphy, **self.constants, 'depth': self.depth, 'dy': self.dy}
 
 if __name__ == '__main__':
     df = load_forcing()
@@ -163,25 +184,22 @@ if __name__ == '__main__':
     dailytemp[dailytemp < 0] = 0
     s_, yf_ = stefantest(dailytemp)
 
-    Ne = 1000
-    dailytemp_ens = np.zeros((Ne, len(dailytemp)))
-    dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
-
     spe = StefanParameterEnsemble()
     spe.draw_stratigraphy()
-    
-    from simulation.stefan import stefan_ens
-#     from timeit import timeit
-#     fun_wrapped = lambda: stefan_ens(dailytemp_ens)
-#     print(f'{timeit(fun_wrapped, number=1)}')
-    s, yf = stefan_ens(dailytemp_ens, params_ens=spe.params_ens)
+    dailytemp_ens = np.zeros((spe.Ne, len(dailytemp)))
+    dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
+
+
+
+    from timeit import timeit
+    fun_wrapped = lambda: stefan_ens(dailytemp_ens, params=spe.params)
+    print(f'{timeit(fun_wrapped, number=1)}')
+    s, yf = stefan_ens(dailytemp_ens, params=spe.params)
 #     import matplotlib.pyplot as plt
 #     plt.hist(s[:, -1])
 #     plt.show()
-    print(np.percentile(s[:, -1], (5, 50, 95)))
+    print(np.percentile(yf[:, -1], (5, 50, 95)))
 #     print(s[0, :] - s_)
 
-    # TODO: k, n_factor, lambda_correction_factor
-    
-
+    # TODO: k,
 
