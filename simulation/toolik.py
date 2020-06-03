@@ -6,7 +6,7 @@ from scipy.stats import beta
 from numpy.random import RandomState
 
 from pathnames import paths
-from simulation.stefan import stefan_ens, constants
+from simulation.stefan import stefan_ens, constants, stefan_integral_balance
 
 def load_forcing(year=2019):
     assert year == 2019
@@ -65,7 +65,7 @@ class StefanParameterEnsemble():
     def __init__(self, rs=None):
         self.depth = 1.5
         self.dy = 2e-3
-        self.Ne = 10000
+        self.Ne = 1000
         self.Nb = 15
         self.expb = 2
         self.rs = rs if rs is not None else RandomState(1)
@@ -81,6 +81,12 @@ class StefanParameterEnsemble():
         self.n_factor_params = {'high': 0.9, 'low': 0.7, 'alphabeta': 2.0}
         self.constants = constants
         self.stratigraphy = {}
+
+    @property
+    def frozen(self):
+        # could be turned into ensemble too
+        return {'kf': 1.9 * np.ones(self.Ne), 'Cf': 1.5e6 * np.ones(self.Ne), 
+                'Tf': -3 * np.ones(self.Ne)}
 
     def _cpoints(self):
         cpoints = np.linspace(0.08, 1.0, num=self.Nb - 1) ** self.expb * self.depth
@@ -174,7 +180,8 @@ class StefanParameterEnsemble():
 
     @property
     def params(self):
-        return {**self.stratigraphy, **self.constants, 'depth': self.depth, 'dy': self.dy}
+        return {**self.stratigraphy, **self.constants, 'depth': self.depth, 'dy': self.dy,
+                **self.frozen}
 
 if __name__ == '__main__':
     df = load_forcing()
@@ -194,12 +201,15 @@ if __name__ == '__main__':
     from timeit import timeit
     fun_wrapped = lambda: stefan_ens(dailytemp_ens, params=spe.params)
     print(f'{timeit(fun_wrapped, number=1)}')
-    s, yf = stefan_ens(dailytemp_ens, params=spe.params)
+    s, yf, _ = stefan_ens(dailytemp_ens, params=spe.params)
 #     import matplotlib.pyplot as plt
 #     plt.hist(s[:, -1])
 #     plt.show()
     print(np.percentile(yf[:, -1], (5, 50, 95)))
 #     print(s[0, :] - s_)
-
+    fun_wrapped = lambda: stefan_integral_balance(dailytemp_ens, params=spe.params)
+    print(f'{timeit(fun_wrapped, number=1)}')
     # TODO: k,
+    s, yf = stefan_integral_balance(dailytemp_ens, params=spe.params)
+
 
