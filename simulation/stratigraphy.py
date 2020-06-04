@@ -9,39 +9,45 @@ import warnings
 
 constants = {'Lvw': 3.34e8, 'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024}
 params_default_frozen = {'kf': 1.9, 'Cf': 1.5e6, 'Tf':-4.0}
-params_default_grid = {'dy': 2e-3, 'depth': 2}
+params_default_grid = {'dy': 2e-3, 'depth': 1.5}
 params_default = {**constants, **params_default_frozen, **params_default_grid}
+params_default_distribution = {
+    'Nb': 15, 'expb': 2,
+    'e': {'alpha_shape': 1.0, 'beta_shape': 2.0, 'high_scale': 0.8, 'alpha_shift': 0.1,
+          'beta_shift': 2.0},
+    'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+    'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
+             'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+    'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
 
 class Stratigraphy():
     def __init__(self):
         pass
 
 class StefanStratigraphy(Stratigraphy):
-    def __init__(self, rs=None):
-        self.depth = 1.5
-        self.dy = 2e-3
-        self.Ne = 10000
+    def __init__(
+            self, dy=None, depth=None, N=10000, dist=params_default_distribution, rs=None, 
+            seed=1, constants=constants):
+        self.depth = depth if depth is not None else params_default_grid['depth']
+        self.dy = dy if dy is not None else params_default_grid['dy']
+        self.rs = rs if rs is not None else RandomState(seed=seed)
+        self.N = N
         self.Nb = 15
-        self.expb = 2
-        self.rs = rs if rs is not None else RandomState(1)
-        self.e_params = {'alpha_shape': 1.0, 'beta_shape': 2.0, 'high_scale': 0.8,
-                         'alpha_shift': 0.1, 'beta_shift': 2.0}
-        self.wsat_params = {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8,
-                            'high_below': 1.0}
+        self.expb = dist['expb']
+        self.e_params = dist['e']
+        self.wsat_params = dist['wsat']
         # soil only; i.e. without excess ice
-        self.soil_params = {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
-                            'mineral_above': 0.05, 'mineral_below': 0.3,
-                            'organic_below': 0.05}
-        # also includes correction factor (Ste > 0, T0 < 0)
-        self.n_factor_params = {'high': 0.9, 'low': 0.7, 'alphabeta': 2.0}
+        self.soil_params = dist['soil']
+        # can also account for correction factor (Ste > 0, T0 < 0) if basic stefan is used
+        self.n_factor_params = dist['n_factor']
         self.constants = constants
         self.stratigraphy = {}
 
     @property
     def frozen(self):
         # could be turned into ensemble too
-        return {'kf': 1.9 * np.ones(self.Ne), 'Cf': 1.5e6 * np.ones(self.Ne),
-                'Tf':-3 * np.ones(self.Ne)}
+        return {'kf': 1.9 * np.ones(self.N), 'Cf': 1.5e6 * np.ones(self.N),
+                'Tf':-3 * np.ones(self.N)}
 
     def _cpoints(self):
         cpoints = np.linspace(0.08, 1.0, num=self.Nb - 1) ** self.expb * self.depth
@@ -65,10 +71,10 @@ class StefanStratigraphy(Stratigraphy):
     def _draw_e(self):
         # draw Bspline coefficients; all independent; 0, 1
         c_shape = self.rs.beta(self.e_params['alpha_shape'], self.e_params['beta_shape'],
-                               size=(self.Ne, self.Nb))
-        c_scale = self.rs.uniform(high=self.e_params['high_scale'], size=(self.Ne, 1))
+                               size=(self.N, self.Nb))
+        c_scale = self.rs.uniform(high=self.e_params['high_scale'], size=(self.N, 1))
         c_shift = self.rs.beta(self.e_params['alpha_shift'], self.e_params['beta_shift'],
-                               size=(self.Ne, 1))
+                               size=(self.N, 1))
         c = c_shift + (1 - c_shift) * c_scale * c_shape
         basis = self._spline_basis()
         e = np.einsum('ij, kj', c, basis)
@@ -76,7 +82,7 @@ class StefanStratigraphy(Stratigraphy):
 
     def _draw_organic_depth(self):
         od = self.rs.uniform(low=self.soil_params['low_horizon'],
-                             high=self.soil_params['high_horizon'], size=(self.Ne,))
+                             high=self.soil_params['high_horizon'], size=(self.N,))
         return od
 
     def _draw_mow(self, od, e):
@@ -91,9 +97,9 @@ class StefanStratigraphy(Stratigraphy):
         np.putmask(m, ind_below, (1 - e) * self.soil_params['mineral_below'])
         np.putmask(o, ind_below, (1 - e) * self.soil_params['organic_below'])
         sat_above = self.rs.uniform(low=self.wsat_params['low_above'],
-                                    high=self.wsat_params['high_above'], size=(self.Ne,))
+                                    high=self.wsat_params['high_above'], size=(self.N,))
         sat_below = self.rs.uniform(low=self.wsat_params['low_below'],
-                                    high=self.wsat_params['high_below'], size=(self.Ne,))
+                                    high=self.wsat_params['high_below'], size=(self.N,))
         print(sat_below.shape)
         np.putmask(sat, ind_above, sat_above[:, np.newaxis] * np.ones_like(sat))
         np.putmask(sat, ind_below, sat_below[:, np.newaxis] * np.ones_like(sat))
@@ -102,7 +108,7 @@ class StefanStratigraphy(Stratigraphy):
 
     def _draw_n_factor(self):
         beta = self.rs.beta(self.n_factor_params['alphabeta'],
-                            self.n_factor_params['alphabeta'], size=(self.Ne,))
+                            self.n_factor_params['alphabeta'], size=(self.N,))
         n_factor = (self.n_factor_params['low']
                     +beta * (self.n_factor_params['high'] - self.n_factor_params['low']))
         return n_factor

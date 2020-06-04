@@ -172,11 +172,11 @@ def _nondata_terms_mvnormal(lam_isqr, ind_singular=None):
     normfac = -(P_eff / 2) * np.log(2 * np.pi)
     return logdetfac, normfac
     
-def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6):
+def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     # likelihood term corresponds to posterior/prior
     # y_obs: (M replicates, P observations over time, )
     # y_ref: (N samples, P_observations over time, )
-    # returns non-normalized log weights
+    # returns log weights; default: not normalized
     # deals with (for practical purposes) singular C_obs
 
     P = y_obs.shape[1]
@@ -195,7 +195,10 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6):
         maha = -0.5 * np.sum(prod ** 2, axis=1)
         lw[:, n] = maha + logdetfac + normfac
 
+    if normalize:
+        lw -= sumlogs(lw, axis=1)[:, np.newaxis]
     lw[ind['invalid'], :] = np.nan
+
     return lw
 
 if __name__ == '__main__':

@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     strat = StefanStratigraphy()
     strat.draw_stratigraphy()
-    dailytemp_ens = np.zeros((strat.Ne, len(dailytemp)))
+    dailytemp_ens = np.zeros((strat.N, len(dailytemp)))
     dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
 
     from timeit import timeit
@@ -80,9 +80,7 @@ if __name__ == '__main__':
 #     print(s[0, :] - s_)
     fun_wrapped = lambda: stefan_integral_balance(dailytemp_ens, params=strat.params)
     print(f'{timeit(fun_wrapped, number=1)}')
-    # TODO: k,
     s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params)
-
 
     unc = 0.01
     ind_true = 0
