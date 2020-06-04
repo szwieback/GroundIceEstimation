@@ -115,6 +115,5 @@ def stefan_integral_balance(dailytemp_ens, params=constants, steps=2):
         #reestimate freezing front progression keeping Qf fixed
         s, yf, k0ikups_t = stefan_ens(dailytemp_ens, params=params, k0ikupsQf=k0ikupsQf)
         step = step + 1
-        print(step, np.nanpercentile(yf[:, -1], (5, 50, 95)), np.nanpercentile(np.sum(k0ikups_t * Qf, axis=1), (5, 50, 95)))
     return s, yf
 

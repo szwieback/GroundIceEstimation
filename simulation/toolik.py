@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import datetime
 
 from scipy.stats import beta
 from numpy.random import RandomState
@@ -15,7 +16,7 @@ def load_forcing(year=2019):
         assert isinstance(t, str)
         t_ = str(int(t) - 100)
         dt = d + ' ' + t_.zfill(4)
-        dtp = pd.datetime.strptime(dt, '%Y-%m-%d %H%M')
+        dtp = datetime.datetime.strptime(dt, '%Y-%m-%d %H%M')
         dtp = dtp + pd.Timedelta(1, 'h')
         return dtp
 
@@ -65,7 +66,7 @@ class StefanParameterEnsemble():
     def __init__(self, rs=None):
         self.depth = 1.5
         self.dy = 2e-3
-        self.Ne = 1000
+        self.Ne = 10000
         self.Nb = 15
         self.expb = 2
         self.rs = rs if rs is not None else RandomState(1)
@@ -212,4 +213,25 @@ if __name__ == '__main__':
     # TODO: k,
     s, yf = stefan_integral_balance(dailytemp_ens, params=spe.params)
 
+
+    unc = 0.01
+    ind_true = 0
+    s_obstime = s[:, 16::11]
+    rs = np.random.RandomState(seed=123)
+    s_obs = s_obstime[ind_true, :]
+    s_obs = np.array([0.01, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
+    s_obs = s_obs + unc * rs.normal(size=(1, s_obstime.shape[1]))
+    print(s_obs)
+    from inference import psislw, lw_mvnormal
+    lw = lw_mvnormal(s_obs, unc**2*np.eye(s_obstime.shape[1])[np.newaxis, ...], s_obstime)
+    lw_ps, _ = psislw(lw)
+    e_est = np.einsum('ij,jk->ik', np.exp(lw_ps), spe.params['e'])
+    s_obstime_est = np.einsum('ij,jk->ik', np.exp(lw_ps), s_obstime)
+    print(s_obstime_est)
+    print(e_est[:, ::25])
+
+#     print(spe.params['e'][ind_true, ::25])
+
+#     print(e_est)
+    # need more variable ice profiles
 
