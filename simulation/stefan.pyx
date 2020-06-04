@@ -6,7 +6,10 @@ Created on Apr 30, 2020
 from cython.view cimport array as cvarray
 import numpy as np
 
-constants = {'Lvw': 3.34e8,  'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024}
+from stratigraphy import params_default
+
+fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
+
 
 class DepthExceedanceException(Exception):
     
@@ -46,9 +49,7 @@ def _extract_conductivity(params, Ne, Ng):
         k0ik = params['k0ik']
     return k0, k0ik
 
-
-fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
-def stefan_ens(dailytemp_ens, params=constants, k0ikupsQf=None):
+def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQf=None):
     
     cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
     cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
@@ -97,7 +98,7 @@ def stefan_ens(dailytemp_ens, params=constants, k0ikupsQf=None):
                 nt += 1
     return s, yf, k0ikups_t
 
-def stefan_integral_balance(dailytemp_ens, params=constants, steps=2):
+def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
     # simplified iterative approach based on Goodman's heat balance 
     # for diffusion in frozen materials (uniform and constant properties)
     s, yf, k0ikups_t = stefan_ens(dailytemp_ens, params=params) # old values
