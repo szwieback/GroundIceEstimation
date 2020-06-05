@@ -201,6 +201,14 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
 
     return lw
 
+def expectation(vals, lw, normalize=False):
+    # vals: samples, val dimension (e.g. depth)
+    # lw: replicates, samples
+    if normalize:
+        lw = lw - sumlogs(lw, axis=1)[:, np.newaxis]
+    x = np.einsum('ij, jk -> ik', np.exp(lw), vals)
+    return x
+
 if __name__ == '__main__':
     pass
 

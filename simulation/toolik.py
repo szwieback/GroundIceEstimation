@@ -56,6 +56,8 @@ def stefantest(dailytemp):
             tind = tind + 1
     return s, yf
 
+
+
 if __name__ == '__main__':
     df = load_forcing()
     d0 = '2019-05-15'
@@ -90,13 +92,15 @@ if __name__ == '__main__':
     s_obs = np.array([0.01, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03])
     s_obs = s_obs + unc * rs.normal(size=(1, s_obstime.shape[1]))
     print(s_obs)
-    from inference import psislw, lw_mvnormal
+    from inference import psislw, lw_mvnormal, expectation
     lw = lw_mvnormal(s_obs, unc**2*np.eye(s_obstime.shape[1])[np.newaxis, ...], s_obstime)
     lw_ps, _ = psislw(lw)
-    e_est = np.einsum('ij,jk->ik', np.exp(lw_ps), strat.params['e'])
-    s_obstime_est = np.einsum('ij,jk->ik', np.exp(lw_ps), s_obstime)
+    e_est = expectation(strat.params['e'], lw_ps)
+    s_obstime_est = expectation(s_obstime, lw_ps)
+    yf_est = expectation(yf, lw_ps)
     print(s_obstime_est)
-    print(e_est[:, ::25])
+    print(yf_est[:, -1])
+    print(e_est[:, :strat.cell_index(yf_est[0,-1]):25])
 
 #     print(spe.params['e'][ind_true, ::25])
 
