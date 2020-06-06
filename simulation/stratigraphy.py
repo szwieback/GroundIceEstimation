@@ -13,13 +13,21 @@ params_default_frozen = {'kf': 1.9, 'Cf': 1.5e6, 'Tf':-4.0}
 params_default_grid = {'dy': 2e-3, 'depth': 1.5}
 params_default = {**constants_default, **params_default_frozen, **params_default_grid}
 params_default_distribution = {
-    'Nb': 15, 'expb': 2,
+    'Nb': 15, 'expb': 2, 'b0': 0.1,
     'e': {'alpha_shape': 1.0, 'beta_shape': 2.0, 'high_scale': 0.8, 'alpha_shift': 0.1,
           'beta_shift': 2.0},
     'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
     'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
+params_default_distribution = {
+    'Nb': 16, 'expb': 2.0, 'b0': 0.1, 'bm': 0.7,
+    'e': {'alpha_shape': 0.1, 'beta_shape': 0.6, 'high_scale': 0.8, 'alpha_shift': 0.1,
+          'beta_shift': 2.0},
+    'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+    'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
+             'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+    'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
 class Stratigraphy():
     def __init__(self):
@@ -34,7 +42,9 @@ class StefanStratigraphy(Stratigraphy):
         self.rs = rs if rs is not None else RandomState(seed=seed)
         dist_ = dist if dist is not None else params_default_distribution
         self.N = N
-        self.Nb = 15
+        self.Nb = dist_['Nb']
+        self.b0 = dist_['b0']
+        self.bm = dist_['bm']
         self.expb = dist_['expb']
         self.e_params = dist_['e']
         self.wsat_params = dist_['wsat']
@@ -47,8 +57,9 @@ class StefanStratigraphy(Stratigraphy):
         self.stratigraphy = {}
 
     def _cpoints(self):
-        cpoints = np.linspace(0.08, 1.0, num=self.Nb - 1) ** self.expb * self.depth
+        cpoints = np.linspace(self.b0, self.bm, num=self.Nb - 2) ** self.expb
         cpoints[0] = 0
+        cpoints = np.concatenate((cpoints, [1])) * self.depth
         return cpoints
 
     @property
@@ -84,6 +95,9 @@ class StefanStratigraphy(Stratigraphy):
         c_scale = self.rs.uniform(high=self.e_params['high_scale'], size=(self.N, 1))
         c_shift = self.rs.beta(self.e_params['alpha_shift'], self.e_params['beta_shift'],
                                size=(self.N, 1))
+#         c_shift = c_shift * 0
+#         import warnings
+#         warnings.warn('c_shift set to 0')
         c = c_shift + (1 - c_shift) * c_scale * c_shape
         basis = self._spline_basis()
         e = np.einsum('ij, kj', c, basis)
