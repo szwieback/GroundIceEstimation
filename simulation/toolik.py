@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import datetime
+from copy import deepcopy
 
 from pathnames import paths
 from simulation.stefan import stefan_ens, stefan_integral_balance
@@ -56,8 +57,6 @@ def stefantest(dailytemp):
             tind = tind + 1
     return s, yf
 
-
-
 if __name__ == '__main__':
     df = load_forcing()
     d0 = '2019-05-15'
@@ -68,10 +67,16 @@ if __name__ == '__main__':
 
     strat = StefanStratigraphy()
     strat.draw_stratigraphy()
-    e = strat.stratigraphy['e'].copy()
-    e[-1, 0:200] = 0.01
-    e[-1, 200:] = 0.8
-    strat.stratigraphy['e'] = e
+    strat_ = StefanStratigraphy(N=1)
+    strat_.draw_stratigraphy()
+    e = strat_.stratigraphy['e']
+#     e[:, 0:80] = 0.2
+#     e[:, 80:160] = 0.01
+#     e[:, 160:] = 0.5
+    e[:, 0:60] = 0.2
+    e[:, 60:180] = 0.0
+    e[:, 180:] = 0.1
+    strat_.stratigraphy['e'] = e
     dailytemp_ens = np.zeros((strat.N, len(dailytemp)))
     dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
 
@@ -86,19 +91,21 @@ if __name__ == '__main__':
     fun_wrapped = lambda: stefan_integral_balance(dailytemp_ens, params=strat.params)
 #     print(f'{timeit(fun_wrapped, number=1)}')
     s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
-
+    s_, yf_ = stefan_integral_balance(dailytemp_ens[0:1, :], params=strat_.params, steps=1)
+    
     unc = 0.003
-    ind_true = -1#8#2, 4, 8
+    ind_true = -1#2, 4, 8
     ind_obs = np.arange(s.shape[1])[16::11]
     s_obstime = s[:, ind_obs]
+    s__obstime = s_[:, ind_obs]
     rs = np.random.RandomState(seed=123)
-    s_obs = s_obstime[ind_true, :]
+    s_obs = s__obstime[0, :]
 #     s_obs = np.array([0.03, 0.06, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
-#     s_obs = np.array([0.01, 0.03, 0.05, 0.06, 0.06, 0.06, 0.08, 0.10, 0.11, 0.12])/2
+#     s_obs = np.array([0.01, 0.03, 0.05, 0.06, 0.06, 0.06, 0.08, 0.10, 0.11, 0.12]) / 2
     s_obs = s_obs + unc * rs.normal(size=(1, s_obstime.shape[1]))
     print(s_obs)
     from inference import psislw, lw_mvnormal, expectation
-    lw = lw_mvnormal(s_obs, unc**2*np.eye(s_obstime.shape[1])[np.newaxis, ...], s_obstime)
+    lw = lw_mvnormal(s_obs, unc ** 2 * np.eye(s_obstime.shape[1])[np.newaxis, ...], s_obstime)
     lw_ps, _ = psislw(lw)
     e_est = expectation(strat.params['e'], lw_ps, normalize=True)
     s_obstime_est = expectation(s_obstime, lw_ps, normalize=True)
@@ -110,16 +117,18 @@ if __name__ == '__main__':
 #     print(e_est[:, :strat.cell_index(yf_est[0,-1]):25])
 
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
+    fig, axs = plt.subplots(ncols=2, sharey=False)
+    fig.set_size_inches((8,3), forward=True)
     days = np.arange(len(dailytemp))
-    ax.plot(days[ind_obs], s_obs[0, :], lw=0.0, c='k', alpha=0.6, marker='o', 
+    axs[0].plot(days[ind_obs], s_obs[0, :], lw=0.0, c='k', alpha=0.6, marker='o',
             mfc='k', mec='none', ms=4)
-    ax.plot(days, s_est[0, :], lw=1.0, c='#999999', alpha=0.6)
-#     ax.plot(days, s[ind_large[0, -1], :], lw=0.5, c='#ccccff', alpha=0.5)
-#     ax.plot(days, s[ind_large[0, -2], :], lw=0.5, c='#ccccff', alpha=0.5)
-#     ax.plot(days, s[ind_large[0, 9000], :], lw=0.5, c='#ffcccc', alpha=0.5)
-    ax.plot(days, s[ind_true, :], lw=0.9, c='#ccffcc', alpha=1.0)
-
+    axs[0].plot(days, s_est[0, :], lw=1.0, c='#999999', alpha=0.6)
+#     axs[0].plot(days, s[ind_large[0, -1], :], lw=0.5, c='#ccccff', alpha=0.5)
+#     axs[0].plot(days, s[ind_large[0, -2], :], lw=0.5, c='#ccccff', alpha=0.5)
+#     axs[0].plot(days, s[ind_large[0, 9000], :], lw=0.5, c='#ffcccc', alpha=0.5)
+    axs[0].plot(days, s_[0, :], lw=0.6, c='#ccffcc', alpha=1.0)
+    axs[1].plot(e_est[0, :], strat._ygrid, lw=1.0, c='#999999', alpha=0.6)
+    axs[1].plot(e[0, :], strat._ygrid, lw=0.6, c='#ccffcc', alpha=1.0)
     plt.show()
 
 #     print(spe.params['e'][ind_true, ::25])
