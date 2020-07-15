@@ -113,7 +113,7 @@ def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
         Qf = -2 * (params['kf'] * params['Tf'])[:, np.newaxis] / (w * yf)
         # compute k0ikQf as function of time
         k0ikupsQf = k0ikups_t * Qf
-        #reestimate freezing front progression keeping Qf fixed
+        # re-estimate freezing front progression keeping Qf fixed
         s, yf, k0ikups_t = stefan_ens(dailytemp_ens, params=params, k0ikupsQf=k0ikupsQf)
         step = step + 1
     return s, yf
