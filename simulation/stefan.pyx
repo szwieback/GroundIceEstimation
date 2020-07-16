@@ -10,7 +10,6 @@ from stratigraphy import params_default
 
 fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
 
-
 class DepthExceedanceException(Exception):
     
     def __init__(self):
@@ -49,14 +48,15 @@ def _extract_conductivity(params, Ne, Ng):
         k0ik = params['k0ik']
     return k0, k0ik
 
-def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQf=None):
+def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
     
     cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
     cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
     cdef double dy = params['dy']
     yg = np.arange(0, params['depth'], step=dy)
     cdef Py_ssize_t Ng = yg.shape[0]
-
+    
+    Ct = params['Ct']
     e, w = _extract_stratigraphy(params, Ne, Ng)
     n_factor =  _extract_n_factor(params, Ne)
     k0, k0ik = _extract_conductivity(params, Ne, Ng)
@@ -64,16 +64,18 @@ def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQf=None):
     
     Lg = params['Lvw'] * (w + e)
     sg = np.cumsum(e * dy, axis=1)
-    k0ikups = k0ik * (yg[np.newaxis, :] - sg)
+    ups = yg[np.newaxis, :] - sg
+    k0ikups = k0ik * ups
 
     tterm = np.cumsum(n_factor[:, np.newaxis] * k0s[:, np.newaxis] * dailytemp_ens, axis=1)
-    if k0ikupsQf is not None:
-        tterm -= np.cumsum(k0ikupsQf, axis=1) * 3600 * 24 * fac
+    if k0ikupsQ is not None:
+        tterm -= np.cumsum(k0ikupsQ, axis=1) * 3600 * 24 * fac
     yterm = np.cumsum(k0ikups * (Lg * fac) * dy, axis=1)
 
     yf = np.ones_like(tterm) * -1
     s = np.zeros_like(tterm)
-    k0ikups_t = np.ones_like(tterm) #k0ik as function of time
+    k0ikups_t = np.ones_like(tterm) #k0ik upsilon as function of time
+    U_t = np.ones_like(tterm) # internal energy due to warming (above 0) in thawed part
     
     cdef Py_ssize_t nt = 0
     cdef Py_ssize_t ny = 0
@@ -82,6 +84,9 @@ def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQf=None):
     cdef double [:, :] tterm_v = tterm
     cdef double [:, :] yterm_v = yterm
     cdef double [:, :] k0ikups_t_v = k0ikups_t
+    cdef double [:, :] U_t_v = U_t
+    cdef double [:, :] dailytemp_ens_v = dailytemp_ens
+    cdef double [:, :] ups_v = ups
 
     for ne in range(Ne):
         nt = 0
@@ -95,13 +100,15 @@ def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQf=None):
                 yf_v[ne, nt] = ny * dy
                 s_v[ne, nt] = sg[ne, ny]
                 k0ikups_t_v[ne, nt] = k0ikups[ne, ny]
+                U_t_v[ne, nt] = 0.5 * Ct * dailytemp_ens_v[ne, nt] * ups_v[ne, ny]
                 nt += 1
-    return s, yf, k0ikups_t
+    return s, yf, k0ikups_t, U_t
 
 def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
-    # simplified iterative approach based on Goodman's heat balance 
+    # simplified iterative approach based on Goodman's heat balance
     # for diffusion in frozen materials (uniform and constant properties)
-    s, yf, k0ikups_t = stefan_ens(dailytemp_ens, params=params) # old values
+    # and (assuming linear profile) storage changes in thawed part (also constant C)
+    s, yf, k0ikups_t, U_t = stefan_ens(dailytemp_ens, params=params) # old values
     t = np.arange(1, 1 + yf.shape[1]) * 3600 * 24 # in seconds
     alphaf = (params['kf'] / params['Cf'])
     step = 0
@@ -113,8 +120,16 @@ def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
         Qf = -2 * (params['kf'] * params['Tf'])[:, np.newaxis] / (w * yf)
         # compute k0ikQf as function of time
         k0ikupsQf = k0ikups_t * Qf
-        # re-estimate freezing front progression keeping Qf fixed
-        s, yf, k0ikups_t = stefan_ens(dailytemp_ens, params=params, k0ikupsQf=k0ikupsQf)
+        k0ikupsdUdt = np.zeros_like(k0ikupsQf)
+        k0ikupsdUdt[:, 1:] = k0ikups_t[:, 1:] * np.diff(U_t, axis=1) / (24 * 3600) 
+        k0ikupsdUdt[:, 0] = 0.0
+#         print(np.mean(k0ikupsQf), np.mean(k0ikupsdUdt))
+#         print(U_t[0, ::7] * 1e-6)
+#         print(dailytemp_ens[0, ::7])
+        k0ikupsQ = k0ikupsQf + k0ikupsdUdt
+        # re-estimate freezing front progression keeping Q "losses" fixed
+        s, yf, k0ikups_t, U_t = stefan_ens(
+            dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ)
         step = step + 1
     return s, yf
 

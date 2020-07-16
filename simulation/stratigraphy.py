@@ -8,7 +8,8 @@ import numpy as np
 import warnings
 
 constants_default = {
-    'Lvw': 3.34e8, 'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024}
+    'Lvw': 3.34e8, 'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024,
+    'Ct': 3.0e6}
 params_default_frozen = {'kf': 1.9, 'Cf': 1.5e6, 'Tf':-4.0}
 params_default_grid = {'dy': 2e-3, 'depth': 1.5}
 params_default = {**constants_default, **params_default_frozen, **params_default_grid}
@@ -155,8 +156,9 @@ class StefanStratigraphy(Stratigraphy):
 
     def _frozen_properties(self):
         # unfiform for now
-        f = {'kf': 1.9 * np.ones(self.N), 'Cf': 1.5e6 * np.ones(self.N),
-             'Tf':-3 * np.ones(self.N)}
+        f = {'kf': self.frozen['kf'] * np.ones(self.N), 
+             'Cf': self.frozen['Cf'] * np.ones(self.N),
+             'Tf': self.frozen['Tf'] * np.ones(self.N)}
         return f
 
     def draw_stratigraphy(self):
