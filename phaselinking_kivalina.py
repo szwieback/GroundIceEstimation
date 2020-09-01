@@ -18,8 +18,8 @@ from InterferometricSpeckle.dataanalysis import process_stack
 
 from pathnames import paths
 
-def phaselinking_kivalina(overwrite=False):
-    stackname = 'kivalina'
+def phaselinking_kivalina(year=2017, overwrite=False):
+    stackname = f'kivalina{year}'
     fnstack = os.path.join(paths['stacks'], stackname + '.npy')
     stack = load_object(fnstack)
 
@@ -35,4 +35,5 @@ def phaselinking_kivalina(overwrite=False):
                   specklem_inference=specklem_inference, overwrite=overwrite)
 
 if __name__ == '__main__':
-    phaselinking_kivalina()
+    phaselinking_kivalina(year=2017)
+    phaselinking_kivalina(year=2018)

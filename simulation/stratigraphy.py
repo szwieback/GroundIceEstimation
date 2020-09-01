@@ -96,9 +96,9 @@ class StefanStratigraphy(Stratigraphy):
         c_scale = self.rs.uniform(high=self.e_params['high_scale'], size=(self.N, 1))
         c_shift = self.rs.beta(self.e_params['alpha_shift'], self.e_params['beta_shift'],
                                size=(self.N, 1))
-#         c_shift = c_shift * 0
-#         import warnings
-#         warnings.warn('c_shift set to 0')
+        c_shift = c_shift * 0
+        import warnings
+        warnings.warn('c_shift set to 0')
         c = c_shift + (1 - c_shift) * c_scale * c_shape
         basis = self._spline_basis()
         e = np.einsum('ij, kj', c, basis)
@@ -124,7 +124,6 @@ class StefanStratigraphy(Stratigraphy):
                                     high=self.wsat_params['high_above'], size=(self.N,))
         sat_below = self.rs.uniform(low=self.wsat_params['low_below'],
                                     high=self.wsat_params['high_below'], size=(self.N,))
-        print(sat_below.shape)
         np.putmask(sat, ind_above, sat_above[:, np.newaxis] * np.ones_like(sat))
         np.putmask(sat, ind_below, sat_below[:, np.newaxis] * np.ones_like(sat))
         w = (1 - e - m - o) * sat
