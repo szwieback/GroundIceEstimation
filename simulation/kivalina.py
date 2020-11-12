@@ -60,7 +60,7 @@ def parse_dates(datestr, strp='%Y%m%d'):
 if __name__ == '__main__':
     folder = '/home/simon/Work/gie/forcing/Kivalina'
     df = load_forcing_merra_subset(folder)
-    year = 2017
+    year = 2019
     d0 = {2019: '2019-05-10', 2017: '2017-05-10', 2018: '2018-05-10'}[year]
     d1 = {2019: '2019-09-15', 2017: '2017-09-20', 2018: '2018-09-15'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
