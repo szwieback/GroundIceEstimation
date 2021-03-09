@@ -23,9 +23,16 @@ class DepthExceedanceException(Exception):
     def __str__(self):
         return ("Simulated thaw depth exceeds computational domain. Increase depth.")
 
-def extract_ensemble(dailytemp, params, batch=None, batchsize=None):
+def extract_ensemble(dailytemp, params, balance=False, batch=None, batchsize=None):
     ens = {}
     Ng = np.arange(0, params['depth'], step=params['dy']).shape[0]
+    def _fill(field, val, size):
+        if field not in params:
+            filled = (val * np.ones(size)).astype(np.float32)
+        else:
+            filled = params[field][ind, ...].astype(np.float32)
+        return filled
+    
     if len(dailytemp.shape) == 2:
         Ne = dailytemp.shape[0]
     elif 'e' in params:
@@ -33,26 +40,27 @@ def extract_ensemble(dailytemp, params, batch=None, batchsize=None):
     else:
         Ne = 1
     ind = np.arange(Ne)
-    def _fill(field, val, size):
-        if field not in params:
-            filled = val * np.ones(size)
-        else:
-            filled = params[field][ind, ...]
-        return filled
+
     if batch is not None:
         ind = np.nonzero(
             np.logical_and(ind >= batch * batchsize, ind < (batch + 1) * batchsize))
         Ne = len(ind)
-    if len(dailytemp.shape) == 2:
-        ens['dailytemp'] = dailytemp[ind, :].astype(np.float32)
+    if balance:
+        ens['Cf'] = _fill('Cf', 1e6, (Ne,))
+        ens['kf'] = _fill('kf', 1.9, (Ne,))
+        ens['Tf'] = _fill('Tf', -4, (Ne,))
     else:
-        ens['dailytemp'] = np.zeros((Ne, len(dailytemp)), dtype=np.float32)
-        ens['dailytemp'][:, :] = np.array(dailytemp)[np.newaxis, :]
-    ens['n_factor'] = _fill('n_factor', 0.9, (Ne,))
-    ens['e'] = _fill('e', 0.1, (Ne, Ng))
-    ens['w'] = _fill('w', 0.4, (Ne, Ng))
-    ens['k0'] = _fill('k0', 0.4, (Ne,))
-    ens['k0ik'] = _fill('k0ik', 1.0, (Ne, Ng))
+        if len(dailytemp.shape) == 2:
+            ens['dailytemp'] = dailytemp[ind, :].astype(np.float32)
+        else:
+            ens['dailytemp'] = np.zeros((Ne, len(dailytemp)), dtype=np.float32)
+            ens['dailytemp'][:, :] = np.array(dailytemp)[np.newaxis, :]
+        ens['n_factor'] = _fill('n_factor', 0.9, (Ne,))
+        ens['e'] = _fill('e', 0.1, (Ne, Ng))
+        ens['w'] = _fill('w', 0.4, (Ne, Ng))
+        ens['k0'] = _fill('k0', 0.4, (Ne,))
+        ens['k0ik'] = _fill('k0ik', 1.0, (Ne, Ng))
+        ens['Ct'] = _fill('Ct', 1e6, (Ne,))
     return ens
 
 def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None, batch=None, batchsize=None):
@@ -79,11 +87,12 @@ def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None, batch=None, batchsiz
     U_t = np.ones_like(tterm) # internal energy due to warming (above 0) in thawed part
     ini = {'yf': yf, 's': s, 'tterm': tterm, 'yterm': yterm, 'k0ikups_t': k0ikups_t,
            'U_t': U_t, 'dailytemp': ens['dailytemp'], 'ups': ups, 'k0ikups': k0ikups,
-           'sg': sg}
+           'sg': sg, 'Ct': ens['Ct']}
     return ini
 
-def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
-    ini = stefan_initialize(dailytemp, params, k0ikupsQ=k0ikupsQ)
+def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None, batch=None, batchsize=None):
+    ini = stefan_initialize(
+        dailytemp, params, k0ikupsQ=k0ikupsQ, batch=batch, batchsize=batchsize)
     s, yf = ini['s'], ini['yf']
     k0ikups_t, U_t = ini['k0ikups_t'], ini['U_t']
     dailytemp_ens = ini['dailytemp']
@@ -104,7 +113,7 @@ def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
     cdef float [:, :] ups_v = ini['ups']
     cdef float [:, :] k0ikups_v = ini['k0ikups']
     cdef float [:, :] sg_v = ini['sg']
-    cdef float Ct = params['Ct']
+    cdef float [:] Ct_v = ini['Ct']
     
     for ne in range(Ne):
         nt = 0
@@ -118,24 +127,31 @@ def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
                 yf_v[ne, nt] = ny * dy
                 s_v[ne, nt] = sg_v[ne, ny]
                 k0ikups_t_v[ne, nt] = k0ikups_v[ne, ny]
-                U_t_v[ne, nt] = 0.5 * Ct * dailytemp_ens_v[ne, nt] * ups_v[ne, ny]
+                U_t_v[ne, nt] = 0.5 * Ct_v[ne] * dailytemp_ens_v[ne, nt] * ups_v[ne, ny]
                 nt += 1
     return s, yf, k0ikups_t, U_t
 
-def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
+def stefan_integral_balance(
+        dailytemp_ens, params=params_default, steps=2, batch=None, batchsize=None):
     # simplified iterative approach based on Goodman's heat balance
     # for diffusion in frozen materials (uniform and constant properties)
     # and (assuming linear profile) storage changes in thawed part (also constant C)
-    s, yf, k0ikups_t, U_t = stefan_ens(dailytemp_ens, params=params) # old values
+
+    # old values
+    s, yf, k0ikups_t, U_t = stefan_ens(
+        dailytemp_ens, params=params, batch=batch, batchsize=batchsize) 
+    
+    ens_balance = extract_ensemble(
+        dailytemp_ens, params, batch=batch, batchsize=batchsize, balance=True)
     t = np.arange(1, 1 + yf.shape[1]) * 3600 * 24 # in seconds
-    alphaf = (params['kf'] / params['Cf'])
+    alphaf = (ens_balance['kf'] / ens_balance['Cf'])
     step = 0
     while step < steps:
         # estimate a and w  as function of t
         a = - 12 * alphaf[:, np.newaxis] * t[np.newaxis, :] * yf ** (-2)
         w = np.sqrt((9 / 4) - a) - (3 / 2) # w should be time invariant (neglect derivative)
         # estimate heat flux Qf into frozen material (function of time)
-        Qf = -2 * (params['kf'] * params['Tf'])[:, np.newaxis] / (w * yf)
+        Qf = -2 * (ens_balance['kf'] * ens_balance['Tf'])[:, np.newaxis] / (w * yf)
         # compute k0ikQf as function of time
         k0ikupsQf = k0ikups_t * Qf
         k0ikupsdUdt = np.zeros_like(k0ikupsQf)
@@ -144,7 +160,12 @@ def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
         k0ikupsQ = k0ikupsQf + k0ikupsdUdt
         # re-estimate freezing front progression keeping Q "losses" fixed
         s, yf, k0ikups_t, U_t = stefan_ens(
-            dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ)
+            dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ, batch=batch, 
+            batchsize=batchsize)
         step = step + 1
     return s, yf
 
+def stefan_integral_balance_parallel():
+    pass
+    
+    

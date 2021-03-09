@@ -87,11 +87,10 @@ if __name__ == '__main__':
                  'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
         'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
-    strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=70000)
+    strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=100000)
     strat.draw_stratigraphy()
     print(strat._cpoints())
-    dailytemp_ens = np.zeros((strat.N, len(dailytemp)), dtype=np.float32)
-    dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
+    dailytemp_ens = dailytemp
 
     s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
     ind_obs = [int((d - d0_).days) for d in datesdisp][1:]

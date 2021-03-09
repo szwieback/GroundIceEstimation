@@ -19,7 +19,6 @@ if __name__ == '__main__':
 
     strat = StefanStratigraphySmoothingSpline(N=10000)
     strat.draw_stratigraphy()
-
     
 #     from timeit import timeit
 #     fun_wrapped = lambda: stefan_integral_balance(

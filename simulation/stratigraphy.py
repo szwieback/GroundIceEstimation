@@ -8,11 +8,10 @@ import numpy as np
 import warnings
 
 constants_default = {
-    'Lvw': 3.34e8, 'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024,
-    'Ct': 3.0e6}
-params_default_frozen = {'kf': 1.9, 'Cf': 1.5e6, 'Tf':-4.0}
+    'Lvw': 3.34e8, 'km': 3.80, 'ko': 0.25, 'ki': 2.20, 'kw': 0.57, 'ka': 0.024}
+params_default_ancillary = {'kf': 1.9, 'Cf': 1.5e6, 'Tf':-4.0, 'Ct': 3.0e6}
 params_default_grid = {'dy': 2e-3, 'depth': 1.5}
-params_default = {**constants_default, **params_default_frozen, **params_default_grid}
+params_default = {**constants_default, **params_default_ancillary, **params_default_grid}
 params_default_distribution = {
     'Nb': 15, 'expb': 2.0, 'b0': 0.1, 'bm': 0.7,
     'e': {'alpha_shape': 1.0, 'beta_shape': 2.0, 'high_scale': 0.8, 'alpha_shift': 0.1,
@@ -35,7 +34,7 @@ class Stratigraphy():
 
 class StefanStratigraphy(Stratigraphy):
     def __init__(
-            self, dy=None, depth=None, N=10000, dist=None, frozen=None, rs=None, seed=1,
+            self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
             constants=None):
         self.depth = depth if depth is not None else params_default_grid['depth']
         self.dy = dy if dy is not None else params_default_grid['dy']
@@ -52,7 +51,8 @@ class StefanStratigraphy(Stratigraphy):
         self.soil_params = dist_['soil']
         # can also account for correction factor (Ste > 0, T0 < 0) if basic stefan is used
         self.n_factor_params = dist_['n_factor']
-        self.frozen = frozen if frozen is not None else params_default_frozen
+        self.ancillary = (
+            ancillary if ancillary is not None else params_default_ancillary)
         self.constants = constants if constants is not None else constants_default
         self.stratigraphy = {}
 
@@ -155,12 +155,13 @@ class StefanStratigraphy(Stratigraphy):
         dict_k = {'k0ik': k0ik, 'k0': k0}
         return dict_k
 
-    def _frozen_properties(self):
-        # unfiform for now
-        f = {'kf': self.frozen['kf'] * np.ones(self.N),
-             'Cf': self.frozen['Cf'] * np.ones(self.N),
-             'Tf': self.frozen['Tf'] * np.ones(self.N)}
-        return f
+    def _ancillary(self):
+        # uniform for now
+        p = {'kf': self.ancillary['kf'] * np.ones(self.N),
+             'Cf': self.ancillary['Cf'] * np.ones(self.N),
+             'Tf': self.ancillary['Tf'] * np.ones(self.N),
+             'Ct': self.ancillary['Ct'] * np.ones(self.N)}
+        return p
 
     def draw_stratigraphy(self):
         if len(self.stratigraphy) > 0:
@@ -169,14 +170,14 @@ class StefanStratigraphy(Stratigraphy):
         od = self._draw_organic_depth()
         m, o, w = self._draw_mow(od, e)
         n_factor = self._draw_n_factor()
-        f = self._frozen_properties()
+        p = self._ancillary()
         self.stratigraphy = {'e': e, 'm': m, 'o': o, 'w': w, 'od': od,
-                             'n_factor': n_factor, **f}
+                             'n_factor': n_factor, **p}
         self.stratigraphy.update(self._thermal_conductivity_thawed())
 
     @property
     def params(self):
-        return {**self.stratigraphy, **self.constants, 'depth': self.depth, 'dy': self.dy}
+        return {**self.constants, **self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
 
 class StefanStratigraphySmoothingSpline(StefanStratigraphy):
     def _draw_e(self):
@@ -193,7 +194,6 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         elogit = np.einsum('ij, kj', coeff, basis)
         e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
         return e
-
 
 if __name__ == '__main__':
     strat = StefanStratigraphySmoothingSpline()
