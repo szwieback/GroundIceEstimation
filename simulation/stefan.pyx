@@ -53,47 +53,60 @@ def _extract_conductivity(params, Ne, Ng):
         k0ik = params['k0ik']
     return k0, k0ik
 
-def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
-    
-    cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
-    cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
-    cdef double dy = params['dy']
-    yg = np.arange(0, params['depth'], step=dy)
-    cdef Py_ssize_t Ng = yg.shape[0]
-    
-    Ct = params['Ct']
+def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
+    dailytemp_ens_ = dailytemp_ens
+    Ne, Nt = dailytemp_ens_.shape    
+    yg = np.arange(0, params['depth'], step=params['dy'])
+    Ng = yg.shape[0]
     e, w = _extract_stratigraphy(params, Ne, Ng)
     n_factor =  _extract_n_factor(params, Ne)
     k0, k0ik = _extract_conductivity(params, Ne, Ng)
     k0s = (k0 * (3600 * 24 * fac))  #scaled, per day
     
     Lg = (params['Lvw'] * (w + e)).astype(np.float32)
-    sg = (np.cumsum(e * dy, axis=1)).astype(np.float32)
+    sg = (np.cumsum(e * params['dy'], axis=1)).astype(np.float32)
     ups = (yg[np.newaxis, :] - sg).astype(np.float32)
     k0ikups = (k0ik * ups).astype(np.float32)
 
-    tterm = np.cumsum(n_factor[:, np.newaxis] * k0s[:, np.newaxis] * dailytemp_ens, axis=1)
+    tterm = np.cumsum(n_factor[:, np.newaxis] * k0s[:, np.newaxis] * dailytemp_ens_, axis=1)
     if k0ikupsQ is not None:
-        tterm -= np.cumsum(k0ikupsQ, axis=1) * 3600 * 24 * fac
+        tterm -= np.cumsum(k0ikupsQ, axis=1) * (3600 * 24 * fac)
     tterm = tterm.astype(np.float32)
-    yterm = np.cumsum(k0ikups * (Lg * fac) * dy, axis=1).astype(np.float32)
+    yterm = np.cumsum(k0ikups * (Lg * fac) * params['dy'], axis=1).astype(np.float32)
 
     yf = np.ones_like(tterm) * -1
     s = np.zeros_like(tterm)
     k0ikups_t = np.ones_like(tterm) #k0ik upsilon as function of time
     U_t = np.ones_like(tterm) # internal energy due to warming (above 0) in thawed part
-    
-    cdef Py_ssize_t nt = 0
-    cdef Py_ssize_t ny = 0
+    ini = {'yf': yf, 's': s, 'tterm': tterm, 'yterm': yterm, 'k0ikups_t': k0ikups_t,
+           'U_t': U_t, 'dailytemp_ens': dailytemp_ens_, 'ups': ups, 'k0ikups': k0ikups,
+           'sg': sg}
+    return ini
+
+def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
+    ini = stefan_initialize(dailytemp_ens, params, k0ikupsQ=k0ikupsQ)
+    s, yf = ini['s'], ini['yf']
+    k0ikups_t, U_t = ini['k0ikups_t'], ini['U_t']
+    dailytemp_ens_ = ini['dailytemp_ens']
     cdef float [:, :] yf_v = yf
     cdef float [:, :] s_v = s
-    cdef float [:, :] tterm_v = tterm
-    cdef float [:, :] yterm_v = yterm
     cdef float [:, :] k0ikups_t_v = k0ikups_t
     cdef float [:, :] U_t_v = U_t
-    cdef float [:, :] dailytemp_ens_v = dailytemp_ens
-    cdef float [:, :] ups_v = ups
 
+    cdef Py_ssize_t Nt = dailytemp_ens_.shape[1]
+    cdef Py_ssize_t Ne = dailytemp_ens_.shape[0]        
+    cdef double dy = params['dy']
+    cdef Py_ssize_t Ng = int(params['depth'] / dy)    
+    cdef Py_ssize_t nt = 0
+    cdef Py_ssize_t ny = 0
+    cdef float [:, :] tterm_v = ini['tterm']
+    cdef float [:, :] yterm_v = ini['yterm']
+    cdef float [:, :] dailytemp_ens_v = dailytemp_ens_
+    cdef float [:, :] ups_v = ini['ups']
+    cdef float [:, :] k0ikups_v = ini['k0ikups']
+    cdef float [:, :] sg_v = ini['sg']
+    cdef float Ct = params['Ct']
+    
     for ne in range(Ne):
         nt = 0
         ny = 1
@@ -104,8 +117,8 @@ def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
                     raise DepthExceedanceException()
             else:
                 yf_v[ne, nt] = ny * dy
-                s_v[ne, nt] = sg[ne, ny]
-                k0ikups_t_v[ne, nt] = k0ikups[ne, ny]
+                s_v[ne, nt] = sg_v[ne, ny]
+                k0ikups_t_v[ne, nt] = k0ikups_v[ne, ny]
                 U_t_v[ne, nt] = 0.5 * Ct * dailytemp_ens_v[ne, nt] * ups_v[ne, ny]
                 nt += 1
     return s, yf, k0ikups_t, U_t
@@ -129,9 +142,6 @@ def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
         k0ikupsdUdt = np.zeros_like(k0ikupsQf)
         k0ikupsdUdt[:, 1:] = k0ikups_t[:, 1:] * np.diff(U_t, axis=1) / (24 * 3600) 
         k0ikupsdUdt[:, 0] = 0.0
-#         print(np.mean(k0ikupsQf), np.mean(k0ikupsdUdt))
-#         print(U_t[0, ::7] * 1e-6)
-#         print(dailytemp_ens[0, ::7])
         k0ikupsQ = k0ikupsQf + k0ikupsdUdt
         # re-estimate freezing front progression keeping Q "losses" fixed
         s, yf, k0ikups_t, U_t = stefan_ens(
