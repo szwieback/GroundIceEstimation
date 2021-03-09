@@ -53,7 +53,7 @@ def _extract_conductivity(params, Ne, Ng):
         k0ik = params['k0ik']
     return k0, k0ik
 
-def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
+def stefan_ens_single(dailytemp_ens, params=params_default, k0ikupsQ=None):
     
     cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
     cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
@@ -110,11 +110,11 @@ def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
                 nt += 1
     return s, yf, k0ikups_t, U_t
 
-def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
+def stefan_integral_balance_single(dailytemp_ens, params=params_default, steps=2):
     # simplified iterative approach based on Goodman's heat balance
     # for diffusion in frozen materials (uniform and constant properties)
     # and (assuming linear profile) storage changes in thawed part (also constant C)
-    s, yf, k0ikups_t, U_t = stefan_ens(dailytemp_ens, params=params) # old values
+    s, yf, k0ikups_t, U_t = stefan_ens_single(dailytemp_ens, params=params) # old values
     t = np.arange(1, 1 + yf.shape[1]) * 3600 * 24 # in seconds
     alphaf = (params['kf'] / params['Cf'])
     step = 0
@@ -134,7 +134,7 @@ def stefan_integral_balance(dailytemp_ens, params=params_default, steps=2):
 #         print(dailytemp_ens[0, ::7])
         k0ikupsQ = k0ikupsQf + k0ikupsdUdt
         # re-estimate freezing front progression keeping Q "losses" fixed
-        s, yf, k0ikups_t, U_t = stefan_ens(
+        s, yf, k0ikups_t, U_t = stefan_ens_single(
             dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ)
         step = step + 1
     return s, yf

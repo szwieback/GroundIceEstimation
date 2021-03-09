@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from simulation.toolik import load_forcing
 from simulation.stefan import stefan_ens, stefan_integral_balance
+from simulation.stefan_single import stefan_integral_balance_single
 from simulation.stratigraphy import StefanStratigraphy
 
 if __name__ == '__main__':
@@ -17,19 +18,19 @@ if __name__ == '__main__':
     dailytemp[dailytemp < 0] = 0
 
     
-    strat = StefanStratigraphy()
+    strat = StefanStratigraphy(N=50000)
     strat.draw_stratigraphy()
     
-    dailytemp_ens = np.zeros((strat.N, len(dailytemp)))
+    dailytemp_ens = np.zeros((strat.N, len(dailytemp)), dtype=np.float32)
     dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
     
 #     from timeit import timeit
-#     fun_wrapped = lambda: stefan_ens(dailytemp_ens, params=strat.params)
+#     fun_wrapped = lambda: stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
 #     print(f'{timeit(fun_wrapped, number=1)}')
     s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=0)
     s2, yf2 = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
     print(np.percentile((yf-yf2)[:, -15], [10, 50, 90]))
-    # effect of C is very small; affects timing slightly
+#     effect of C is very small; affects timing slightly
     
     
     
