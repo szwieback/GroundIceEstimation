@@ -17,18 +17,17 @@ if __name__ == '__main__':
     dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
 
-    strat = StefanStratigraphySmoothingSpline(N=30000)
+    strat = StefanStratigraphySmoothingSpline(N=10000)
     strat.draw_stratigraphy()
 
-    dailytemp_ens = np.zeros((strat.N, len(dailytemp)), dtype=np.float32)
-    dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
-
+    
 #     from timeit import timeit
-#     fun_wrapped = lambda: stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
+#     fun_wrapped = lambda: stefan_integral_balance(
+#         dailytemp, params=strat.params, steps=1)
 #     print(f'{timeit(fun_wrapped, number=1)}')
-    s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=0)
-#     s2, yf2 = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
-    print(np.percentile(yf[:, -1], [10, 50, 90]))
+#     s, yf = stefan_integral_balance(dailytemp, params=strat.params, steps=0)
+    s2, yf2 = stefan_integral_balance(dailytemp, params=strat.params, steps=1)
+    print(np.percentile(yf2[:, -1], [10, 50, 90]))
 #     print(np.percentile((yf - yf2)[:, -15], [10, 50, 90]))
     
 #     effect of C is very small; affects timing slightly

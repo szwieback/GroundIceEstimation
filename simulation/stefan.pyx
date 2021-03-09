@@ -21,54 +21,53 @@ class DepthExceedanceException(Exception):
         pass
     
     def __str__(self):
-        return ('Simulated thaw depth exceeds computational domain. Increase depth.')
+        return ("Simulated thaw depth exceeds computational domain. Increase depth.")
 
-def _extract_stratigraphy(params, Ne, Ng):
-    if 'e' not in params:
-        e = 0.1 * np.ones((Ne, Ng))
+def extract_ensemble(dailytemp, params, batch=None, batchsize=None):
+    ens = {}
+    Ng = np.arange(0, params['depth'], step=params['dy']).shape[0]
+    if len(dailytemp.shape) == 2:
+        Ne = dailytemp.shape[0]
+    elif 'e' in params:
+        Ne = params['e'].shape[0]
     else:
-        e = params['e']
-    
-    if 'w' not in params:
-        w = 0.4 * np.ones((Ne, Ng))
+        Ne = 1
+    ind = np.arange(Ne)
+    def _fill(field, val, size):
+        if field not in params:
+            filled = val * np.ones(size)
+        else:
+            filled = params[field][ind, ...]
+        return filled
+    if batch is not None:
+        ind = np.nonzero(
+            np.logical_and(ind >= batch * batchsize, ind < (batch + 1) * batchsize))
+        Ne = len(ind)
+    if len(dailytemp.shape) == 2:
+        ens['dailytemp'] = dailytemp[ind, :].astype(np.float32)
     else:
-        w = params['w']
-    return e, w
+        ens['dailytemp'] = np.zeros((Ne, len(dailytemp)), dtype=np.float32)
+        ens['dailytemp'][:, :] = np.array(dailytemp)[np.newaxis, :]
+    ens['n_factor'] = _fill('n_factor', 0.9, (Ne,))
+    ens['e'] = _fill('e', 0.1, (Ne, Ng))
+    ens['w'] = _fill('w', 0.4, (Ne, Ng))
+    ens['k0'] = _fill('k0', 0.4, (Ne,))
+    ens['k0ik'] = _fill('k0ik', 1.0, (Ne, Ng))
+    return ens
 
-def _extract_n_factor(params, Ne):
-    if 'n_factor' not in params:
-        n_factor = 0.9 * np.ones((Ne,))
-    else:
-        n_factor = params['n_factor']
-    return n_factor
-
-def _extract_conductivity(params, Ne, Ng):
-    if 'k0' not in params:
-        k0 = 0.4* np.ones((Ne,))
-    else:
-        k0 = params['k0']
-    if 'k0ik' not in params:
-        k0ik = np.ones((Ne, Ng))
-    else:
-        k0ik = params['k0ik']
-    return k0, k0ik
-
-def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
-    dailytemp_ens_ = dailytemp_ens
-    Ne, Nt = dailytemp_ens_.shape    
-    yg = np.arange(0, params['depth'], step=params['dy'])
+def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None, batch=None, batchsize=None):
+    yg = np.arange(0, params['depth'], step=params['dy'])  
     Ng = yg.shape[0]
-    e, w = _extract_stratigraphy(params, Ne, Ng)
-    n_factor =  _extract_n_factor(params, Ne)
-    k0, k0ik = _extract_conductivity(params, Ne, Ng)
-    k0s = (k0 * (3600 * 24 * fac))  #scaled, per day
+    ens = extract_ensemble(dailytemp_ens, params, batch=batch, batchsize=batchsize)
+    k0s = (ens['k0'] * (3600 * 24 * fac))  #scaled, per day
     
-    Lg = (params['Lvw'] * (w + e)).astype(np.float32)
-    sg = (np.cumsum(e * params['dy'], axis=1)).astype(np.float32)
+    Lg = (params['Lvw'] * (ens['w'] + ens['e'])).astype(np.float32)
+    sg = (np.cumsum(ens['e'] * params['dy'], axis=1)).astype(np.float32)
     ups = (yg[np.newaxis, :] - sg).astype(np.float32)
-    k0ikups = (k0ik * ups).astype(np.float32)
+    k0ikups = (ens['k0ik'] * ups).astype(np.float32)
 
-    tterm = np.cumsum(n_factor[:, np.newaxis] * k0s[:, np.newaxis] * dailytemp_ens_, axis=1)
+    tterm = np.cumsum(
+        ens['n_factor'][:, np.newaxis] * k0s[:, np.newaxis] * ens['dailytemp'], axis=1)
     if k0ikupsQ is not None:
         tterm -= np.cumsum(k0ikupsQ, axis=1) * (3600 * 24 * fac)
     tterm = tterm.astype(np.float32)
@@ -79,29 +78,29 @@ def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
     k0ikups_t = np.ones_like(tterm) #k0ik upsilon as function of time
     U_t = np.ones_like(tterm) # internal energy due to warming (above 0) in thawed part
     ini = {'yf': yf, 's': s, 'tterm': tterm, 'yterm': yterm, 'k0ikups_t': k0ikups_t,
-           'U_t': U_t, 'dailytemp_ens': dailytemp_ens_, 'ups': ups, 'k0ikups': k0ikups,
+           'U_t': U_t, 'dailytemp': ens['dailytemp'], 'ups': ups, 'k0ikups': k0ikups,
            'sg': sg}
     return ini
 
-def stefan_ens(dailytemp_ens, params=params_default, k0ikupsQ=None):
-    ini = stefan_initialize(dailytemp_ens, params, k0ikupsQ=k0ikupsQ)
+def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
+    ini = stefan_initialize(dailytemp, params, k0ikupsQ=k0ikupsQ)
     s, yf = ini['s'], ini['yf']
     k0ikups_t, U_t = ini['k0ikups_t'], ini['U_t']
-    dailytemp_ens_ = ini['dailytemp_ens']
+    dailytemp_ens = ini['dailytemp']
     cdef float [:, :] yf_v = yf
     cdef float [:, :] s_v = s
     cdef float [:, :] k0ikups_t_v = k0ikups_t
     cdef float [:, :] U_t_v = U_t
 
-    cdef Py_ssize_t Nt = dailytemp_ens_.shape[1]
-    cdef Py_ssize_t Ne = dailytemp_ens_.shape[0]        
+    cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
+    cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
     cdef double dy = params['dy']
     cdef Py_ssize_t Ng = int(params['depth'] / dy)    
     cdef Py_ssize_t nt = 0
     cdef Py_ssize_t ny = 0
     cdef float [:, :] tterm_v = ini['tterm']
     cdef float [:, :] yterm_v = ini['yterm']
-    cdef float [:, :] dailytemp_ens_v = dailytemp_ens_
+    cdef float [:, :] dailytemp_ens_v = dailytemp_ens
     cdef float [:, :] ups_v = ini['ups']
     cdef float [:, :] k0ikups_v = ini['k0ikups']
     cdef float [:, :] sg_v = ini['sg']
