@@ -22,9 +22,8 @@ params_default_distribution = {
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
     'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
 params_default_distribution = {
-    'Nb': 8, 'expb': 1.3, 'b0': 0.03, 'bm': 0.65,
-    'e': {'alpha_shape': 0.1, 'beta_shape': 0.6, 'high_scale': 0.8, 'alpha_shift': 0.1,
-          'beta_shift': 2.0},
+    'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -2, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
@@ -36,7 +35,7 @@ class Stratigraphy():
 
 class StefanStratigraphy(Stratigraphy):
     def __init__(
-            self, dy=None, depth=None, N=10000, dist=None, frozen=None, rs=None, seed=1, 
+            self, dy=None, depth=None, N=10000, dist=None, frozen=None, rs=None, seed=1,
             constants=None):
         self.depth = depth if depth is not None else params_default_grid['depth']
         self.dy = dy if dy is not None else params_default_grid['dy']
@@ -70,9 +69,9 @@ class StefanStratigraphy(Stratigraphy):
     def cell_index(self, depth):
         d_ = np.atleast_1d(depth)
         ind = np.zeros(d_.shape, dtype=np.uint32) - 1
-        yg_ = self._ygrid[(np.newaxis, )*len(d_.shape) + (slice(None),)]
+        yg_ = self._ygrid[(np.newaxis,) * len(d_.shape) + (slice(None),)]
         ind_ = np.argmin(np.abs(d_[..., np.newaxis] - yg_), axis=-1)
-        valid = np.logical_and(d_>=0, d_<=self.depth)
+        valid = np.logical_and(d_ >= 0, d_ <= self.depth)
         ind[valid] = ind_[valid]
         if not isinstance(depth, (list, tuple, np.ndarray)):
             ind = ind[0]
@@ -84,6 +83,9 @@ class StefanStratigraphy(Stratigraphy):
         knots = np.concatenate(([0, 0], cpoints , [self.depth, self.depth]))
         c = np.eye(self.Nb)
         bspline = BSpline(knots, c, k=2, extrapolate=False)
+        # integrate than difference
+        # focus on average rather than at grid point
+        # partition of unity is preserved (except 0 element)
         bsplinead = bspline.antiderivative()
         yg = self._ygrid
         basis = np.diff(bsplinead(yg), axis=0, prepend=0) / self.dy
@@ -155,7 +157,7 @@ class StefanStratigraphy(Stratigraphy):
 
     def _frozen_properties(self):
         # unfiform for now
-        f = {'kf': self.frozen['kf'] * np.ones(self.N), 
+        f = {'kf': self.frozen['kf'] * np.ones(self.N),
              'Cf': self.frozen['Cf'] * np.ones(self.N),
              'Tf': self.frozen['Tf'] * np.ones(self.N)}
         return f
@@ -175,3 +177,32 @@ class StefanStratigraphy(Stratigraphy):
     @property
     def params(self):
         return {**self.stratigraphy, **self.constants, 'depth': self.depth, 'dy': self.dy}
+
+class StefanStratigraphySmoothingSpline(StefanStratigraphy):
+    def _draw_e(self):
+        # draw Bspline coefficients; all independent; 0, 1
+        ehigh, elow = self.e_params['low'], self.e_params['high']
+        coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
+        coeffcorr = self.e_params['coeff_corr']
+        coeff = self.rs.normal(size=(self.N, self.Nb))
+        for jcoeff in range(1, self.Nb):
+            coeff[:, jcoeff] += coeffcorr * coeff[:, jcoeff - 1]
+        coeff *= (1 - coeffcorr**2) ** (0.5) # make asymptotic variance 1
+        coeff = coeffmean + coeff * coeffstd
+        basis = self._spline_basis()
+        elogit = np.einsum('ij, kj', coeff, basis)
+        e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
+        return e
+
+
+if __name__ == '__main__':
+    strat = StefanStratigraphySmoothingSpline()
+    print(strat._cpoints())
+#     print(np.sum(strat._spline_basis(), axis=1))
+    e = strat._draw_e()
+    import matplotlib.pyplot as plt
+    ygrid = strat._ygrid
+    plt.plot(ygrid, e[0:50, :].T, alpha=0.5)
+    plt.show()
+    
+    

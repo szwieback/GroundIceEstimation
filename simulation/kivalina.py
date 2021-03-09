@@ -8,7 +8,7 @@ import pandas as pd
 import datetime
 import numpy as np
 from simulation.stefan import stefan_ens, stefan_integral_balance
-from simulation.stratigraphy import StefanStratigraphy
+from simulation.stratigraphy import StefanStratigraphy, StefanStratigraphySmoothingSpline
 
 def read_merra_subset(fn, field='T2MMEAN[0][0]'):
     with open(fn, 'r') as f:
@@ -66,8 +66,6 @@ if __name__ == '__main__':
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-    print(dailytemp)    
-    print(np.mean(dailytemp))
 
     datesdisp, dispd = get_displacements(year=year)
 
@@ -80,9 +78,19 @@ if __name__ == '__main__':
                  'mineral_above': 0.1, 'mineral_below': 0.3, 'organic_below': 0.05},
         'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
-    strat = StefanStratigraphy(dist=params_dist, N=50000)
+    params_dist = {
+        'Nb': 10, 'expb': 1.5, 'b0': 0.05, 'bm': 0.70,
+        'e': {
+            'low': 0.00, 'high': 0.95, 'coeff_mean': -2, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
+                 'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+        'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
+
+    strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=70000)
     strat.draw_stratigraphy()
-    dailytemp_ens = np.zeros((strat.N, len(dailytemp)))
+    print(strat._cpoints())
+    dailytemp_ens = np.zeros((strat.N, len(dailytemp)), dtype=np.float32)
     dailytemp_ens[:, :] = np.array(dailytemp)[np.newaxis, :]
 
     s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
@@ -90,8 +98,7 @@ if __name__ == '__main__':
     s_obs_pred = s[:, ind_obs]
 
     s_obs = -dispd['disp'][np.newaxis, :] 
-    C = dispd['C'][np.newaxis, ...] 
-    print(np.sqrt(np.diag(C[0, ...])))
+    C = dispd['C'][np.newaxis, ...] # scaling has a noticeable eff
     from inference import psislw, lw_mvnormal, expectation
     lw = lw_mvnormal(s_obs, C, s_obs_pred)
     lw_ps, _ = psislw(lw)
