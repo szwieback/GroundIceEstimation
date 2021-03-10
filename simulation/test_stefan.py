@@ -49,14 +49,14 @@ if __name__ == '__main__':
     stratb = StefanStratigraphySmoothingSpline(N=300000)
 
 
-    strat = StratigraphyMultiple(StefanStratigraphySmoothingSpline(N=10000), Nbatch=1)
+    strat = StratigraphyMultiple(StefanStratigraphySmoothingSpline(N=25000), Nbatch=12)
 #     params = strat.params()
 #     print(params['e'].shape)
 
-    def fun_wrapped():
-        stratb.draw_stratigraphy()
-        paramsb = stratb.params()
-        stefan_integral_balance(dailytemp, params=paramsb, steps=1)
+#     def fun_wrapped():
+#         stratb.draw_stratigraphy()
+#         paramsb = stratb.params()
+#         stefan_integral_balance(dailytemp, params=paramsb, steps=1)
     
     from timeit import timeit
     fun_wrapped = lambda: stefan_stratigraphy(dailytemp, strat, force_bulk=False, steps=1)

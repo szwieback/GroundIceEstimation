@@ -14,7 +14,7 @@ import numpy as np
 from stratigraphy import params_default
 
 fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
-nptype = np.float32
+nptype = np.float64
 
 class DepthExceedanceException(Exception):
     
@@ -94,10 +94,10 @@ def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
     s, yf = ini['s'], ini['yf']
     k0ikups_t, U_t = ini['k0ikups_t'], ini['U_t']
     dailytemp_ens = ini['dailytemp']
-    cdef float [:, :] yf_v = yf
-    cdef float [:, :] s_v = s
-    cdef float [:, :] k0ikups_t_v = k0ikups_t
-    cdef float [:, :] U_t_v = U_t
+    cdef double [:, :] yf_v = yf
+    cdef double [:, :] s_v = s
+    cdef double [:, :] k0ikups_t_v = k0ikups_t
+    cdef double [:, :] U_t_v = U_t
 
     cdef Py_ssize_t Nt = dailytemp_ens.shape[1]
     cdef Py_ssize_t Ne = dailytemp_ens.shape[0]        
@@ -105,13 +105,13 @@ def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
     cdef Py_ssize_t Ng = int(params['depth'] / dy)    
     cdef Py_ssize_t nt = 0
     cdef Py_ssize_t ny = 0
-    cdef float [:, :] tterm_v = ini['tterm']
-    cdef float [:, :] yterm_v = ini['yterm']
-    cdef float [:, :] dailytemp_ens_v = dailytemp_ens
-    cdef float [:, :] ups_v = ini['ups']
-    cdef float [:, :] k0ikups_v = ini['k0ikups']
-    cdef float [:, :] sg_v = ini['sg']
-    cdef float [:] Ct_v = ini['Ct']
+    cdef double [:, :] tterm_v = ini['tterm']
+    cdef double [:, :] yterm_v = ini['yterm']
+    cdef double [:, :] dailytemp_ens_v = dailytemp_ens
+    cdef double [:, :] ups_v = ini['ups']
+    cdef double [:, :] k0ikups_v = ini['k0ikups']
+    cdef double [:, :] sg_v = ini['sg']
+    cdef double [:] Ct_v = ini['Ct']
     
     for ne in range(Ne):
         nt = 0
