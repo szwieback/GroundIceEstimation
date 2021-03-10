@@ -22,15 +22,41 @@ params_default_distribution = {
     'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
 params_default_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -2, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':3, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
     'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
 class Stratigraphy():
-    def __init__(self):
+    def __init__(
+            self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
+            constants=None):
         pass
+    def _update_rs(self, rs):
+        self.rs = rs
+
+class StratigraphyMultiple():
+    def __init__(self, strat, Ns=100, seed0=1):
+        self.strat = strat
+        self.Ns = Ns
+        self.seed0 = seed0
+        
+    def params(self, fields=None):
+        params0 = {**self.strat.constants, 'depth': self.strat.depth, 'dy': self.strat.dy}
+        params_strat = {}
+        for js in range(self.Ns):
+            self.strat._update_rs(RandomState(seed=self.seed0+js))
+            self.strat.draw_stratigraphy(verbose=False)
+            params_stratjs = self.strat.stratigraphy
+            for field in params_stratjs:
+                if fields is None or field in fields:
+                    if js == 0 or np.isscalar(params_stratjs[field]):
+                        params_strat[field] = params_stratjs[field]
+                    else:
+                        params_strat[field] = np.concatenate(
+                            (params_strat[field], params_stratjs[field]), axis=0)
+        return {**params0, **params_strat}
 
 class StefanStratigraphy(Stratigraphy):
     def __init__(
@@ -55,6 +81,7 @@ class StefanStratigraphy(Stratigraphy):
             ancillary if ancillary is not None else params_default_ancillary)
         self.constants = constants if constants is not None else constants_default
         self.stratigraphy = {}
+        self.dtype = np.float32
 
     def _cpoints(self):
         cpoints = np.linspace(self.b0, self.bm, num=self.Nb - 2) ** self.expb
@@ -152,30 +179,30 @@ class StefanStratigraphy(Stratigraphy):
         ik = np.cumsum(ikg * depthf, axis=1) / np.cumsum(depthf, axis=1)
         k0 = k[:, 1]
         k0ik = k0[:, np.newaxis] * ik
-        dict_k = {'k0ik': k0ik, 'k0': k0}
+        dict_k = {'k0ik': k0ik.astype(self.dtype), 'k0': k0.astype(self.dtype)}
         return dict_k
 
     def _ancillary(self):
         # uniform for now
-        p = {'kf': self.ancillary['kf'] * np.ones(self.N),
-             'Cf': self.ancillary['Cf'] * np.ones(self.N),
-             'Tf': self.ancillary['Tf'] * np.ones(self.N),
-             'Ct': self.ancillary['Ct'] * np.ones(self.N)}
+        p = {'kf': self.ancillary['kf'],
+             'Cf': self.ancillary['Cf'],
+             'Tf': self.ancillary['Tf'],
+             'Ct': self.ancillary['Ct']}
         return p
 
-    def draw_stratigraphy(self):
-        if len(self.stratigraphy) > 0:
+    def draw_stratigraphy(self, verbose=True):
+        if len(self.stratigraphy) > 0 and verbose:
             warnings.warn("Overwriting stratigraphy", RuntimeWarning)
-        e = self._draw_e()
-        od = self._draw_organic_depth()
+        e = self._draw_e().astype(self.dtype)
+        od = self._draw_organic_depth().astype(self.dtype)
         m, o, w = self._draw_mow(od, e)
-        n_factor = self._draw_n_factor()
+        n_factor = self._draw_n_factor().astype(self.dtype)
         p = self._ancillary()
-        self.stratigraphy = {'e': e, 'm': m, 'o': o, 'w': w, 'od': od,
-                             'n_factor': n_factor, **p}
+        self.stratigraphy = {
+            'e': e, 'm': m.astype(self.dtype), 'o': o.astype(self.dtype),
+            'w': w.astype(self.dtype), 'od': od, 'n_factor': n_factor, **p}
         self.stratigraphy.update(self._thermal_conductivity_thawed())
 
-    @property
     def params(self):
         return {**self.constants, **self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
 
@@ -188,7 +215,7 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         coeff = self.rs.normal(size=(self.N, self.Nb))
         for jcoeff in range(1, self.Nb):
             coeff[:, jcoeff] += coeffcorr * coeff[:, jcoeff - 1]
-        coeff *= (1 - coeffcorr**2) ** (0.5) # make asymptotic variance 1
+        coeff *= (1 - coeffcorr ** 2) ** (0.5)  # make asymptotic variance 1
         coeff = coeffmean + coeff * coeffstd
         basis = self._spline_basis()
         elogit = np.einsum('ij, kj', coeff, basis)
@@ -204,5 +231,4 @@ if __name__ == '__main__':
     ygrid = strat._ygrid
     plt.plot(ygrid, e[0:50, :].T, alpha=0.5)
     plt.show()
-    
-    
+

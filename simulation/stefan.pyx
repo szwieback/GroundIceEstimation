@@ -23,16 +23,9 @@ class DepthExceedanceException(Exception):
     def __str__(self):
         return ("Simulated thaw depth exceeds computational domain. Increase depth.")
 
-def extract_ensemble(dailytemp, params, balance=False, batch=None, batchsize=None):
+def extract_ensemble(dailytemp, params, balance=False):
     ens = {}
-    Ng = np.arange(0, params['depth'], step=params['dy']).shape[0]
-    def _fill(field, val, size):
-        if field not in params:
-            filled = (val * np.ones(size)).astype(np.float32)
-        else:
-            filled = params[field][ind, ...].astype(np.float32)
-        return filled
-    
+    Ng = np.arange(0, params['depth'], step=params['dy']).shape[0]    
     if len(dailytemp.shape) == 2:
         Ne = dailytemp.shape[0]
     elif 'e' in params:
@@ -40,11 +33,15 @@ def extract_ensemble(dailytemp, params, balance=False, batch=None, batchsize=Non
     else:
         Ne = 1
     ind = np.arange(Ne)
-
-    if batch is not None:
-        ind = np.nonzero(
-            np.logical_and(ind >= batch * batchsize, ind < (batch + 1) * batchsize))
-        Ne = len(ind)
+    def _fill(field, val, size):
+        if field not in params:
+            filled = (val * np.ones(size))
+        else:
+            try:
+                filled = params[field][ind, ...]
+            except:
+                filled = params[field] * np.ones(len(ind))
+        return filled.astype(np.float32)
     if balance:
         ens['Cf'] = _fill('Cf', 1e6, (Ne,))
         ens['kf'] = _fill('kf', 1.9, (Ne,))
@@ -63,10 +60,10 @@ def extract_ensemble(dailytemp, params, balance=False, batch=None, batchsize=Non
         ens['Ct'] = _fill('Ct', 1e6, (Ne,))
     return ens
 
-def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None, batch=None, batchsize=None):
+def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
     yg = np.arange(0, params['depth'], step=params['dy'])  
     Ng = yg.shape[0]
-    ens = extract_ensemble(dailytemp_ens, params, batch=batch, batchsize=batchsize)
+    ens = extract_ensemble(dailytemp_ens, params)
     k0s = (ens['k0'] * (3600 * 24 * fac))  #scaled, per day
     
     Lg = (params['Lvw'] * (ens['w'] + ens['e'])).astype(np.float32)
@@ -90,9 +87,9 @@ def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None, batch=None, batchsiz
            'sg': sg, 'Ct': ens['Ct']}
     return ini
 
-def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None, batch=None, batchsize=None):
+def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None):
     ini = stefan_initialize(
-        dailytemp, params, k0ikupsQ=k0ikupsQ, batch=batch, batchsize=batchsize)
+        dailytemp, params, k0ikupsQ=k0ikupsQ)
     s, yf = ini['s'], ini['yf']
     k0ikups_t, U_t = ini['k0ikups_t'], ini['U_t']
     dailytemp_ens = ini['dailytemp']
@@ -132,17 +129,15 @@ def stefan_ens(dailytemp, params=params_default, k0ikupsQ=None, batch=None, batc
     return s, yf, k0ikups_t, U_t
 
 def stefan_integral_balance(
-        dailytemp_ens, params=params_default, steps=2, batch=None, batchsize=None):
+        dailytemp_ens, params=params_default, steps=2):
     # simplified iterative approach based on Goodman's heat balance
     # for diffusion in frozen materials (uniform and constant properties)
     # and (assuming linear profile) storage changes in thawed part (also constant C)
 
     # old values
-    s, yf, k0ikups_t, U_t = stefan_ens(
-        dailytemp_ens, params=params, batch=batch, batchsize=batchsize) 
+    s, yf, k0ikups_t, U_t = stefan_ens(dailytemp_ens, params=params) 
     
-    ens_balance = extract_ensemble(
-        dailytemp_ens, params, batch=batch, batchsize=batchsize, balance=True)
+    ens_balance = extract_ensemble(dailytemp_ens, params, balance=True)
     t = np.arange(1, 1 + yf.shape[1]) * 3600 * 24 # in seconds
     alphaf = (ens_balance['kf'] / ens_balance['Cf'])
     step = 0
@@ -160,12 +155,7 @@ def stefan_integral_balance(
         k0ikupsQ = k0ikupsQf + k0ikupsdUdt
         # re-estimate freezing front progression keeping Q "losses" fixed
         s, yf, k0ikups_t, U_t = stefan_ens(
-            dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ, batch=batch, 
-            batchsize=batchsize)
+            dailytemp_ens, params=params, k0ikupsQ=k0ikupsQ)
         step = step + 1
     return s, yf
-
-def stefan_integral_balance_parallel():
-    pass
-    
     

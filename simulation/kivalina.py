@@ -81,28 +81,31 @@ if __name__ == '__main__':
     params_dist = {
         'Nb': 10, 'expb': 1.5, 'b0': 0.05, 'bm': 0.70,
         'e': {
-            'low': 0.00, 'high': 0.95, 'coeff_mean': -2, 'coeff_std': 3, 'coeff_corr': 0.7},
+            'low': 0.00, 'high': 0.95, 'coeff_mean': 2, 'coeff_std': 3, 'coeff_corr': 0.7},
         'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
         'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
                  'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
         'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
-    strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=100000)
+    strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=30000)
     strat.draw_stratigraphy()
+    params = strat.params()
+    print(np.mean(params['e'][:, 200]))
     print(strat._cpoints())
     dailytemp_ens = dailytemp
 
-    s, yf = stefan_integral_balance(dailytemp_ens, params=strat.params, steps=1)
+    s, yf = stefan_integral_balance(dailytemp_ens, params=params, steps=1)
     ind_obs = [int((d - d0_).days) for d in datesdisp][1:]
     s_obs_pred = s[:, ind_obs]
 
     s_obs = -dispd['disp'][np.newaxis, :] 
     C = dispd['C'][np.newaxis, ...] # scaling has a noticeable eff
+    C = (np.eye(len(s_obs[0, ...])) * 0.01 ** 2)[np.newaxis, ...]
     from inference import psislw, lw_mvnormal, expectation
     lw = lw_mvnormal(s_obs, C, s_obs_pred)
     lw_ps, _ = psislw(lw)
 
-    e_est = expectation(strat.params['e'], lw_ps, normalize=True)
+    e_est = expectation(params['e'], lw_ps, normalize=True)
     s_obs_pred_est = expectation(s_obs_pred, lw_ps, normalize=True)
     s_est = expectation(s, lw_ps, normalize=True)
     yf_est = expectation(yf, lw_ps, normalize=True)
