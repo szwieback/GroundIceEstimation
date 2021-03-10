@@ -33,25 +33,34 @@ class Stratigraphy():
             self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
             constants=None):
         pass
+    
     def _update_rs(self, rs):
         self.rs = rs
+        
+    @property
+    def Nbatch(self):
+        return 0
 
 class StratigraphyMultiple():
-    def __init__(self, strat, Ns=100, seed0=1):
+    def __init__(self, strat, Nbatch=100, seed0=1):
         self.strat = strat
-        self.Ns = Ns
+        self.Nbatch = Nbatch
         self.seed0 = seed0
-        
-    def params(self, fields=None):
+
+    def params(self, fields=None, batch=None):
         params0 = {**self.strat.constants, 'depth': self.strat.depth, 'dy': self.strat.dy}
         params_strat = {}
-        for js in range(self.Ns):
-            self.strat._update_rs(RandomState(seed=self.seed0+js))
+        if batch is None:
+            batches = range(self.Nbatch)
+        else:
+            batches = [batch]
+        for jb, b in enumerate(batches):
+            self.strat._update_rs(RandomState(seed=self.seed0 + b))
             self.strat.draw_stratigraphy(verbose=False)
             params_stratjs = self.strat.stratigraphy
             for field in params_stratjs:
                 if fields is None or field in fields:
-                    if js == 0 or np.isscalar(params_stratjs[field]):
+                    if jb == 0 or np.isscalar(params_stratjs[field]):
                         params_strat[field] = params_stratjs[field]
                     else:
                         params_strat[field] = np.concatenate(

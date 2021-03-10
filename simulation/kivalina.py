@@ -90,7 +90,7 @@ if __name__ == '__main__':
     strat = StefanStratigraphySmoothingSpline(dist=params_dist, N=30000)
     strat.draw_stratigraphy()
     params = strat.params()
-    print(np.mean(params['e'][:, 200]))
+    e = params['e']
     print(strat._cpoints())
     dailytemp_ens = dailytemp
 
@@ -100,12 +100,13 @@ if __name__ == '__main__':
 
     s_obs = -dispd['disp'][np.newaxis, :] 
     C = dispd['C'][np.newaxis, ...] # scaling has a noticeable eff
+    # removing autocorrelation makes fit in August more accurate
     C = (np.eye(len(s_obs[0, ...])) * 0.01 ** 2)[np.newaxis, ...]
     from inference import psislw, lw_mvnormal, expectation
     lw = lw_mvnormal(s_obs, C, s_obs_pred)
     lw_ps, _ = psislw(lw)
 
-    e_est = expectation(params['e'], lw_ps, normalize=True)
+    e_est = expectation(e, lw_ps, normalize=True)
     s_obs_pred_est = expectation(s_obs_pred, lw_ps, normalize=True)
     s_est = expectation(s, lw_ps, normalize=True)
     yf_est = expectation(yf, lw_ps, normalize=True)

@@ -14,6 +14,7 @@ import numpy as np
 from stratigraphy import params_default
 
 fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
+nptype = np.float32
 
 class DepthExceedanceException(Exception):
     
@@ -41,16 +42,16 @@ def extract_ensemble(dailytemp, params, balance=False):
                 filled = params[field][ind, ...]
             except:
                 filled = params[field] * np.ones(len(ind))
-        return filled.astype(np.float32)
+        return filled.astype(nptype)
     if balance:
         ens['Cf'] = _fill('Cf', 1e6, (Ne,))
         ens['kf'] = _fill('kf', 1.9, (Ne,))
         ens['Tf'] = _fill('Tf', -4, (Ne,))
     else:
         if len(dailytemp.shape) == 2:
-            ens['dailytemp'] = dailytemp[ind, :].astype(np.float32)
+            ens['dailytemp'] = dailytemp[ind, :].astype(nptype)
         else:
-            ens['dailytemp'] = np.zeros((Ne, len(dailytemp)), dtype=np.float32)
+            ens['dailytemp'] = np.zeros((Ne, len(dailytemp)), dtype=nptype)
             ens['dailytemp'][:, :] = np.array(dailytemp)[np.newaxis, :]
         ens['n_factor'] = _fill('n_factor', 0.9, (Ne,))
         ens['e'] = _fill('e', 0.1, (Ne, Ng))
@@ -66,17 +67,17 @@ def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
     ens = extract_ensemble(dailytemp_ens, params)
     k0s = (ens['k0'] * (3600 * 24 * fac))  #scaled, per day
     
-    Lg = (params['Lvw'] * (ens['w'] + ens['e'])).astype(np.float32)
-    sg = (np.cumsum(ens['e'] * params['dy'], axis=1)).astype(np.float32)
-    ups = (yg[np.newaxis, :] - sg).astype(np.float32)
-    k0ikups = (ens['k0ik'] * ups).astype(np.float32)
+    Lg = (params['Lvw'] * (ens['w'] + ens['e'])).astype(nptype)
+    sg = (np.cumsum(ens['e'] * params['dy'], axis=1)).astype(nptype)
+    ups = (yg[np.newaxis, :] - sg).astype(nptype)
+    k0ikups = (ens['k0ik'] * ups).astype(nptype)
 
     tterm = np.cumsum(
         ens['n_factor'][:, np.newaxis] * k0s[:, np.newaxis] * ens['dailytemp'], axis=1)
     if k0ikupsQ is not None:
         tterm -= np.cumsum(k0ikupsQ, axis=1) * (3600 * 24 * fac)
-    tterm = tterm.astype(np.float32)
-    yterm = np.cumsum(k0ikups * (Lg * fac) * params['dy'], axis=1).astype(np.float32)
+    tterm = tterm.astype(nptype)
+    yterm = np.cumsum(k0ikups * (Lg * fac) * params['dy'], axis=1).astype(nptype)
 
     yf = np.ones_like(tterm) * -1
     s = np.zeros_like(tterm)
