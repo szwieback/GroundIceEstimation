@@ -213,6 +213,8 @@ class StefanStratigraphy(Stratigraphy):
         self.stratigraphy.update(self._thermal_conductivity_thawed())
 
     def params(self):
+        if len(self.stratigraphy) == 0:
+            self.draw_stratigraphy()
         return {**self.constants, **self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
 
 class StefanStratigraphySmoothingSpline(StefanStratigraphy):
@@ -229,6 +231,16 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         basis = self._spline_basis()
         elogit = np.einsum('ij, kj', coeff, basis)
         e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
+        e[:, 0] = e[:, 1]
+        return e
+    
+class StefanStratigraphyConstantE(StefanStratigraphy):
+    def _draw_e(self):
+        ehigh, elow = self.e_params['low'], self.e_params['high']
+        coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
+        coeff = coeffmean + self.rs.normal(size=(self.N, 1)) * coeffstd
+        og = np.ones_like(self._ygrid)
+        e = (1 + np.exp(-coeff * og[np.newaxis, :])) ** (-1) * (ehigh - elow) + elow
         return e
 
 if __name__ == '__main__':
