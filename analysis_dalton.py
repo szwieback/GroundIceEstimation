@@ -44,7 +44,7 @@ if __name__ == '__main__':
         C = dispdicts[locn]['C'] + np.eye(len(xpos)) * 1e-6  # 1 mm atmosphere error
         disperr = np.sqrt(np.diag(C))
         axs[jloc].errorbar(xpos, disp, yerr=disperr, lw=1.0, elinewidth=0.5, c=col,
-                     ecolor=col, marker='o', markersize=2)
+                           ecolor=col, marker='o', markersize=2)
     axs[0].set_yticks([-0.1, 0])
     axs[0].set_yticklabels([])
     axs[0].set_xticks([1.67, 4.0, 6.5])  # 1 July, 1 August, 1 September

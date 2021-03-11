@@ -1,4 +1,4 @@
-# Adapts code from: 
+# Adapts code from:
 """Pareto smoothed importance sampling (PSIS)
 This module implements Pareto smoothed importance sampling (PSIS) and PSIS
 leave-one-out (LOO) cross-validation for Python (Numpy).
@@ -94,7 +94,7 @@ def gpdfit(w):
     L = N * (np.log(-bs / ks) - ks - 1)
     wsum = np.empty_like(L)
     for jG in range(G):
-        wsum[:, jG] = 1/(np.sum(np.exp(L - L[:, jG][:, np.newaxis]), axis=1))
+        wsum[:, jG] = 1 / (np.sum(np.exp(L - L[:, jG][:, np.newaxis]), axis=1))
     wsum /= np.sum(wsum, axis=1)[..., np.newaxis]
     # posterior mean for b
     b = np.sum(bs * wsum, axis=1)
@@ -165,13 +165,13 @@ def invert_nonzero(b, ind_zero=None, thresh=1e-9):
 def _nondata_terms_mvnormal(lam_isqr, ind_singular=None):
     if ind_singular is None:
         ind_singular = np.full(lam_isqr.shape, False)
-    lam_isqr[ind_singular] = 1.0 # for log determinant 
+    lam_isqr[ind_singular] = 1.0  # for log determinant
     logdetfac = np.sum(np.log(lam_isqr), axis=1)
     lam_isqr[ind_singular] = 0.0
     P_eff = np.sum(np.logical_not(ind_singular), axis=1)
     normfac = -(P_eff / 2) * np.log(2 * np.pi)
     return logdetfac, normfac
-    
+
 def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     # likelihood term corresponds to posterior/prior
     # y_obs: (M replicates, P observations over time, )
