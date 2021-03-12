@@ -120,7 +120,7 @@ def simulation():
     s_sim_pred = extract_predictions(stefandictsim)
 
     # run inference
-    from inference import psislw, lw_mvnormal, expectation, sumlogs
+    from inference import psislw, lw_mvnormal, expectation, sumlogs, quantile
     jsim = 0
     # todo: add observation noise
     s_sim_pred_jsim = s_sim_pred[jsim, ...][np.newaxis, ...]
@@ -132,17 +132,7 @@ def simulation():
     s_est = expectation(
         extract_predictions(stefandict, scenes=False), lw_ps, normalize=True)
     yf_est = expectation(stefandict['yf'], lw_ps, normalize=True)
-    def quantile(vals, lw, q, steps=100):
-        lw_ = lw - sumlogs(lw, axis=1)[:, np.newaxis]
-        valmin, valmax = np.min(vals), np.max(vals)
-        valq = np.zeros((vals.shape[1],)) + np.nan
-        vald = np.ones((vals.shape[1],))
-        for valtrial in np.linspace(valmin, valmax, steps):
-            vals_ind = (vals < valtrial).astype(np.float64)
-            dtrial = np.abs(expectation(vals_ind, lw_) - q)[0, ...]
-            np.putmask(valq, dtrial < vald, valtrial)
-            np.putmask(vald, dtrial < vald, dtrial)
-        return valq
+
     e_l = quantile(stefandict['e'], lw_ps, 0.1)
     e_h = quantile(stefandict['e'], lw_ps, 0.9)
     

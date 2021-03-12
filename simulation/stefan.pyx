@@ -1,13 +1,3 @@
-'''
-Created on Mar 8, 2021
-
-@author: simon
-'''
-'''
-Created on Apr 30, 2020
-
-@author: simon
-'''
 from cython.view cimport array as cvarray
 import numpy as np
 

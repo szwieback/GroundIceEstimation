@@ -172,6 +172,14 @@ def _nondata_terms_mvnormal(lam_isqr, ind_singular=None):
     normfac = -(P_eff / 2) * np.log(2 * np.pi)
     return logdetfac, normfac
 
+def _normalize(lw, normalize=False):
+    if normalize:
+        lw_ = lw - sumlogs(lw, axis=1)[:, np.newaxis]
+    else:
+        lw_ = lw
+    return lw_
+
+
 def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     # likelihood term corresponds to posterior/prior
     # y_obs: (M replicates, P observations over time, )
@@ -195,8 +203,7 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
         maha = -0.5 * np.sum(prod ** 2, axis=1)
         lw[:, n] = maha + logdetfac + normfac
 
-    if normalize:
-        lw -= sumlogs(lw, axis=1)[:, np.newaxis]
+    lw = _normalize(lw, normalize=normalize)
     lw[ind['invalid'], :] = np.nan
 
     return lw
@@ -204,10 +211,22 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
 def expectation(vals, lw, normalize=False):
     # vals: samples, val dimension (e.g. depth)
     # lw: replicates, samples
-    if normalize:
-        lw = lw - sumlogs(lw, axis=1)[:, np.newaxis]
-    x = np.einsum('ij, jk -> ik', np.exp(lw), vals)
+    lw_ = _normalize(lw, normalize=normalize)
+    x = np.einsum('ij, jk -> ik', np.exp(lw_), vals)
     return x
+
+def quantile(vals, lw, q, steps=100, normalize=False):
+    lw_ = _normalize(lw, normalize=normalize)
+    valmin, valmax = np.min(vals), np.max(vals)
+    valq = np.zeros((vals.shape[1],)) + np.nan
+    vald = np.ones((vals.shape[1],))
+    for valtrial in np.linspace(valmin, valmax, steps):
+        vals_ind = (vals < valtrial).astype(np.float64)
+        dtrial = np.abs(expectation(vals_ind, lw_) - q)[0, ...]
+        np.putmask(valq, dtrial < vald, valtrial)
+        np.putmask(vald, dtrial < vald, dtrial)
+    return valq
+
 
 if __name__ == '__main__':
     pass
