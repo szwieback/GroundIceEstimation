@@ -184,7 +184,7 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     # likelihood term corresponds to posterior/prior
     # y_obs: (M replicates, P observations over time, )
     # y_ref: (N samples, P_observations over time, )
-    # returns log weights; default: not normalized
+    # returns log weights (M, N); default: not normalized
     # deals with (for practical purposes) singular C_obs
 
     P = y_obs.shape[1]
@@ -216,16 +216,19 @@ def expectation(vals, lw, normalize=False):
     return x
 
 def quantile(vals, lw, q, steps=100, normalize=False):
-    lw_ = _normalize(lw, normalize=normalize)
-    valmin, valmax = np.min(vals), np.max(vals)
-    valq = np.zeros((vals.shape[1],)) + np.nan
-    vald = np.ones((vals.shape[1],))
-    for valtrial in np.linspace(valmin, valmax, steps):
-        vals_ind = (vals < valtrial).astype(np.float64)
-        dtrial = np.abs(expectation(vals_ind, lw_) - q)[0, ...]
-        np.putmask(valq, dtrial < vald, valtrial)
-        np.putmask(vald, dtrial < vald, dtrial)
-    return valq
+    if isinstance(q, float):
+        lw_ = _normalize(lw, normalize=normalize)
+        valmin, valmax = np.min(vals), np.max(vals)
+        valq = np.zeros((vals.shape[1],)) + np.nan
+        vald = np.ones((vals.shape[1],))
+        for valtrial in np.linspace(valmin, valmax, steps):
+            vals_ind = (vals < valtrial).astype(np.float64)
+            dtrial = np.abs(expectation(vals_ind, lw_) - q)[0, ...]
+            np.putmask(valq, dtrial < vald, valtrial)
+            np.putmask(vald, dtrial < vald, dtrial)
+        return valq
+    else:
+        return [quantile(vals, lw, q_, steps=steps, normalize=normalize) for q_ in q]
 
 
 if __name__ == '__main__':
