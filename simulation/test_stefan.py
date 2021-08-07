@@ -7,40 +7,97 @@ import pandas as pd
 import numpy as np
 import os
 import datetime
+import copy
 
 from simulation.toolik import load_forcing
-from simulation.stefan import stefan_ens, stefan_integral_balance
-from simulation.stefan_single import stefan_integral_balance_single
+from simulation.stefan import stefan_integral_balance
 from simulation.stratigraphy import (
-    StefanStratigraphy, StefanStratigraphySmoothingSpline, StratigraphyMultiple, 
+    StefanStratigraphySmoothingSpline, StratigraphyMultiple, 
     StefanStratigraphyConstantE)
 
-fieldsdef = ('e', 'depth', 'dy')
 
-def stefan_stratigraphy(dailytemp, strat, fields=fieldsdef, force_bulk=False, **kwargs):
-    def _stefan_internal(params):
-        s, yf = stefan_integral_balance(dailytemp, params=params, **kwargs)
+class Predictor():
+    def __init__(self):
+        pass
+    
+    def predict(self, forcing, params, fields=None, geom=None, **kwargs):
+        raise NotImplementedError
+    
+    def _project(self, y, geom, covariance=False):
+        exponent = 2 if covariance else 1
+        y_los = y * np.cos(geom['ia']) ** exponent
+        return y_los
+    
+class StefanPredictor(Predictor):
+    fieldsdef = ('e', 'depth', 'dy')
+    
+    def __init__(self, fields=None):
+        if fields is None:
+            self.fields = self.fieldsdef
+        else:
+            self.fields = fields
+
+    def predict(self, forcing, params, fields=None, geom=None, **kwargs):
+        # forcing: just dailytemp for Stefan
+        # geom['ia']: incidence angle in rad
+        stefandict = self._stefan_internal(forcing, params, fields=fields, **kwargs)
+        if geom is not None:
+            stefandict['s_los'] = self._project(stefandict['s'], geom, covariance=False)
+        return stefandict
+        
+    def _stefan_internal(self, forcing, params, fields=None, **kwargs):
+        if fields is None: fields = self.fields
+        s, yf = stefan_integral_balance(forcing, params=params, **kwargs)
         stefandict = {'s': s, 'yf': yf}
         if fields is not None:
             stefandict.update({field: params[field] for field in fields})
         else:
             stefandict.update(params)
         return stefandict
-    if strat.Nbatch == 0 or force_bulk:
-        params = strat.params()
-        stefandict = _stefan_internal(params)
-    else:
-        for batch in range(strat.Nbatch):
-            params_batch = strat.params(batch=batch)
-            stefandict_batch = _stefan_internal(params_batch)
-            if batch == 0:
-                stefandict = stefandict_batch
-            else:
-                for k in stefandict.keys():
-                    if not np.isscalar(stefandict[k]):
-                        stefandict[k] = np.concatenate(
-                            (stefandict[k], stefandict_batch[k]), axis=0)
-    return stefandict
+
+class PredictionEnsemble():
+    def __init__(self, strat, predictor, geom=None):
+        # creates an internal copy of predictor
+        self.strat = strat
+        self.predictor = predictor
+        self.geom = geom
+        self.results = None
+        
+    def predict(self, forcing, force_bulk=False, **kwargs):
+        self.results = {}
+        if self.strat.Nbatch == 0:
+            self.results = self.predictor.predict(
+                forcing, self.strat.params(), geom=self.geom, **kwargs)
+        else:
+            for batch in range(self.strat.Nbatch):
+                res_batch = self.predictor.predict(
+                    forcing, self.strat.params(batch=batch), geom=self.geom, **kwargs)
+                for k in res_batch:
+                    if k in self.results:
+                        if not np.isscalar(self.results[k]):
+                            self.results[k] = np.concatenate(
+                                (self.results[k], res_batch[k]), axis=0)
+                    else:
+                        self.results[k] = res_batch[k]
+
+    def extract_predictions(
+            self, indices, field='s_los', C=None, rng=None, reference_only=False):
+        # nn interpolation from time steps to observation epochs 
+        # indices: ind of time steps 
+        # C not None: add measurement noise
+        if not reference_only:
+            s = self.results[field][:, indices[1:]]
+        else:
+            s = self.results[field]
+        s -= self.results[field][:, indices[0]][:, np.newaxis]
+        if C is not None:
+            if rng is None:
+                rng = np.random.default_rng(seed=1)
+            assert C.shape[0] == s.shape[1]
+            obs_noise = rng.multivariate_normal(
+                np.zeros(s.shape[1]), C, size=(s.shape[0],))
+            s += obs_noise
+        return s
 
 def test():
     df = load_forcing()
@@ -48,8 +105,6 @@ def test():
     d1 = '2019-09-15'
     dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-
-    stratb = StefanStratigraphySmoothingSpline(N=300000)
 
     strat = StratigraphyMultiple(StefanStratigraphySmoothingSpline(N=25000), Nbatch=12)
 #     params = strat.params()
@@ -82,81 +137,70 @@ def simulation():
     stefanparams = {'steps': 1}
     fn = '/home/simon/Work/gie/processed/kivalina2019/timeseries/disp_polygons2.p'
     from InterferometricSpeckle.storage import load_object
-    res = load_object(fn)
+    C_obs = load_object(fn)['C']
     datestr = ['2019-06-02', '2019-06-14', '2019-06-26', '2019-07-08', '2019-07-20',
                '2019-08-01', '2019-08-13', '2019-08-25', '2019-09-06']
     dates = parse_dates(datestr, strp=strp)
-    ia = 30 * np.pi / 180
+    geom = {'ia': 30 * np.pi / 180}
     df = load_forcing()
     d0 = '2019-05-28'
     d1 = '2019-09-15'
     d0_, d1_ = parse_dates((d0, d1), strp=strp)
     dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-    dailytemp = 12 * np.sin((np.pi / len(dailytemp)) * np.arange(len(dailytemp)))
-
+#     dailytemp = 12 * np.sin((np.pi / len(dailytemp)) * np.arange(len(dailytemp)))
     ind_scenes = [int((d - d0_).days) for d in dates]
 
-    def apply_ia(y, covariance=False):
-        exponent = -2 if covariance else -1
-        yia = y * np.cos(ia) ** exponent
-        return yia
-    def extract_predictions(sd, scenes=True):
-        if scenes:
-            s = sd['s'][:, ind_scenes[1:]]
-        else:
-            s = sd['s']
-        s -= sd['s'][:, ind_scenes[0]][:, np.newaxis]
-        return apply_ia(s)
-
-    C = apply_ia(res['C'], covariance=True)[np.newaxis, ...]
-
+    predictor = StefanPredictor()
     strat = StratigraphyMultiple(StefanStratigraphySmoothingSpline(N=10000), Nbatch=3)
-    stefandict = stefan_stratigraphy(dailytemp, strat, **stefanparams)
-    s_obs_pred = extract_predictions(stefandict)
-    stratsim = StefanStratigraphySmoothingSpline(N=10, seed=114)  #122 #114
-    stratsim = StefanStratigraphyConstantE(N=10, seed=31)#29
-    stefandictsim = stefan_stratigraphy(dailytemp, stratsim, **stefanparams)
-    s_sim_pred = extract_predictions(stefandictsim)
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    predens.predict(dailytemp)
+#     strat_sim = StefanStratigraphySmoothingSpline(N=10, seed=114)  #122 #114
+    strat_sim = StefanStratigraphyConstantE(N=10, seed=31)#29
+    predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
+    predens_sim.predict(dailytemp)
+    
+    rng = np.random.default_rng(seed=1)
+    s_los_pred = predens.extract_predictions(ind_scenes, C=None, rng=rng)
+    s_los_true = predens_sim.extract_predictions(ind_scenes, C=None, reference_only=True)
 
-    # run inference
+    # add loop over replicates here
+    s_los_obs = predens_sim.extract_predictions(ind_scenes, C=C_obs, rng=rng)
+    
+
     from inference import psislw, lw_mvnormal, expectation, sumlogs, quantile
     jsim = 0
-    # todo: add observation noise
-    s_sim_pred_jsim = s_sim_pred[jsim, ...][np.newaxis, ...]
-    e_sim_jsim = stefandictsim['e'][jsim, ...]
-    lw = lw_mvnormal(s_sim_pred_jsim, C, s_obs_pred)
+    e_sim_jsim = predens_sim.results['e'][jsim, ...]
+    s_los_obs_jsim = s_los_obs[jsim, ...]
+    lw = lw_mvnormal(
+        s_los_obs_jsim[np.newaxis, ...], C_obs[np.newaxis, ...], s_los_pred)
     lw_ps, _ = psislw(lw)
-    e_est = expectation(stefandict['e'], lw_ps, normalize=True)
-    s_obs_pred_est = expectation(s_obs_pred, lw_ps, normalize=True)
-    s_est = expectation(
-        extract_predictions(stefandict, scenes=False), lw_ps, normalize=True)
-    yf_est = expectation(stefandict['yf'], lw_ps, normalize=True)
-
-    e_l = quantile(stefandict['e'], lw_ps, 0.1)
-    e_h = quantile(stefandict['e'], lw_ps, 0.9)
-    
+    e_inv = expectation(predens.results['e'], lw_ps, normalize=True)
+    s_obs_inv = expectation(s_los_pred, lw_ps, normalize=True)
+    yf_inv = expectation(predens.results['yf'], lw_ps, normalize=True)
+    print(yf_inv[0, ind_scenes[-1]])
+    e_inv_q = quantile(predens.results['e'], lw_ps, 0.1), quantile(predens.results['e'], lw_ps, 0.9)
+     
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(ncols=2, sharey=False)
     fig.set_size_inches((8, 3), forward=True)
     days = np.arange(len(dailytemp))
-    ygrid = np.arange(0, stefandict['depth'], step=stefandict['dy'])
-    axs[0].plot(days[ind_scenes[1:]], s_sim_pred_jsim[0, :], lw=0.0, c='k', alpha=0.6,
+    ygrid = np.arange(0, predens.results['depth'], step=predens.results['dy'])
+    axs[0].plot(days[ind_scenes[1:]], s_los_obs_jsim, lw=0.0, c='k', alpha=0.6,
                 marker='o', mfc='k', mec='none', ms=4)
-    axs[0].plot(days, s_est[0, :], lw=1.0, c='#999999', alpha=0.6)
+    axs[0].plot(days, s_los_true[jsim, ...], lw=1.0, c='#999999', alpha=0.6)
 #     axs[0].plot(days, s[ind_large[0, -1], :], lw=0.5, c='#ccccff', alpha=0.5)
 #     axs[0].plot(days, s[ind_large[0, -2], :], lw=0.5, c='#ccccff', alpha=0.5)
 #     axs[0].plot(days, s[ind_large[0, 9000], :], lw=0.5, c='#ffcccc', alpha=0.5)
-    axs[1].plot(e_est[0, :], ygrid, lw=1.0, c='#999999', alpha=0.6)
+    axs[1].plot(e_inv[0, :], ygrid, lw=1.0, c='#999999', alpha=0.6)
     axs[1].plot(e_sim_jsim, ygrid, lw=1.0, c='#000000', alpha=0.6)
-    axs[1].plot(e_l, ygrid, lw=0.5, c='#9999ee', alpha=0.6)
-    axs[1].plot(e_h, ygrid, lw=0.5, c='#9999ee', alpha=0.6)
-
+    axs[1].plot(e_inv_q[0], ygrid, lw=0.5, c='#9999ee', alpha=0.6)
+    axs[1].plot(e_inv_q[1], ygrid, lw=0.5, c='#9999ee', alpha=0.6)
     plt.show()
 
-    # loop over samples
-    # extract quantitative comparisons; look at near-surface issues
-    #
+
+    # create separate simulation class with storage,  loop over 1000 samples
+    # create separate class for simulation results, with distributed reading and comparison
 
 if __name__ == '__main__':
     simulation()
