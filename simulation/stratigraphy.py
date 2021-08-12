@@ -135,7 +135,6 @@ class StefanStratigraphy(Stratigraphy):
         c_shift = self.rs.beta(self.e_params['alpha_shift'], self.e_params['beta_shift'],
                                size=(self.N, 1))
         c_shift = c_shift * 0
-        import warnings
         warnings.warn('c_shift set to 0')
         c = c_shift + (1 - c_shift) * c_scale * c_shape
         basis = self._spline_basis()
@@ -148,7 +147,6 @@ class StefanStratigraphy(Stratigraphy):
         return od
 
     def _draw_mow(self, od, e):
-        # currently: determinstic given od
         ind_above = self._ygrid[np.newaxis, :] < od[:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)
@@ -217,6 +215,26 @@ class StefanStratigraphy(Stratigraphy):
             self.draw_stratigraphy()
         return {**self.constants, **self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
 
+    def _override_stratigraphy(self):
+        self.stratigraphy['od'] = (
+            0.2 * np.ones_like(self.stratigraphy['od']))
+        self.stratigraphy['n_factor'] = (
+            0.9 * np.ones_like(self.stratigraphy['n_factor']))
+        sat = 0.5 * np.ones_like(self.stratigraphy['e'])
+        ind_above = self._ygrid[np.newaxis, :] < self.stratigraphy['od'][:, np.newaxis]
+        ind_below = np.logical_not(ind_above)
+        m = np.zeros_like(ind_above, dtype=np.float64)
+        o = np.zeros_like(ind_above, dtype=np.float64)
+        e = self.stratigraphy['e']
+        np.putmask(m, ind_above, (1 - e) * self.soil_params['mineral_above'])
+        np.putmask(o, ind_above, (1 - e) * self.soil_params['organic_above'])
+        np.putmask(m, ind_below, (1 - e) * self.soil_params['mineral_below'])
+        np.putmask(o, ind_below, (1 - e) * self.soil_params['organic_below'])
+        w = (1 - e - m - o) * sat
+        self.stratigraphy.update({'m': m.astype(self.dtype), 'o': o.astype(self.dtype),
+            'w': w.astype(self.dtype)})
+        self.stratigraphy.update(self._thermal_conductivity_thawed())
+
 class StefanStratigraphySmoothingSpline(StefanStratigraphy):
     def _draw_e(self):
         # draw Bspline coefficients; all independent; 0, 1
@@ -242,6 +260,18 @@ class StefanStratigraphyConstantE(StefanStratigraphy):
         og = np.ones_like(self._ygrid)
         e = (1 + np.exp(-coeff * og[np.newaxis, :])) ** (-1) * (ehigh - elow) + elow
         return e
+
+class StefanStratigraphyPrescribedSmoothingSpline(StefanStratigraphySmoothingSpline):
+    def draw_stratigraphy(self, verbose=True):
+        super().draw_stratigraphy(verbose=verbose)
+        super()._override_stratigraphy()
+        
+class StefanStratigraphyPrescribedConstantE(StefanStratigraphyConstantE):
+    def draw_stratigraphy(self, verbose=True):
+        super().draw_stratigraphy(verbose=verbose)
+        super()._override_stratigraphy()
+
+        
 
 if __name__ == '__main__':
     strat = StefanStratigraphySmoothingSpline()

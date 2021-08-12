@@ -174,7 +174,7 @@ def _nondata_terms_mvnormal(lam_isqr, ind_singular=None):
 
 def _normalize(lw, normalize=False):
     if normalize:
-        lw_ = lw - sumlogs(lw, axis=1)[:, np.newaxis]
+        lw_ = lw - sumlogs(lw, axis=-1)[..., np.newaxis]
     else:
         lw_ = lw
     return lw_
@@ -212,23 +212,35 @@ def expectation(vals, lw, normalize=False):
     # vals: samples, val dimension (e.g. depth)
     # lw: replicates, samples
     lw_ = _normalize(lw, normalize=normalize)
-    x = np.einsum('ij, jk -> ik', np.exp(lw_), vals)
+    x = np.einsum('...ij, jk -> ...ik', np.exp(lw_), vals)
     return x
 
-def quantile(vals, lw, q, steps=100, normalize=False):
+def quantile(vals, lw, q, steps=100, normalize=False, smooth=None):
+    # only works for lw: [1, samples]
     if isinstance(q, float):
-        lw_ = _normalize(lw, normalize=normalize)
+        if len(lw.shape) == 1:
+            lw_ = lw[np.newaxis, :]
+        else:
+            lw_ = lw
+        lw_ = _normalize(lw_, normalize=normalize)
         valmin, valmax = np.min(vals), np.max(vals)
-        valq = np.zeros((vals.shape[1],)) + np.nan
-        vald = np.ones((vals.shape[1],))
+        valq = np.zeros(lw_.shape[:-1] + (vals.shape[1],)) + np.nan
+        vald = np.ones_like(valq)
         for valtrial in np.linspace(valmin, valmax, steps):
             vals_ind = (vals < valtrial).astype(np.float64)
-            dtrial = np.abs(expectation(vals_ind, lw_) - q)[0, ...]
+            dtrial = np.abs(expectation(vals_ind, lw_) - q)
             np.putmask(valq, dtrial < vald, valtrial)
             np.putmask(vald, dtrial < vald, dtrial)
+        if smooth is not None and smooth > 0:
+            from scipy.ndimage import gaussian_filter1d
+            valq = gaussian_filter1d(valq, smooth, axis=-1, mode='nearest')
+        if len(lw.shape) == 1:
+            valq = valq[0, :]
         return valq
     else:
-        return [quantile(vals, lw, q_, steps=steps, normalize=normalize) for q_ in q]
+        valql = [quantile(vals, lw, q_, steps=steps, normalize=normalize, smooth=smooth)
+                 for q_ in q]
+        return valql
 
 
 if __name__ == '__main__':

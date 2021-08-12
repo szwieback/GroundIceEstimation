@@ -1,7 +1,7 @@
 from cython.view cimport array as cvarray
 import numpy as np
 
-from stratigraphy import params_default
+from simulation.stratigraphy import params_default
 
 fac = 1e-9 # scale integral to avoid huge numbers [printing a pain]
 nptype = np.float64
