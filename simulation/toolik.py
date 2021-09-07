@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 import datetime
-from copy import deepcopy
 
 from pathnames import paths
 from simulation.stefan import stefan_ens, stefan_integral_balance
