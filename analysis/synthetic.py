@@ -218,15 +218,16 @@ class simInvEnsemble():
                -self.moment(param=None, replicate=replicate, p=p, power=1) ** 2)
         return var
 
-    def quantile(self, quantiles, param='e', replicate=0, jsim=0, smooth=None):
+    def quantile(
+            self, quantiles, param='e', replicate=0, jsim=0, smooth=None, steps=8,
+            method='bisection'):
         from inference import quantile as quant
         repl_slice = np.s_[:] if replicate is None else np.s_[replicate]
         jsim_slice = np.s_[:] if jsim is None else np.s_[jsim]
         lw_ = self.lw[(repl_slice, jsim_slice, Ellipsis)]
-#         lw_ = self.lw[replicate, jsim, ...][np.newaxis, :]
         postquant = quant(
-            self.invsim.predens.results[param], lw_, quantiles, normalize=True, 
-            smooth=smooth)
+            self.invsim.predens.results[param], lw_, quantiles, method=method, steps=steps,
+            normalize=True, smooth=smooth)
         return postquant
 
     def prescribed(self, param='e'):
@@ -276,7 +277,7 @@ class simInvEnsemble():
         e_inv_std = np.sqrt(self.variance('e', replicate=replicate))
         if show_quantile:
             e_inv_q = self.quantile(
-                [0.1, 0.5, 0.9], 'e', replicate=replicate, jsim=jsim, 
+                [0.1, 0.5, 0.9], 'e', replicate=replicate, jsim=jsim,
                 smooth=smooth_quantile)
         e_sim = self.prescribed('e')
         s_sim = self.prescribed('s_los')

@@ -215,22 +215,50 @@ def expectation(vals, lw, normalize=False):
     x = np.einsum('...ij, jk -> ...ik', np.exp(lw_), vals)
     return x
 
-def quantile(vals, lw, q, steps=100, normalize=False, smooth=None):
+def _quantile_grid(vals, lw_, q=0.5, steps=100, normalize=False):
+    lw_ = _normalize(lw_, normalize=normalize)
+    valmin, valmax = np.min(vals), np.max(vals)
+    valq = np.zeros(lw_.shape[:-1] + (vals.shape[1],)) + np.nan
+    vald = np.ones_like(valq)
+    for valtrial in np.linspace(valmin, valmax, steps):
+        vals_ind = (vals < valtrial).astype(np.float64)
+        dtrial = np.abs(expectation(vals_ind, lw_) - q)
+        np.putmask(valq, dtrial < vald, valtrial)
+        np.putmask(vald, dtrial < vald, dtrial)
+    return valq
+
+def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
+    lw_ = _normalize(lw_, normalize=normalize)
+    vals_left = np.full(lw_.shape[:-1] + vals.shape[1:], np.min(vals))
+    vals_right = np.full(lw_.shape[:-1] + vals.shape[1:], np.max(vals))
+    slicetup = (slice(None),) * len(lw_.shape[:-1]) + (np.newaxis, Ellipsis)
+    for step in range(steps):
+        vals_mid = 0.5 * (vals_left + vals_right)
+        # indicator: 1 where smaller than interval midpoint, 0 otherwise
+        indicator = np.ones(lw_.shape[:-1] + (vals.shape), np.float64)
+        indicator[vals > vals_mid[slicetup]] = 0
+        # now weight with importance sampling weights (in place)
+        indicator *= np.exp(lw_)[(Ellipsis,) + (np.newaxis,) * (len(vals.shape) - 1)]
+        # expectation
+        d = np.sum(indicator, axis=(len(lw_.shape) - 1)) - q
+        np.putmask(vals_right, d >= 0, vals_mid)
+        np.putmask(vals_left, d < 0, vals_mid)
+    vals_mid = 0.5 * (vals_left + vals_right)
+    return vals_mid
+
+def quantile(vals, lw, q, steps=8, method='bisection', normalize=False, smooth=None):
     # only works for lw: [1, samples]
     if isinstance(q, float):
         if len(lw.shape) == 1:
             lw_ = lw[np.newaxis, :]
         else:
             lw_ = lw
-        lw_ = _normalize(lw_, normalize=normalize)
-        valmin, valmax = np.min(vals), np.max(vals)
-        valq = np.zeros(lw_.shape[:-1] + (vals.shape[1],)) + np.nan
-        vald = np.ones_like(valq)
-        for valtrial in np.linspace(valmin, valmax, steps):
-            vals_ind = (vals < valtrial).astype(np.float64)
-            dtrial = np.abs(expectation(vals_ind, lw_) - q)
-            np.putmask(valq, dtrial < vald, valtrial)
-            np.putmask(vald, dtrial < vald, dtrial)
+        if method == 'bisection':
+            valq = _quantile_bisection(vals, lw_, q, steps=steps, normalize=normalize)
+        elif method == 'grid':
+            valq = _quantile_grid(vals, lw_, q, steps=steps, normalize=normalize)
+        else:
+            raise ValueError(f'Method {method} not known')
         if smooth is not None and smooth > 0:
             from scipy.ndimage import gaussian_filter1d
             valq = gaussian_filter1d(valq, smooth, axis=-1, mode='nearest')
