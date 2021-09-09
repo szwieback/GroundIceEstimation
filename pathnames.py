@@ -11,7 +11,8 @@ hostname = socket.gethostname()
 
 if hostname == 'Vienna':
     path0 = '/10TBstorage/Work/gie/'
-
+elif hostname == 'homer':
+    path0 = '/home2/Work/gie'
 else:
     path0 = os.path.join(os.path.expanduser('~'), 'Work/gie/')
 
