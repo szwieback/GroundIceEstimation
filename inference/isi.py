@@ -1,21 +1,5 @@
 # Adapts code from:
-"""Pareto smoothed importance sampling (PSIS)
-This module implements Pareto smoothed importance sampling (PSIS) and PSIS
-leave-one-out (LOO) cross-validation for Python (Numpy).
-Included functions
-------------------
-psisloo
-    Pareto smoothed importance sampling leave-one-out log predictive densities.
-psislw
-    Pareto smoothed importance sampling.
-gpdfitnew
-    Estimate the paramaters for the Generalized Pareto Distribution (GPD).
-gpinv
-    Inverse Generalised Pareto distribution function.
-sumlogs
-    Sum of vector where numbers are represented by their logarithms.
-References
-----------
+"""
 Aki Vehtari, Andrew Gelman and Jonah Gabry (2017). Practical
 Bayesian model evaluation using leave-one-out cross-validation
 and WAIC. Statistics and Computing, 27(5):1413–1432.
@@ -192,23 +176,23 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     N = y_ref.shape[0]
     assert C_obs.shape == (M, P, P)
     assert y_ref.shape[1] == P
-
-    lw = np.zeros((M, N))
     lam_isqr, U, ind = _sqr_eigen(C_obs, cond_thresh=cond_thresh, invert=True)
     C_obs_isqrT = U * lam_isqr[:, np.newaxis, :]
     logdetfac, normfac = _nondata_terms_mvnormal(lam_isqr, ind_singular=ind['singular'])
 
+    lw = np.zeros((M, N)) + logdetfac[:, np.newaxis] + normfac[:, np.newaxis]
+
     for n in np.arange(N):
         prod = np.einsum('mqp, mq -> mp', C_obs_isqrT, y_obs - y_ref[n, :][np.newaxis, :])
         maha = -0.5 * np.sum(prod ** 2, axis=1)
-        lw[:, n] = maha + logdetfac + normfac
+        lw[:, n] += maha
 
     lw = _normalize(lw, normalize=normalize)
     lw[ind['invalid'], :] = np.nan
 
     return lw
 
-def expectation(vals, lw, normalize=False):
+def expectation(vals, lw, normalize=True):
     # vals: samples, val dimension (e.g. depth)
     # lw: replicates, samples
     lw_ = _normalize(lw, normalize=normalize)
@@ -232,10 +216,11 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
     vals_left = np.full(lw_.shape[:-1] + vals.shape[1:], np.min(vals))
     vals_right = np.full(lw_.shape[:-1] + vals.shape[1:], np.max(vals))
     slicetup = (slice(None),) * len(lw_.shape[:-1]) + (np.newaxis, Ellipsis)
+    indicator = np.ones(lw_.shape[:-1] + (vals.shape), dtype='float32')
     for step in range(steps):
         vals_mid = 0.5 * (vals_left + vals_right)
         # indicator: 1 where smaller than interval midpoint, 0 otherwise
-        indicator = np.ones(lw_.shape[:-1] + (vals.shape), np.float64)
+        indicator[...] = 1 #np.ones(lw_.shape[:-1] + (vals.shape), np.float64)
         indicator[vals > vals_mid[slicetup]] = 0
         # now weight with importance sampling weights (in place)
         indicator *= np.exp(lw_)[(Ellipsis,) + (np.newaxis,) * (len(vals.shape) - 1)]
@@ -246,7 +231,7 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
     vals_mid = 0.5 * (vals_left + vals_right)
     return vals_mid
 
-def quantile(vals, lw, q, steps=8, method='bisection', normalize=False, smooth=None):
+def quantile(vals, lw, q, steps=8, method='bisection', normalize=True, smooth=None):
     # only works for lw: [1, samples]
     if isinstance(q, float):
         if len(lw.shape) == 1:
@@ -270,6 +255,21 @@ def quantile(vals, lw, q, steps=8, method='bisection', normalize=False, smooth=N
                  for q_ in q]
         return valql
 
+def ensemble_quantile(vals, lw, vals_reference, n_jobs=-2):
+    # may need to generalize broadcasting otherwise
+    assert len(vals.shape) == 2
+    assert len(vals_reference.shape) == 2
+    assert vals.shape[1] == vals_reference.shape[1]
+    from joblib import Parallel, delayed
+    w_ = np.exp(_normalize(lw, normalize=True))
+    def _quantile(jy):
+        ind = vals[:, jy][np.newaxis, :] < vals_reference[:, jy][:, np.newaxis]
+        return np.sum(w_, axis=-1, where=ind)
+    q = np.stack(
+        Parallel(n_jobs=n_jobs)(
+            delayed(_quantile)(jy) for jy in range(vals_reference.shape[1])),
+        axis=-1)
+    return q
 
 if __name__ == '__main__':
     pass
