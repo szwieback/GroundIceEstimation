@@ -56,7 +56,7 @@ class PredictionEnsemble():
         self.geom = geom
         self.results = None
 
-    def predict(self, forcing, n_jobs=12, **kwargs):
+    def predict(self, forcing, n_jobs=-2, **kwargs):
         self.results = {}
         if self.strat.Nbatch == 0:
             self.results = self.predictor.predict(
@@ -128,6 +128,18 @@ class inversionSimulator():
         return self.predens_sim.extract_predictions(
             self.ind_scenes, C_obs=None, reference_only=True)
 
+    @property
+    def depth(self):
+        return self.predens.results['depth']
+
+    @property
+    def dy(self):
+        return self.predens.results['dy']
+
+    @property
+    def ygrid(self):
+        return np.arange(0, self.depth, step=self.dy)
+
     def simulated_observations(self, rng=None):
         rng_ = self.rng if rng is None else np.random.default_rng(rng)
         return self.predens_sim.extract_predictions(
@@ -148,7 +160,7 @@ class inversionSimulator():
         lw_ps, _ = psislw(lw)
         return lw_ps
 
-    def logweights(self, replicates=10, pathout=None, n_jobs=12):
+    def logweights(self, replicates=10, pathout=None, n_jobs=-2):
         if pathout is None:
             pathout = os.getcwd()
             import warnings
@@ -158,8 +170,8 @@ class inversionSimulator():
         def _export(r):
             sim_obs_r = self.simulated_observations(rng=child_states[r])
             lw_r = self._logweights(sim_obs_r, pred_scenes)
-            save_object(lw_r, os.path.join(pathout, f'sim_{r}.npy'))
-            save_object(sim_obs_r, os.path.join(pathout, f'simobs_{r}.npy'))
+            save_object(lw_r, self.filename_sim(pathout, r))
+            save_object(sim_obs_r, self.filename_simobs(pathout, r))
         from joblib import Parallel, delayed
         Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in range(replicates))
 
@@ -169,20 +181,109 @@ class inversionSimulator():
             'ind_scenes': self.ind_scenes, 'C_obs': self.C_obs}
         save_object(isdict, fnout)
 
+    def _replicate_generator(self, pathout, replicates=None):
+        if replicates is not None:
+            for r in replicates:
+                yield r
+        else:
+            from itertools import count
+            for r in count(0):
+                if os.path.exists(self.filename_sim(pathout, r)):
+                    yield r
+                else:
+                    break
+    def prescribed(self, param='e'):
+        return self.predens_sim.results[param]
+
+    def filename_sim(self, pathout, r):
+        return os.path.join(pathout, f'sim_{r}.npy')
+
+    def filename_simobs(self, pathout, r):
+        return os.path.join(pathout, f'simobs_{r}.npy')
+
+    def filename_metrics(self, pathout, r, suffix=None):
+        if suffix is None:
+            suffix_ = '_' + suffix
+        else:
+            suffix_ = ''
+        return os.path.join(pathout, f'metrics{suffix_}_{r}.p')
+
     def results(self, pathout, replicates=None):
-        r = 0
         lw = []
         simobs = []
-        while replicates is None or r < replicates :
-            fn_r = os.path.join(pathout, f'sim_{r}.npy')
-            if os.path.exists(fn_r):
-                lw_r = load_object(fn_r)
-                lw.append(lw_r)
-                simobs.append(load_object(os.path.join(pathout, f'simobs_{r}.npy')))
-                r += 1
-            else:
-                break
+        for r in self._replicate_generator(pathout, replicates=replicates):
+            lw_r = load_object(self.filename_sim(pathout, r))
+            lw.append(lw_r)
+            simobs.append(load_object(self.filename_simobs(pathout, r)))
         return simInvEnsemble(self, np.array(lw), simobs=np.array(simobs))
+
+    def export_metrics(self, pathout, param='e', metrics_ind=None, metrics=None, n_jobs=-2):
+        def _export(r):
+            sie = self.results(pathout, replicates=(r,))
+            fnout = self.filename_metrics(pathout, r, suffix=param)
+            sie.export_metrics(fnout, param=param, metrics=metrics_ind)
+        from joblib import Parallel, delayed
+        rgen = self._replicate_generator(pathout, replicates=None)
+        Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in rgen)
+        self._assemble_metrics(pathout, param='e', metrics=metrics, delete_temp=True)
+
+    def _validation_metric(self, metrics_dict, metric):
+        if metric[0] == 'RMSE':
+            m = np.sqrt(np.mean(
+                (metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...])**2, 
+                axis=0))
+        elif metric[0] == 'bias':
+            m = metrics_dict['mean'] - np.mean(metrics_dict['sim'], axis=0)
+        elif metric[0] == 'MAD':
+            m = np.mean(
+                np.abs(metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...]),
+                axis=0)
+        elif metric[0] == 'variance':
+            m = np.mean(metrics_dict['variance'], axis=0)
+        elif metric[0] == 'coverage':
+            def _coverage(target):
+                covbool = np.abs(metrics_dict['ensemble_quantile'] - 0.5) < target / 2
+                return np.mean(covbool, axis=0)
+            m = np.stack([_coverage(target) for target in metric[1]], axis=-1)
+        return m
+
+    def _validation_metrics(self, metrics_dict, metrics=None):
+        if metrics is None:
+            metrics = [
+                ('RMSE',), ('bias',), ('MAD',), ('variance',), ('coverage', [0.5, 0.8])]
+        res = {'meta_validation':{}}
+        for metric in metrics:
+            print(metric)
+            res[metric[0]] = self._validation_metric(metrics_dict, metric)
+            res['meta_validation'][metric[0]] = metric[1:]
+        return res
+    
+    def _assemble_metrics(self, pathout, param='e', metrics=None, delete_temp=False):
+        res = {}
+        meta = {}
+        for r in self._replicate_generator(pathout, replicates=None):
+            fnr = self.filename_metrics(pathout, r, suffix=param)
+            res_r = load_object(fnr)
+            for metric in res_r:
+                if metric not in res:
+                    res[metric] = [res_r[metric][0]]
+                    meta[metric] = res_r[metric][1]
+                else:
+                    res[metric].append(res_r[metric][0])
+        for metric in res:
+            res[metric] = np.concatenate(res[metric], axis=0)
+        res['meta'] = meta
+        res['ygrid'] = self.ygrid
+        res['sim'] = self.prescribed(param=param)
+        res_metrics = self._validation_metrics(res, metrics=metrics)
+        res.update(res_metrics)
+        save_object(res, os.path.join(pathout, 'metrics.p'))
+        if delete_temp:
+            for r in self._replicate_generator(pathout, replicates=None):
+                try:
+                    os.remove(self.filename_metrics(pathout, r, suffix=param))
+                except:
+                    pass
 
 class simInvEnsemble():
 
@@ -219,7 +320,7 @@ class simInvEnsemble():
         return var
 
     def quantile(
-            self, quantiles, param='e', replicate=0, jsim=0, smooth=None, steps=8,
+            self, quantiles, param='e', replicate=None, jsim=None, smooth=None, steps=8,
             method='bisection'):
         from inference import quantile as quant
         repl_slice = np.s_[:] if replicate is None else np.s_[replicate]
@@ -239,10 +340,6 @@ class simInvEnsemble():
         else:
             return self.simobs[replicate, ...]
 
-    @property
-    def ygrid(self):
-        return np.arange(0, self.depth, step=self.dy)
-
     def frac_thawed(self, jsim=0, replicate=0):
         yf = self.invsim.predens.results['yf'][..., self.invsim.ind_scenes[-1]]
         from inference.isi import sumlogs
@@ -255,11 +352,6 @@ class simInvEnsemble():
 
     def mean_period(self, indrange, param='e'):
         ygrid = self.ygrid
-#         jyrange = []
-#         for ind in indrange:
-#             yf = self.invsim.predens.results['yf'][:, ind]
-#             jyrange.append(
-#                 np.argmin(np.abs(yf[:, np.newaxis] -  ygrid[np.newaxis, :]), axis=1))
         p = self.invsim.predens.results[param]
         yfrange = [self.invsim.predens.results['yf'][:, ind] for ind in indrange]
         invalid = np.logical_or(
@@ -356,7 +448,7 @@ class simInvEnsemble():
             ax.spines['right'].set_visible(False)
             ax.spines['top'].set_visible(False)
             ax.text(
-                0.50, 1.05, titles[jax], c='k', transform=ax.transAxes, 
+                0.50, 1.05, titles[jax], c='k', transform=ax.transAxes,
                 ha='center', va='baseline')
         plt.show()
 
@@ -367,3 +459,42 @@ class simInvEnsemble():
     @property
     def dy(self):
         return self.invsim.predens.results['dy']
+
+    @property
+    def ygrid(self):
+        return np.arange(0, self.depth, step=self.dy)
+
+    def mean(self, param='e', replicate=None):
+            return self.moment(param=param, replicate=replicate)
+
+    def _metric(self, metric, param='e', replicate=None, metric_args=()):
+        if metric == 'mean':
+            return self.mean(param=param, replicate=replicate)
+        elif metric == 'variance':
+            return self.variance(param=param, replicate=replicate)
+        elif metric == 'quantile':
+            return self.quantile(metric_args[0], param=param, replicate=replicate)
+        elif metric == 'ensemble_quantile':
+            return self.ensemble_quantile(param=param, replicate=replicate)
+        else:
+            raise NotImplementedError(f'{metric} not known')
+
+    def ensemble_quantile(self, param='e', replicate=None):
+        # computes quantile of "truth" with respect to ensemble distribution
+        if replicate is not None: raise NotImplementedError
+        from inference import ensemble_quantile as eq
+        ref = self.prescribed(param)
+        p = self.invsim.predens.results[param]
+        return eq(p, self.lw, ref)
+
+    def export_metrics(self, fnout, param='e', metrics=None):
+        results = {}
+        if metrics is None:
+            metrics = [('mean',), ('variance',), ('ensemble_quantile',)]
+#             metrics = [('quantile', [0.10, 0.25, 0.50, 0.75, 0.90])]
+        for metric in metrics:
+            mr = self._metric(
+                metric[0], param=param, replicate=None, metric_args=metric[1:])
+            results[metric[0]] = (mr, metric[1:])
+        save_object(results, fnout)
+

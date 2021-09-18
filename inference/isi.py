@@ -163,7 +163,6 @@ def _normalize(lw, normalize=False):
         lw_ = lw
     return lw_
 
-
 def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     # likelihood term corresponds to posterior/prior
     # y_obs: (M replicates, P observations over time, )
@@ -211,16 +210,17 @@ def _quantile_grid(vals, lw_, q=0.5, steps=100, normalize=False):
         np.putmask(vald, dtrial < vald, dtrial)
     return valq
 
-def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
+def _quantile_bisection_(vals, lw_, q=0.5, steps=8, normalize=False):
+    # memory issues
     lw_ = _normalize(lw_, normalize=normalize)
     vals_left = np.full(lw_.shape[:-1] + vals.shape[1:], np.min(vals))
     vals_right = np.full(lw_.shape[:-1] + vals.shape[1:], np.max(vals))
+    print(vals_left.shape, lw_.shape, vals.shape)
     slicetup = (slice(None),) * len(lw_.shape[:-1]) + (np.newaxis, Ellipsis)
-    indicator = np.ones(lw_.shape[:-1] + (vals.shape), dtype='float32')
     for step in range(steps):
         vals_mid = 0.5 * (vals_left + vals_right)
         # indicator: 1 where smaller than interval midpoint, 0 otherwise
-        indicator[...] = 1 #np.ones(lw_.shape[:-1] + (vals.shape), np.float64)
+        indicator = np.ones(lw_.shape[:-1] + (vals.shape), np.float64)
         indicator[vals > vals_mid[slicetup]] = 0
         # now weight with importance sampling weights (in place)
         indicator *= np.exp(lw_)[(Ellipsis,) + (np.newaxis,) * (len(vals.shape) - 1)]
@@ -230,6 +230,28 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
         np.putmask(vals_left, d < 0, vals_mid)
     vals_mid = 0.5 * (vals_left + vals_right)
     return vals_mid
+
+def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
+    lw = _normalize(lw_, normalize=normalize).reshape((-1, lw_.shape[-1]))
+    qvals = np.zeros((lw.shape[0],) + vals.shape[1:], dtype=np.float32)
+    vals_left = np.min(vals, axis=0)
+    vals_right = np.max(vals, axis=0)
+    for jlw in range(lw.shape[0]):
+        wj = np.exp(lw[jlw])
+        vals_left_j = vals_left.copy()
+        vals_right_j = vals_right.copy()
+        for step in range(steps):
+            vals_j = 0.5 * (vals_left_j + vals_right_j)
+            indicator = np.ones(vals.shape, np.float64)
+            indicator[vals > vals_j[np.newaxis, :]] = 0.0
+            indicator *= wj[:, np.newaxis]
+            d = np.sum(indicator, axis=0) - q
+            np.putmask(vals_right_j, d >= 0, vals_j)
+            np.putmask(vals_left, d < 0, vals_j)
+        vals_j = 0.5 * (vals_left_j + vals_right_j)
+        qvals[jlw, ...] = vals_j
+    return qvals.reshape(lw_.shape[:-1] + (qvals.shape[-1],))
+    
 
 def quantile(vals, lw, q, steps=8, method='bisection', normalize=True, smooth=None):
     # only works for lw: [1, samples]
@@ -251,11 +273,13 @@ def quantile(vals, lw, q, steps=8, method='bisection', normalize=True, smooth=No
             valq = valq[0, :]
         return valq
     else:
-        valql = [quantile(vals, lw, q_, steps=steps, normalize=normalize, smooth=smooth)
-                 for q_ in q]
+        valql = np.stack(
+            [quantile(vals, lw, q_, steps=steps, normalize=normalize, smooth=smooth)
+            for q_ in q], axis=-1)
+        
         return valql
 
-def ensemble_quantile(vals, lw, vals_reference, n_jobs=-2):
+def ensemble_quantile(vals, lw, vals_reference, n_jobs=1):
     # may need to generalize broadcasting otherwise
     assert len(vals.shape) == 2
     assert len(vals_reference.shape) == 2

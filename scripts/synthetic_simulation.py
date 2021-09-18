@@ -8,7 +8,7 @@ import numpy as np
 import os
 import datetime
 
-from analysis.ioput import save_object, load_object
+from analysis.ioput import load_object
 from simulation.toolik import load_forcing
 from pathnames import paths
 from analysis.synthetic import StefanPredictor, inversionSimulator, PredictionEnsemble
@@ -22,7 +22,7 @@ def parse_dates(datestr, strp='%Y%m%d'):
     else:
         return [parse_dates(ds, strp=strp) for ds in datestr]
 
-def toolik_simulation(simname, N_sim=500, replicates=250):
+def toolik_simulation(simname, Nsim=500, replicates=250, N=25000, Nbatch=10):
     fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
     pathout = os.path.join(paths['simulation'], simname)
 
@@ -46,12 +46,12 @@ def toolik_simulation(simname, N_sim=500, replicates=250):
     from simulation.stratigraphy import (
         StefanStratigraphyPrescribedConstantE, StefanStratigraphyPrescribedSmoothingSpline)
     strat = StratigraphyMultiple(
-        StefanStratigraphyPrescribedSmoothingSpline(N=50000), Nbatch=10)
+        StefanStratigraphyPrescribedSmoothingSpline(N=N), Nbatch=Nbatch)
 
     if simname in ['constant']:
-        strat_sim = StefanStratigraphyConstantE(N=N_sim, seed=31)
+        strat_sim = StefanStratigraphyConstantE(N=Nsim, seed=31)
     elif simname in ['spline']:
-        strat_sim = StefanStratigraphySmoothingSpline(N=N_sim, seed=114)
+        strat_sim = StefanStratigraphySmoothingSpline(N=Nsim, seed=114)
     else:
         raise ValueError(f'Simulation {simname} not known')
 
@@ -64,13 +64,19 @@ def toolik_simulation(simname, N_sim=500, replicates=250):
     invsim.register_observations(ind_scenes, C_obs)
     invsim.export(os.path.join(pathout, 'invsim.p'))
     invsim.logweights(replicates=replicates, pathout=pathout)
-
+    invsim.export_metrics(pathout)
 
 if __name__ == '__main__':
-    toolik_simulation('constant')
-    toolik_simulation('spline')
-
+    Nsim = 250
+    Nbatch = 4
+    replicates = 100
+    toolik_simulation('constant', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch)
+    toolik_simulation('spline', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch)
     
+#     res = load_object(os.path.join(paths['simulation'], 'constant', 'metrics.p'))
+#     print(np.mean(res['RMSE'], axis=0))
+#     print(np.mean(res['coverage'][..., 1], axis=0))
+
 #     invsim_ = inversionSimulator.from_file(os.path.join(pathout, 'invsim.p'))
 #     sie = invsim_.results(pathout)
 #     jsim = 3
