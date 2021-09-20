@@ -22,12 +22,13 @@ def parse_dates(datestr, strp='%Y%m%d'):
     else:
         return [parse_dates(ds, strp=strp) for ds in datestr]
 
-def toolik_simulation(simname, Nsim=500, replicates=250, N=25000, Nbatch=10):
+def toolik_simulation(
+        simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
     fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
     pathout = os.path.join(paths['simulation'], simname)
 
-    C_obs = load_object(fn)['C']
-    # weird correlation structure
+    C_obs = load_object(fn)['C'] * C_obs_multiplier
+    # unusual correlation structure
     datestr = ['2019-06-02', '2019-06-14', '2019-06-26', '2019-07-08', '2019-07-20',
                '2019-08-01', '2019-08-13', '2019-08-25', '2019-09-06']
     dates = parse_dates(datestr, strp='%Y-%m-%d')
@@ -48,9 +49,9 @@ def toolik_simulation(simname, Nsim=500, replicates=250, N=25000, Nbatch=10):
     strat = StratigraphyMultiple(
         StefanStratigraphyPrescribedSmoothingSpline(N=N), Nbatch=Nbatch)
 
-    if simname in ['constant']:
+    if simname.split('_')[0] in ['constant']:
         strat_sim = StefanStratigraphyConstantE(N=Nsim, seed=31)
-    elif simname in ['spline']:
+    elif simname.split('_')[0] in ['spline']:
         strat_sim = StefanStratigraphySmoothingSpline(N=Nsim, seed=114)
     else:
         raise ValueError(f'Simulation {simname} not known')
@@ -64,34 +65,19 @@ def toolik_simulation(simname, Nsim=500, replicates=250, N=25000, Nbatch=10):
     invsim.register_observations(ind_scenes, C_obs)
     invsim.export(os.path.join(pathout, 'invsim.p'))
     invsim.logweights(replicates=replicates, pathout=pathout)
-    invsim.export_metrics(pathout)
+    invsim.export_metrics(pathout, param='e')
+    indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
+    invsim.export_metrics(pathout, param='e', indranges=indranges)
+
 
 if __name__ == '__main__':
     Nsim = 250
     Nbatch = 4
     replicates = 100
-    toolik_simulation('constant', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch)
-    toolik_simulation('spline', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch)
-    
-#     res = load_object(os.path.join(paths['simulation'], 'constant', 'metrics.p'))
-#     print(np.mean(res['RMSE'], axis=0))
-#     print(np.mean(res['coverage'][..., 1], axis=0))
-
-#     invsim_ = inversionSimulator.from_file(os.path.join(pathout, 'invsim.p'))
-#     sie = invsim_.results(pathout)
-#     jsim = 3
-#     print(sie.expectation('e', replicate=replicate))
-#     for replicate in range(replicates):
-#         sie.plot(jsim=jsim, replicate=replicate, ymax=0.7, show_quantile=False)
-#     sie.plot(jsim=jsim, replicate=3, ymax=0.7, show_quantile=True)
-#     e_inv_q = sie.quantile(
-#         [0.1], 'e', replicate=0, jsim=3, smooth=None)
-
-#     indrange = (sie.invsim.ind_scenes[-4], sie.invsim.ind_scenes[-1])
-#     e_mean = sie.mean_period(indrange)
-#     e_mean_inv = sie.moment(param=None, replicate=None, p=e_mean)
-#     np.set_printoptions(precision=3, suppress=True)
-#     print(np.mean(e_mean_inv, axis=0))
-#     print(np.std(e_mean_inv, axis=0))
-#     print(np.mean(sie.invsim.predens_sim.results['e'], axis=1))
+    multipliers = {'stdacc': 1.0, 'lowacc': 25.0, 'highacc': 1.0/25}
+    for accn in multipliers:
+        for scenarion in ['spline', 'constant']:
+            toolik_simulation(
+                f'{scenarion}_{accn}', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch, 
+                C_obs_multiplier=multipliers[accn])
 

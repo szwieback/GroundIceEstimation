@@ -56,7 +56,7 @@ class PredictionEnsemble():
         self.geom = geom
         self.results = None
 
-    def predict(self, forcing, n_jobs=-2, **kwargs):
+    def predict(self, forcing, n_jobs=-8, **kwargs):
         self.results = {}
         if self.strat.Nbatch == 0:
             self.results = self.predictor.predict(
@@ -160,7 +160,7 @@ class inversionSimulator():
         lw_ps, _ = psislw(lw)
         return lw_ps
 
-    def logweights(self, replicates=10, pathout=None, n_jobs=-2):
+    def logweights(self, replicates=10, pathout=None, n_jobs=-8):
         if pathout is None:
             pathout = os.getcwd()
             import warnings
@@ -195,6 +195,26 @@ class inversionSimulator():
     def prescribed(self, param='e'):
         return self.predens_sim.results[param]
 
+    def prescribed_mean_period(self, indranges, param='e'):
+        ref = self.prescribed(param)
+        yf = self.predens_sim.results['yf']
+        ref_mean = self._mean_period(ref, indranges, yf)
+        return ref_mean
+
+    def _mean_period(self, p, indranges, yf):
+        # need to re-organize this to avoid redundancy
+        ygrid = self.ygrid
+        p_mean = []
+        for indrange in indranges:
+            yfrange = yf[:, indrange]
+            invalid = np.logical_or(
+                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
+                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
+            np.putmask(p, invalid, np.nan)
+            p_mean.append(np.nanmean(p, axis=1))
+        p_mean = np.stack(p_mean, axis=-1)
+        return p_mean
+
     def filename_sim(self, pathout, r):
         return os.path.join(pathout, f'sim_{r}.npy')
 
@@ -202,11 +222,12 @@ class inversionSimulator():
         return os.path.join(pathout, f'simobs_{r}.npy')
 
     def filename_metrics(self, pathout, r, suffix=None):
-        if suffix is None:
-            suffix_ = '_' + suffix
+        if suffix is not None:
+            suffix_ = '_' + '_'.join(suffix)
         else:
             suffix_ = ''
-        return os.path.join(pathout, f'metrics{suffix_}_{r}.p')
+        rstr = '' if r is None else f'_{r}'
+        return os.path.join(pathout, f'metrics{suffix_}{rstr}.p')
 
     def results(self, pathout, replicates=None):
         lw = []
@@ -217,15 +238,19 @@ class inversionSimulator():
             simobs.append(load_object(self.filename_simobs(pathout, r)))
         return simInvEnsemble(self, np.array(lw), simobs=np.array(simobs))
 
-    def export_metrics(self, pathout, param='e', metrics_ind=None, metrics=None, n_jobs=-2):
+    def export_metrics(
+            self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None, 
+            n_jobs=-8):
         def _export(r):
             sie = self.results(pathout, replicates=(r,))
-            fnout = self.filename_metrics(pathout, r, suffix=param)
-            sie.export_metrics(fnout, param=param, metrics=metrics_ind)
+            suffix = (param,) if indranges is None else (param, 'indranges')
+            fnout = self.filename_metrics(pathout, r, suffix=suffix)
+            sie.export_metrics(fnout, param=param, metrics=metrics_ind, indranges=indranges)
         from joblib import Parallel, delayed
         rgen = self._replicate_generator(pathout, replicates=None)
         Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in rgen)
-        self._assemble_metrics(pathout, param='e', metrics=metrics, delete_temp=True)
+        self._assemble_metrics(
+            pathout, param='e', metrics=metrics, delete_temp=True, indranges=indranges)
 
     def _validation_metric(self, metrics_dict, metric):
         if metric[0] == 'RMSE':
@@ -233,7 +258,7 @@ class inversionSimulator():
                 (metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...])**2, 
                 axis=0))
         elif metric[0] == 'bias':
-            m = metrics_dict['mean'] - np.mean(metrics_dict['sim'], axis=0)
+            m = np.mean(metrics_dict['mean'], axis=0) - metrics_dict['sim']
         elif metric[0] == 'MAD':
             m = np.mean(
                 np.abs(metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...]),
@@ -253,16 +278,17 @@ class inversionSimulator():
                 ('RMSE',), ('bias',), ('MAD',), ('variance',), ('coverage', [0.5, 0.8])]
         res = {'meta_validation':{}}
         for metric in metrics:
-            print(metric)
             res[metric[0]] = self._validation_metric(metrics_dict, metric)
             res['meta_validation'][metric[0]] = metric[1:]
         return res
     
-    def _assemble_metrics(self, pathout, param='e', metrics=None, delete_temp=False):
+    def _assemble_metrics(
+            self, pathout, param='e', metrics=None, delete_temp=False, indranges=None):
         res = {}
         meta = {}
         for r in self._replicate_generator(pathout, replicates=None):
-            fnr = self.filename_metrics(pathout, r, suffix=param)
+            suffix = (param,) if indranges is None else (param, 'indranges')
+            fnr = self.filename_metrics(pathout, r, suffix=suffix)
             res_r = load_object(fnr)
             for metric in res_r:
                 if metric not in res:
@@ -274,14 +300,19 @@ class inversionSimulator():
             res[metric] = np.concatenate(res[metric], axis=0)
         res['meta'] = meta
         res['ygrid'] = self.ygrid
-        res['sim'] = self.prescribed(param=param)
+        if indranges is not None:
+            res['indranges'] = indranges
+            res['sim'] = self.prescribed_mean_period(indranges, param=param)
+        else:
+            res['sim'] = self.prescribed(param=param)
+
         res_metrics = self._validation_metrics(res, metrics=metrics)
         res.update(res_metrics)
-        save_object(res, os.path.join(pathout, 'metrics.p'))
+        save_object(res, self.filename_metrics(pathout, None, suffix=suffix))
         if delete_temp:
             for r in self._replicate_generator(pathout, replicates=None):
                 try:
-                    os.remove(self.filename_metrics(pathout, r, suffix=param))
+                    os.remove(self.filename_metrics(pathout, r, suffix=suffix))
                 except:
                     pass
 
@@ -292,10 +323,14 @@ class simInvEnsemble():
         self.invsim = invsim
         self.simobs = simobs
 
+    def predictions(self, param='e', p=None):
+        if p is None:
+            p = self.invsim.predens.results[param]
+        return p
+    
     def moment(self, param='e', replicate=None, power=1, p=None):
         from inference import expectation
-        if param is not None:
-            p = self.invsim.predens.results[param]
+        p = self.predictions(param=param, p=p)
         if len(p.shape) == 1:
             p = p[:, np.newaxis]
             shrink = True
@@ -313,26 +348,27 @@ class simInvEnsemble():
 
     def variance(self, param='e', replicate=None, p=None):
         # improvement needed to deal with numerical issues
-        if param is not None:
-            p = self.invsim.predens.results[param]
+        p = self.predictions(param=param, p=p)
         var = (self.moment(param=None, replicate=replicate, p=p, power=2)
                -self.moment(param=None, replicate=replicate, p=p, power=1) ** 2)
         return var
 
     def quantile(
             self, quantiles, param='e', replicate=None, jsim=None, smooth=None, steps=8,
-            method='bisection'):
+            p=None, method='bisection'):
         from inference import quantile as quant
         repl_slice = np.s_[:] if replicate is None else np.s_[replicate]
         jsim_slice = np.s_[:] if jsim is None else np.s_[jsim]
         lw_ = self.lw[(repl_slice, jsim_slice, Ellipsis)]
+        if param is not None and p is None:
+            p = self.invsim.predens.results[param]
         postquant = quant(
-            self.invsim.predens.results[param], lw_, quantiles, method=method, steps=steps,
+            p, lw_, quantiles, method=method, steps=steps,
             normalize=True, smooth=smooth)
         return postquant
 
     def prescribed(self, param='e'):
-        return self.invsim.predens_sim.results[param]
+            return self.invsim.predens_sim.results[param]
 
     def observed(self, replicate=None):
         if replicate is None:
@@ -350,17 +386,31 @@ class simInvEnsemble():
         frac_thawed = np.sum(w_, axis=1)
         return frac_thawed
 
-    def mean_period(self, indrange, param='e'):
+    def predicted_mean_period(self, indranges, param='e'):
+        p = self.predictions(param=param)
+        yf = self.invsim.predens.results['yf']
+        p_mean = self._mean_period(p, indranges, yf)
+        return p_mean
+    
+    def _mean_period(self, p, indranges, yf):
         ygrid = self.ygrid
-        p = self.invsim.predens.results[param]
-        yfrange = [self.invsim.predens.results['yf'][:, ind] for ind in indrange]
-        invalid = np.logical_or(
-            yfrange[0][:, np.newaxis] > ygrid[np.newaxis, :],
-            yfrange[1][:, np.newaxis] < ygrid[np.newaxis, :])
-        np.putmask(p, invalid, np.nan)
-        p_mean = np.nanmean(p, axis=1)
+        p_mean = []
+        for indrange in indranges:
+            yfrange = yf[:, indrange]
+            invalid = np.logical_or(
+                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
+                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
+            np.putmask(p, invalid, np.nan)
+            p_mean.append(np.nanmean(p, axis=1))
+        p_mean = np.stack(p_mean, axis=-1)
         return p_mean
 
+    def prescribed_mean_period(self, indranges, param='e'):
+        ref = self.prescribed(param)
+        yf = self.invsim.predens_sim.results['yf']
+        ref_mean = self._mean_period(ref, indranges, yf)
+        return ref_mean
+        
     def plot(self, jsim=0, replicate=0, ymax=None, show_quantile=False):
         import matplotlib.pyplot as plt
         globfigparams = {
@@ -464,37 +514,41 @@ class simInvEnsemble():
     def ygrid(self):
         return np.arange(0, self.depth, step=self.dy)
 
-    def mean(self, param='e', replicate=None):
-            return self.moment(param=param, replicate=replicate)
+    def mean(self, param='e', p=None, replicate=None):
+        return self.moment(param=param, p=p, replicate=replicate)
 
-    def _metric(self, metric, param='e', replicate=None, metric_args=()):
+    def _metric(self, metric, param='e', metric_args=(), replicate=None, indranges=None):
+        if indranges is None:
+            p = self.predictions(param=param)
+            ref = self.prescribed(param)
+        else:
+            p = self.predicted_mean_period(indranges, param=param)
+            ref = self.prescribed_mean_period(indranges, param=param)
         if metric == 'mean':
-            return self.mean(param=param, replicate=replicate)
+            return self.mean(p=p)
         elif metric == 'variance':
-            return self.variance(param=param, replicate=replicate)
+            return self.variance(p=p)
         elif metric == 'quantile':
-            return self.quantile(metric_args[0], param=param, replicate=replicate)
+            return self.quantile(metric_args[0], p=p)
         elif metric == 'ensemble_quantile':
-            return self.ensemble_quantile(param=param, replicate=replicate)
+            return self._ensemble_quantile(p, ref)
         else:
             raise NotImplementedError(f'{metric} not known')
 
-    def ensemble_quantile(self, param='e', replicate=None):
+    def _ensemble_quantile(self, p, ref):
         # computes quantile of "truth" with respect to ensemble distribution
-        if replicate is not None: raise NotImplementedError
         from inference import ensemble_quantile as eq
-        ref = self.prescribed(param)
-        p = self.invsim.predens.results[param]
         return eq(p, self.lw, ref)
 
-    def export_metrics(self, fnout, param='e', metrics=None):
+    def export_metrics(self, fnout, param='e', metrics=None, indranges=None):
         results = {}
         if metrics is None:
             metrics = [('mean',), ('variance',), ('ensemble_quantile',)]
 #             metrics = [('quantile', [0.10, 0.25, 0.50, 0.75, 0.90])]
         for metric in metrics:
             mr = self._metric(
-                metric[0], param=param, replicate=None, metric_args=metric[1:])
+                metric[0], param=param, replicate=None, metric_args=metric[1:], 
+                indranges=indranges)
             results[metric[0]] = (mr, metric[1:])
         save_object(results, fnout)
 
