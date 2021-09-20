@@ -210,8 +210,9 @@ class inversionSimulator():
             invalid = np.logical_or(
                 yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
                 yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
-            np.putmask(p, invalid, np.nan)
-            p_mean.append(np.nanmean(p, axis=1))
+            p_ = p.copy()
+            np.putmask(p_, invalid, np.nan)
+            p_mean.append(np.nanmean(p_, axis=1))
         p_mean = np.stack(p_mean, axis=-1)
         return p_mean
 
@@ -400,8 +401,9 @@ class simInvEnsemble():
             invalid = np.logical_or(
                 yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
                 yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
-            np.putmask(p, invalid, np.nan)
-            p_mean.append(np.nanmean(p, axis=1))
+            p_ = p.copy()
+            np.putmask(p_, invalid, np.nan)
+            p_mean.append(np.nanmean(p_, axis=1))
         p_mean = np.stack(p_mean, axis=-1)
         return p_mean
 
