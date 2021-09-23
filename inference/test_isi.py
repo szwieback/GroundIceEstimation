@@ -92,14 +92,13 @@ class MVNormalTestCase1(unittest.TestCase):
             except:
                 lpd2 = None
             if lpd2 is not None:
-                self.assertLess(np.abs(lpd-lpd2), 1e-6)
+                self.assertLess(np.abs(lpd-lpd2), 1e-9)
             else:
                 self.assertTrue(np.isnan(lpd))
     
     def test_shape(self):
         self.assertEqual(self.lw.shape, (self.M, self.N))
-                
-                
+                          
 class MVNormalTestCase2(MVNormalTestCase1):
      
     @classmethod
@@ -109,7 +108,21 @@ class MVNormalTestCase2(MVNormalTestCase1):
      
     @classmethod
     def __set_C_obs(cls):
-        C0 = np.diag(np.arange(cls.P) + 3) + 0.5 * np.ones((cls.P, cls.P))
+        C0 = np.diag(np.arange(cls.P) + 3) + 0.1 * np.ones((cls.P, cls.P))
+        cls.C_obs = np.stack([C0] * cls.M, axis=0)
+        cls.C_obs[1, 0, 0] = 2
+        cls.C_obs[2, 0, 0] = 0
+
+class MVNormalTestCase3(MVNormalTestCase1):
+     
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.__set_C_obs()
+     
+    @classmethod
+    def __set_C_obs(cls):
+        C0 = 4 * np.eye(cls.P) - 0.1 * np.ones((cls.P, cls.P))
         cls.C_obs = np.stack([C0] * cls.M, axis=0)
         cls.C_obs[1, 0, 0] = 2
         cls.C_obs[2, 0, 0] = 0

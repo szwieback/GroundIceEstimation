@@ -26,9 +26,10 @@ def toolik_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
     fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
     pathout = os.path.join(paths['simulation'], simname)
-
-    C_obs = load_object(fn)['C'] * C_obs_multiplier
-    # unusual correlation structure
+    
+    C_obs0 = load_object(fn)['C']
+    C_obs0 += (4e-3) ** 2 * np.eye(C_obs0.shape[0])
+    C_obs = C_obs0 * C_obs_multiplier
     datestr = ['2019-06-02', '2019-06-14', '2019-06-26', '2019-07-08', '2019-07-20',
                '2019-08-01', '2019-08-13', '2019-08-25', '2019-09-06']
     dates = parse_dates(datestr, strp='%Y-%m-%d')
@@ -71,8 +72,8 @@ def toolik_simulation(
 
 
 if __name__ == '__main__':
-    Nsim = 250
-    Nbatch = 4
+    Nsim = 500
+    Nbatch = 10
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 25.0, 'highacc': 1.0/25}
     for accn in multipliers:
@@ -80,4 +81,5 @@ if __name__ == '__main__':
             toolik_simulation(
                 f'{scenarion}_{accn}', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch, 
                 C_obs_multiplier=multipliers[accn])
-
+#     
+#     toolik_simulation('spline_plot', Nsim=50, replicates=5, Nbatch=4)

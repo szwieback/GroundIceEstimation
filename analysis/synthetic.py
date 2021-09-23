@@ -145,7 +145,7 @@ class inversionSimulator():
         return self.predens_sim.extract_predictions(
             self.ind_scenes, C_obs=self.C_obs, rng=rng_)
 
-    def _logweights_single(self, sim_obs_jsim, pred_scenes, jsim=0):
+    def _logweights_single(self, sim_obs_jsim, pred_scenes):
         from inference import lw_mvnormal, psislw
         lw = lw_mvnormal(
             sim_obs_jsim[np.newaxis, ...], self.C_obs[np.newaxis, ...], pred_scenes)
@@ -240,7 +240,7 @@ class inversionSimulator():
         return simInvEnsemble(self, np.array(lw), simobs=np.array(simobs))
 
     def export_metrics(
-            self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None, 
+            self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None,
             n_jobs=-8):
         def _export(r):
             sie = self.results(pathout, replicates=(r,))
@@ -256,7 +256,7 @@ class inversionSimulator():
     def _validation_metric(self, metrics_dict, metric):
         if metric[0] == 'RMSE':
             m = np.sqrt(np.mean(
-                (metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...])**2, 
+                (metrics_dict['mean'] - metrics_dict['sim'][np.newaxis, ...]) ** 2,
                 axis=0))
         elif metric[0] == 'bias':
             m = np.mean(metrics_dict['mean'], axis=0) - metrics_dict['sim']
@@ -282,7 +282,7 @@ class inversionSimulator():
             res[metric[0]] = self._validation_metric(metrics_dict, metric)
             res['meta_validation'][metric[0]] = metric[1:]
         return res
-    
+
     def _assemble_metrics(
             self, pathout, param='e', metrics=None, delete_temp=False, indranges=None):
         res = {}
@@ -328,7 +328,7 @@ class simInvEnsemble():
         if p is None:
             p = self.invsim.predens.results[param]
         return p
-    
+
     def moment(self, param='e', replicate=None, power=1, p=None):
         from inference import expectation
         p = self.predictions(param=param, p=p)
@@ -392,7 +392,7 @@ class simInvEnsemble():
         yf = self.invsim.predens.results['yf']
         p_mean = self._mean_period(p, indranges, yf)
         return p_mean
-    
+
     def _mean_period(self, p, indranges, yf):
         ygrid = self.ygrid
         p_mean = []
@@ -412,97 +412,6 @@ class simInvEnsemble():
         yf = self.invsim.predens_sim.results['yf']
         ref_mean = self._mean_period(ref, indranges, yf)
         return ref_mean
-        
-    def plot(self, jsim=0, replicate=0, ymax=None, show_quantile=False):
-        import matplotlib.pyplot as plt
-        globfigparams = {
-            'fontsize':8, 'family':'serif', 'usetex': True,
-            'preamble': r'\usepackage{amsmath} \usepackage{times} \usepackage{mathtools}',
-            'column_inch':229.8775 / 72.27, 'markersize':24, 'markercolour':'#AA00AA',
-            'fontcolour':'#666666', 'tickdirection':'out', 'linewidth': 0.5,
-            'ticklength': 2.50, 'minorticklength': 1.1 }
-        plt.rc(
-            'font', **{'size':globfigparams['fontsize'], 'family':globfigparams['family']})
-        plt.rcParams['text.usetex'] = globfigparams['usetex']
-        plt.rcParams['text.latex.preamble'] = globfigparams['preamble']
-        plt.rcParams['legend.fontsize'] = globfigparams['fontsize']
-        plt.rcParams['font.size'] = globfigparams['fontsize']
-        plt.rcParams['axes.linewidth'] = globfigparams['linewidth']
-        plt.rcParams['axes.labelcolor'] = globfigparams['fontcolour']
-        plt.rcParams['axes.edgecolor'] = globfigparams['fontcolour']
-        plt.rcParams['xtick.color'] = globfigparams['fontcolour']
-        plt.rcParams['xtick.direction'] = globfigparams['tickdirection']
-        plt.rcParams['ytick.direction'] = globfigparams['tickdirection']
-        plt.rcParams['ytick.color'] = globfigparams['fontcolour']
-        plt.rcParams['xtick.major.width'] = globfigparams['linewidth']
-        plt.rcParams['ytick.major.width'] = globfigparams['linewidth']
-        plt.rcParams['xtick.minor.width'] = globfigparams['linewidth']
-        plt.rcParams['ytick.minor.width'] = globfigparams['linewidth']
-        plt.rcParams['ytick.major.size'] = globfigparams['ticklength']
-        plt.rcParams['xtick.major.size'] = globfigparams['ticklength']
-        plt.rcParams['ytick.minor.size'] = globfigparams['minorticklength']
-        plt.rcParams['xtick.minor.size'] = globfigparams['minorticklength']
-        plt.rcParams['text.color'] = globfigparams['fontcolour']
-        cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
-        smooth_quantile = 2
-        ygrid = self.ygrid
-        e_inv = self.moment('e', replicate=replicate)
-        e_inv_std = np.sqrt(self.variance('e', replicate=replicate))
-        if show_quantile:
-            e_inv_q = self.quantile(
-                [0.1, 0.9], 'e', replicate=replicate, jsim=jsim,
-                smooth=smooth_quantile)
-        e_sim = self.prescribed('e')
-        s_sim = self.prescribed('s_los')
-        s_obs = self.observed(replicate=replicate)
-        s_pred = self.moment('s_los', replicate=replicate)
-        fig, axs = plt.subplots(ncols=2, sharey=False)
-        plt.subplots_adjust(top=0.92, left=0.10, right=0.98, bottom=0.15, wspace=0.30)
-        fig.set_size_inches((5, 2.5), forward=True)
-        days = np.arange(s_sim.shape[1])
-        axs[0].plot(
-            days[self.invsim.ind_scenes[1:]], s_obs[jsim, ...], lw=0.0, c='k', alpha=0.6,
-            marker='o', mfc='k', mec='none', ms=4)
-        axs[0].plot(
-            days, s_pred[jsim, ...] - s_pred[jsim, self.invsim.ind_scenes[0]],
-            c=cols['est'], lw=1.0)
-        axs[0].plot(
-            days, s_sim[jsim, ...] - s_sim[jsim, self.invsim.ind_scenes[0]],
-            lw=1.0, c=cols['true'])
-        axs[0].set_xlabel('time since snow melt [d]')
-        axs[0].set_ylabel('subsidence [m]')
-        axs[1].plot(e_sim[jsim, :], ygrid, lw=1.0, c=cols['true'])
-        alpha = self.frac_thawed(replicate=replicate, jsim=jsim)
-        for jdepth in np.arange(ygrid.shape[0] - 1):
-            axs[1].plot(
-                e_inv[jsim, jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=1.0,
-                c=cols['est'], alpha=alpha[jdepth])
-            if show_quantile:
-                axs[1].plot(
-                    e_inv_q[0][jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=0.5,
-                    c=cols['unc'], alpha=alpha[jdepth])
-                axs[1].plot(
-                    e_inv_q[1][jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=0.5,
-                    c=cols['unc'], alpha=alpha[jdepth])
-            else:
-                axs[1].plot(
-                    e_inv[jsim, jdepth:jdepth + 2] + e_inv_std[jsim, jdepth:jdepth + 2],
-                     ygrid[jdepth:jdepth + 2], lw=0.5, c=cols['unc'], alpha=alpha[jdepth])
-                axs[1].plot(
-                    e_inv[jsim, jdepth:jdepth + 2] - e_inv_std[jsim, jdepth:jdepth + 2],
-                    ygrid[jdepth:jdepth + 2], lw=0.5, c=cols['unc'], alpha=alpha[jdepth])
-        if ymax is None: ymax = ygrid[-1]
-        axs[1].set_ylim((ymax, ygrid[0]))
-        axs[1].set_ylabel('Depth [m]')
-        axs[1].set_xlabel('Excess ice content [-]')
-        titles = ['observations', 'ice content profile']
-        for jax, ax in enumerate(axs):
-            ax.spines['right'].set_visible(False)
-            ax.spines['top'].set_visible(False)
-            ax.text(
-                0.50, 1.05, titles[jax], c='k', transform=ax.transAxes,
-                ha='center', va='baseline')
-        plt.show()
 
     @property
     def depth(self):
@@ -549,7 +458,7 @@ class simInvEnsemble():
 #             metrics = [('quantile', [0.10, 0.25, 0.50, 0.75, 0.90])]
         for metric in metrics:
             mr = self._metric(
-                metric[0], param=param, replicate=None, metric_args=metric[1:], 
+                metric[0], param=param, replicate=None, metric_args=metric[1:],
                 indranges=indranges)
             results[metric[0]] = (mr, metric[1:])
         save_object(results, fnout)

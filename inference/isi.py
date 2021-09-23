@@ -215,7 +215,6 @@ def _quantile_bisection_(vals, lw_, q=0.5, steps=8, normalize=False):
     lw_ = _normalize(lw_, normalize=normalize)
     vals_left = np.full(lw_.shape[:-1] + vals.shape[1:], np.min(vals))
     vals_right = np.full(lw_.shape[:-1] + vals.shape[1:], np.max(vals))
-    print(vals_left.shape, lw_.shape, vals.shape)
     slicetup = (slice(None),) * len(lw_.shape[:-1]) + (np.newaxis, Ellipsis)
     for step in range(steps):
         vals_mid = 0.5 * (vals_left + vals_right)
@@ -237,7 +236,7 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
     vals_left = np.min(vals, axis=0)
     vals_right = np.max(vals, axis=0)
     for jlw in range(lw.shape[0]):
-        wj = np.exp(lw[jlw])
+        wj = np.exp(lw[jlw, ...])
         vals_left_j = vals_left.copy()
         vals_right_j = vals_right.copy()
         for step in range(steps):
@@ -247,7 +246,7 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
             indicator *= wj[:, np.newaxis]
             d = np.sum(indicator, axis=0) - q
             np.putmask(vals_right_j, d >= 0, vals_j)
-            np.putmask(vals_left, d < 0, vals_j)
+            np.putmask(vals_left_j, d < 0, vals_j)
         vals_j = 0.5 * (vals_left_j + vals_right_j)
         qvals[jlw, ...] = vals_j
     return qvals.reshape(lw_.shape[:-1] + (qvals.shape[-1],))
@@ -273,9 +272,13 @@ def quantile(vals, lw, q, steps=8, method='bisection', normalize=True, smooth=No
             valq = valq[0, :]
         return valq
     else:
+        def _quantile(q_):
+            valq = quantile(
+                vals, lw, q_, method=method, steps=steps, normalize=normalize, 
+                smooth=smooth)
+            return valq
         valql = np.stack(
-            [quantile(vals, lw, q_, steps=steps, normalize=normalize, smooth=smooth)
-            for q_ in q], axis=-1)
+            [_quantile(q_) for q_ in q], axis=-1)
         
         return valql
 

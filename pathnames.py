@@ -20,4 +20,5 @@ else:
 paths = {'simulation': os.path.join(path0, 'simulation'),
          'stacks': os.path.join(path0, 'stacks'),
          'processed': os.path.join(path0, 'processed'),
-         'forcing': os.path.join(path0, 'forcing')}
+         'forcing': os.path.join(path0, 'forcing'),
+         'figures': os.path.join(path0, 'figures')}
