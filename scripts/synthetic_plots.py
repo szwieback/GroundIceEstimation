@@ -152,13 +152,13 @@ def plot_metrics(ymax=0.8):
     for simname in simnames:
         metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
         axs[0].plot(
-            np.mean(metrics['MAD'], axis=0), metrics['ygrid'],
+            np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
             lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
         axs[1].plot(
-            np.mean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
+            np.nanmean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
             lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
         axs[2].plot(
-            np.mean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
+            np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
             lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
 
     axs[0].set_xlim(0.05, 0.20)
@@ -196,31 +196,28 @@ def plot_metrics(ymax=0.8):
     axs[1].text(-1.480, -0.111, 'accuracy', transform=axs[1].transAxes)
     plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics.pdf'))
 
-def plot_metrics_presentation(ymax=0.8):
+def plot_metrics_presentation(simname, ymax=0.8):
     from string import ascii_lowercase
     import matplotlib.lines as mlines
     fig, axs = plt.subplots(ncols=3, sharey=True, sharex=False)
     plt.subplots_adjust(
         top=0.78, left=0.14, right=0.98, bottom=0.03, wspace=0.30, hspace=0.46)
     fig.set_size_inches((4.0, 2.2), forward=True)
-    simname ='spline_stdacc'
-    colscen = {
-        'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
-    alphascen = {'spline_highacc':0.5, 'spline_lowacc':0.5, 'spline_stdacc':0.8}
-    lwscen = {'spline_highacc':0.6, 'spline_lowacc':0.6, 'spline_stdacc':1.2}
-    labels = {'spline_highacc':'high', 'spline_lowacc':'low', 'spline_stdacc':'std'}
+    colscen = '#4c4632'
+    alphascen = 0.8
+    lwscen = 1.2
 
     axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
     metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
     axs[0].plot(
-        np.mean(metrics['MAD'], axis=0), metrics['ygrid'],
-        lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+        np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
+        lw=lwscen, alpha=alphascen, c=colscen)
     axs[1].plot(
-        np.mean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
-        lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+        np.nanmean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
+        lw=lwscen, alpha=alphascen, c=colscen)
     axs[2].plot(
-        np.mean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
-        lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+        np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
+        lw=lwscen, alpha=alphascen, c=colscen)
 
     axs[0].set_xlim(0.05, 0.20)
     axs[1].set_xlim(0.00, 0.25)
@@ -242,14 +239,71 @@ def plot_metrics_presentation(ymax=0.8):
             transform=ax.transAxes)
         ax.text(
             0.54, 1.15, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
-   
+
     plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics_pres.pdf'))
 
-def test_simulation():
-    simname ='spline_stdacc'
-    metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
-    print(metrics.keys())
+def plot_metrics_indrange():
+    from string import ascii_lowercase
+    import matplotlib.transforms as transforms
+    fig, axs = plt.subplots(ncols=2, sharey=True, sharex=False)
+    plt.subplots_adjust(
+        top=0.87, left=0.21, right=0.98, bottom=0.34, wspace=0.30, hspace=0.46)
+    fig.set_size_inches((2.2, 0.9), forward=True)
+    simnames = ['spline_lowacc', 'spline_stdacc', 'spline_highacc']
+    colscen = {
+        'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
+    alphascen = {'spline_highacc':0.5, 'spline_lowacc':0.5, 'spline_stdacc':0.8}
 
+    jindrange = 0
+    marker = 'o'
+    ms = 4
+    ylim = (-0.3, 2.5)
+    yticks = (0, 1, 2)
+    yticklabels = ('low', 'standard', 'high')
+
+    axs[1].axvline(0.8, lw=0.5, c='#eeeeee')
+    for jsimname, simname in enumerate(simnames):
+        metrics = load_object(
+            os.path.join(paths['simulation'], simname, 'metrics_e_indranges.p'))
+        axs[0].plot(
+            np.nanmean(metrics['MAD'], axis=0)[jindrange], jsimname,
+            linestyle='none', mfc=colscen[simname], alpha=alphascen[simname], marker=marker,
+            ms=ms, mec='none')
+        axs[1].plot(
+            np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
+            linestyle='none', mfc=colscen[simname], alpha=alphascen[simname], marker=marker,
+            ms=ms, mec='none')
+
+    axs[0].set_xlim(0.00, 0.15)
+    axs[1].set_xlim(0.35, 0.90)
+    axs[1].set_xticks((0.4, 0.6, 0.8))
+    axs[0].set_ylim(ylim)
+#
+    titles = ['error', 'coverage']
+    xlabels = ['MAD [-]', 'fraction [-]']
+    ypos = 1.08
+    xpos = -0.07
+    for jax, ax in enumerate(axs):
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_yticks(yticks)
+        ax.text(
+            0.54, ypos, titles[jax], ha='center', va='baseline', c='k',
+            transform=ax.transAxes)
+        ax.text(
+            0.54, -0.58, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
+        ax.text(
+            0.03, 0.07, ascii_lowercase[jax] + ')', ha='left', va='baseline',
+            transform=ax.transAxes)
+    axs[0].text(
+        xpos, ypos, 'accuracy', va='baseline', ha='right', transform=axs[0].transAxes)
+    axs[0].set_yticklabels(())
+    trans = transforms.blended_transform_factory(
+        axs[0].transAxes, axs[0].transData)
+    for jtickl, tickl in enumerate(yticklabels):
+        axs[0].text(xpos, jtickl, tickl, va='center', ha='right', transform=trans)
+    plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics_indrange.pdf'))
 
 if __name__ == '__main__':
-    test_simulation()
+    plot_metrics()
+    plot_metrics_indrange()

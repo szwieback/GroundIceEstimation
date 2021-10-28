@@ -75,9 +75,9 @@ if __name__ == '__main__':
     Nsim = 500
     Nbatch = 10
     replicates = 100
-    multipliers = {'stdacc': 1.0, 'lowacc': 25.0, 'highacc': 1.0/25}
+    multipliers = {'lowacc': 16.0, 'highacc': 1.0/16}
     for accn in multipliers:
-        for scenarion in ['spline', 'constant']:
+        for scenarion in ['spline']:
             toolik_simulation(
                 f'{scenarion}_{accn}', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch, 
                 C_obs_multiplier=multipliers[accn])
