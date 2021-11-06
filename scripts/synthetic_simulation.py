@@ -8,7 +8,7 @@ import numpy as np
 import os
 import datetime
 
-from simulation.toolik import read_toolik_forcing
+from forcing import read_toolik_forcing
 from scripts.pathnames import paths
 from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, load_object
 from simulation import (
@@ -26,7 +26,7 @@ def toolik_simulation(
     fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
     fnforcing = os.path.join(paths['forcing'], 'toolik2019', '1-hour_data.csv')
     pathout = os.path.join(paths['simulation'], simname)
-    
+
     C_obs0 = load_object(fn)['C']
     C_obs0 += (4e-3) ** 2 * np.eye(C_obs0.shape[0])
     C_obs = C_obs0 * C_obs_multiplier
@@ -67,16 +67,17 @@ def toolik_simulation(
     indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
     invsim.export_metrics(pathout, param='e', indranges=indranges)
 
-
 if __name__ == '__main__':
+    N = 25000
     Nsim = 500
-    Nbatch = 10
     replicates = 100
-    multipliers = {'stdacc': 1.0}#'lowacc': 16.0, 'highacc': 1.0/16}
-    for accn in multipliers:
-        for scenarion in ['spline']:
-            toolik_simulation(
-                f'{scenarion}_{accn}', Nsim=Nsim, replicates=replicates, Nbatch=Nbatch, 
-                C_obs_multiplier=multipliers[accn])
+    multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
+    Nbatch_list = [2]  # 10
+    for Nbatch in Nbatch_list:
+        for accn in multipliers:
+            for scenarion in ['spline']:
+                toolik_simulation(
+                    f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
+                    Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
 
-    toolik_simulation('spline_plot', Nsim=50, replicates=5, Nbatch=4)
+#     toolik_simulation('spline_plot', Nsim=50, replicates=5, Nbatch=4)

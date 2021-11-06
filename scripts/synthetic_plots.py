@@ -12,9 +12,8 @@ from scripts.plotting import cols, prepare_figure
 from analysis import load_object
 from analysis import InversionSimulator
 
-
 def _plot_example(
-        axs, sie, jsim=0, replicate=0, show_quantile=True, smooth_quantile=None, ymax=None,
+        axs, sie, jsim=0, replicate=0, show_quantile=True, smooth_quantile=2, ymax=None,
         slim=None, sticks=None, show_ylabels=False):
     ygrid = sie.ygrid
     e_inv = sie.moment('e', replicate=replicate)
@@ -87,16 +86,15 @@ def plot_examples(show_quantile=False):
     simname = 'spline_plot'
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
-    instances = (Instance(0, 18), Instance(0, 13), Instance(0, 12))  # 0, 2
-    jsim = 18  # 13#12 #2
+    instances = (Instance(0, 2), Instance(0, 12) , Instance(0, 42))  # (0, 13) (0, 18)
     ymax = 0.6
-    slim = (0.075, -0.010)
-    sticks = [0.0, 0.03, 0.06]
+    slim = (0.10, -0.01)
+    sticks = [0.0, 0.03, 0.06, 0.09]
 
-    fig, axs = plt.subplots(ncols=len(instances), nrows=2, sharey=False, sharex='row')
-    plt.subplots_adjust(
-        top=0.98, left=0.10, right=0.98, bottom=0.12, wspace=0.30, hspace=0.46)
-    fig.set_size_inches((5, 3), forward=True)
+    fig, axs = prepare_figure(
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(5,3), 
+        figsizeunit='in', top=0.98, left=0.10, right=0.98, bottom=0.12, wspace=0.30, 
+        hspace=0.46)
 
     for jinstance, instance in enumerate(instances):
         invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
@@ -110,10 +108,10 @@ def plot_examples(show_quantile=False):
 def plot_metrics(ymax=0.8):
     from string import ascii_lowercase
     import matplotlib.lines as mlines
-    fig, axs = plt.subplots(ncols=3, sharey=True, sharex=False)
-    plt.subplots_adjust(
-        top=0.75, left=0.14, right=0.98, bottom=0.09, wspace=0.30, hspace=0.46)
-    fig.set_size_inches((3.0, 2.2), forward=True)
+    fig, axs = prepare_figure(
+        ncols=3, figsize=(3.0, 2.2), figsizeunit='in', sharey=True, sharex=False,
+        top=0.75, left=0.14, right=0.98, bottom=0.09, wspace=0.30, hspace=0.46,
+        remove_spines=False)
     simnames = ['spline_highacc', 'spline_lowacc', 'spline_stdacc']
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
@@ -134,10 +132,10 @@ def plot_metrics(ymax=0.8):
             np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
             lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
 
-    axs[0].set_xlim(0.05, 0.20)
+    axs[0].set_xlim(0.00, 0.20)
     axs[1].set_xlim(0.00, 0.25)
-    axs[2].set_xlim(0.35, 0.90)
-    axs[2].set_xticks((0.4, 0.6, 0.8))
+    axs[2].set_xlim(0.55, 0.95)
+    axs[2].set_xticks((0.6, 0.8))
     axs[0].set_ylim(ymax, 0)
     axs[0].text(
         -0.4, 0.5, 'depth [m]', transform=axs[0].transAxes, va='center',
@@ -169,56 +167,12 @@ def plot_metrics(ymax=0.8):
     axs[1].text(-1.480, -0.111, 'accuracy', transform=axs[1].transAxes)
     plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics.pdf'))
 
-def plot_metrics_presentation(simname, ymax=0.8):
-    from string import ascii_lowercase
-    import matplotlib.lines as mlines
-    fig, axs = plt.subplots(ncols=3, sharey=True, sharex=False)
-    plt.subplots_adjust(
-        top=0.78, left=0.14, right=0.98, bottom=0.03, wspace=0.30, hspace=0.46)
-    fig.set_size_inches((4.0, 2.2), forward=True)
-    colscen = '#4c4632'
-    alphascen = 0.8
-    lwscen = 1.2
-
-    axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
-    metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
-    axs[0].plot(
-        np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
-        lw=lwscen, alpha=alphascen, c=colscen)
-    axs[1].plot(
-        np.nanmean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
-        lw=lwscen, alpha=alphascen, c=colscen)
-    axs[2].plot(
-        np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
-        lw=lwscen, alpha=alphascen, c=colscen)
-
-    axs[0].set_xlim(0.05, 0.20)
-    axs[1].set_xlim(0.00, 0.25)
-    axs[2].set_xlim(0.35, 0.90)
-    axs[2].set_xticks((0.4, 0.6, 0.8))
-    axs[0].set_ylim(ymax, 0)
-    axs[0].text(
-        -0.4, 0.5, 'depth [m]', transform=axs[0].transAxes, va='center',
-        ha='right', rotation=90)
-
-    titles = ['error', 'posterior spread', 'coverage']
-    xlabels = ['MAD [-]', '$\\sigma_p$ [-]', 'fraction [-]']
-    for jax, ax in enumerate(axs):
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.xaxis.set_ticks_position('top')
-        ax.text(
-            0.54, 1.24, titles[jax], ha='center', va='baseline', c='k',
-            transform=ax.transAxes)
-        ax.text(
-            0.54, 1.15, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
-
-    plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics_pres.pdf'))
 
 def plot_metrics_indrange():
     from string import ascii_lowercase
     import matplotlib.transforms as transforms
-    fig, axs = prepare_figure(ncols=2, sharey=True, sharex=False, figsize=(2.2, 0.9),
+    fig, axs = prepare_figure(
+        ncols=2, sharey=True, sharex=False, figsize=(2.2, 0.9), figsizeunit='in',
         top=0.87, left=0.21, right=0.98, bottom=0.34, wspace=0.30, hspace=0.46)
     simnames = ['spline_lowacc', 'spline_stdacc', 'spline_highacc']
     colscen = {
@@ -246,8 +200,8 @@ def plot_metrics_indrange():
             ms=ms, mec='none')
 
     axs[0].set_xlim(0.00, 0.15)
-    axs[1].set_xlim(0.35, 0.90)
-    axs[1].set_xticks((0.4, 0.6, 0.8))
+    axs[1].set_xlim(0.55, 0.95)
+    axs[1].set_xticks((0.6, 0.8))
     axs[0].set_ylim(ylim)
 #
     titles = ['error', 'coverage']
@@ -276,5 +230,6 @@ def plot_metrics_indrange():
     plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics_indrange.pdf'))
 
 if __name__ == '__main__':
-    plot_metrics()
-    plot_metrics_indrange()
+    plot_examples(show_quantile=True)
+#     plot_metrics()
+#     plot_metrics_indrange()
