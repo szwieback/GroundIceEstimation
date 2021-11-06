@@ -6,39 +6,12 @@ Created on Sep 20, 2021
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-from pathnames import paths
-from analysis.ioput import load_object
-from analysis.synthetic import StefanPredictor, inversionSimulator, PredictionEnsemble
 
-globfigparams = {
-    'fontsize':8, 'family':'serif', 'usetex': True,
-    'preamble': r'\usepackage{amsmath} \usepackage{times} \usepackage{mathtools}',
-    'column_inch':229.8775 / 72.27, 'markersize':24, 'markercolour':'#AA00AA',
-    'fontcolour':'#666666', 'tickdirection':'out', 'linewidth': 0.5,
-    'ticklength': 2.50, 'minorticklength': 1.1 }
-plt.rc(
-    'font', **{'size':globfigparams['fontsize'], 'family':globfigparams['family']})
-plt.rcParams['text.usetex'] = globfigparams['usetex']
-plt.rcParams['text.latex.preamble'] = globfigparams['preamble']
-plt.rcParams['legend.fontsize'] = globfigparams['fontsize']
-plt.rcParams['font.size'] = globfigparams['fontsize']
-plt.rcParams['axes.linewidth'] = globfigparams['linewidth']
-plt.rcParams['axes.labelcolor'] = globfigparams['fontcolour']
-plt.rcParams['axes.edgecolor'] = globfigparams['fontcolour']
-plt.rcParams['xtick.color'] = globfigparams['fontcolour']
-plt.rcParams['xtick.direction'] = globfigparams['tickdirection']
-plt.rcParams['ytick.direction'] = globfigparams['tickdirection']
-plt.rcParams['ytick.color'] = globfigparams['fontcolour']
-plt.rcParams['xtick.major.width'] = globfigparams['linewidth']
-plt.rcParams['ytick.major.width'] = globfigparams['linewidth']
-plt.rcParams['xtick.minor.width'] = globfigparams['linewidth']
-plt.rcParams['ytick.minor.width'] = globfigparams['linewidth']
-plt.rcParams['ytick.major.size'] = globfigparams['ticklength']
-plt.rcParams['xtick.major.size'] = globfigparams['ticklength']
-plt.rcParams['ytick.minor.size'] = globfigparams['minorticklength']
-plt.rcParams['xtick.minor.size'] = globfigparams['minorticklength']
-plt.rcParams['text.color'] = globfigparams['fontcolour']
-cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
+from scripts.pathnames import paths
+from scripts.plotting import cols, prepare_figure
+from analysis import load_object
+from analysis import InversionSimulator
+
 
 def _plot_example(
         axs, sie, jsim=0, replicate=0, show_quantile=True, smooth_quantile=None, ymax=None,
@@ -126,7 +99,7 @@ def plot_examples(show_quantile=False):
     fig.set_size_inches((5, 3), forward=True)
 
     for jinstance, instance in enumerate(instances):
-        invsim = inversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
+        invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, jsim=instance.jsim, replicate=0,
@@ -245,10 +218,8 @@ def plot_metrics_presentation(simname, ymax=0.8):
 def plot_metrics_indrange():
     from string import ascii_lowercase
     import matplotlib.transforms as transforms
-    fig, axs = plt.subplots(ncols=2, sharey=True, sharex=False)
-    plt.subplots_adjust(
+    fig, axs = prepare_figure(ncols=2, sharey=True, sharex=False, figsize=(2.2, 0.9),
         top=0.87, left=0.21, right=0.98, bottom=0.34, wspace=0.30, hspace=0.46)
-    fig.set_size_inches((2.2, 0.9), forward=True)
     simnames = ['spline_lowacc', 'spline_stdacc', 'spline_highacc']
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
