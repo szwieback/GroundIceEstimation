@@ -68,11 +68,11 @@ def toolik_simulation(
     invsim.export_metrics(pathout, param='e', indranges=indranges)
 
 if __name__ == '__main__':
-    N = 25000
+    N = 10000
     Nsim = 500
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
-    Nbatch_list = [2]  # 10
+    Nbatch_list = [1, 5, 10, 25]
     for Nbatch in Nbatch_list:
         for accn in multipliers:
             for scenarion in ['spline']:

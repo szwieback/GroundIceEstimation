@@ -92,8 +92,8 @@ def plot_examples(show_quantile=False):
     sticks = [0.0, 0.03, 0.06, 0.09]
 
     fig, axs = prepare_figure(
-        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(5,3), 
-        figsizeunit='in', top=0.98, left=0.10, right=0.98, bottom=0.12, wspace=0.30, 
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(5, 3),
+        figsizeunit='in', top=0.98, left=0.10, right=0.98, bottom=0.12, wspace=0.30,
         hspace=0.46)
 
     for jinstance, instance in enumerate(instances):
@@ -105,14 +105,15 @@ def plot_examples(show_quantile=False):
             slim=slim, sticks=sticks)
     plt.savefig(os.path.join(paths['figures'], 'synthetic_examples.pdf'))
 
-def plot_metrics(ymax=0.8):
+def plot_metrics(ymax=0.8, suffix=''):
     from string import ascii_lowercase
     import matplotlib.lines as mlines
     fig, axs = prepare_figure(
         ncols=3, figsize=(3.0, 2.2), figsizeunit='in', sharey=True, sharex=False,
         top=0.75, left=0.14, right=0.98, bottom=0.09, wspace=0.30, hspace=0.46,
         remove_spines=False)
-    simnames = ['spline_highacc', 'spline_lowacc', 'spline_stdacc']
+
+    simnames = ('spline_highacc', 'spline_lowacc', 'spline_stdacc')
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
     alphascen = {'spline_highacc':0.5, 'spline_lowacc':0.5, 'spline_stdacc':0.8}
@@ -120,17 +121,18 @@ def plot_metrics(ymax=0.8):
     labels = {'spline_highacc':'high', 'spline_lowacc':'low', 'spline_stdacc':'std'}
 
     axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
-    for simname in simnames:
+    for sim in simnames:
+        simname = sim + suffix
         metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
-            lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+            lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
         axs[1].plot(
             np.nanmean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
-            lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+            lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
         axs[2].plot(
             np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
-            lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname])
+            lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
 
     axs[0].set_xlim(0.00, 0.20)
     axs[1].set_xlim(0.00, 0.25)
@@ -156,19 +158,18 @@ def plot_metrics(ymax=0.8):
             0.05, 0.00, ascii_lowercase[jax] + ')', ha='left', va='baseline',
             transform=ax.transAxes)
     handles = []
-    for simname in simnames:
+    for sim in simnames:
         l = mlines.Line2D(
-            [], [], lw=lwscen[simname], c=colscen[simname], alpha=alphascen[simname],
-            label=labels[simname])
+            [], [], lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim],
+            label=labels[sim])
         handles.append(l)
     axs[1].legend(
         handles=[handles[-1]] + handles[:-1], loc='lower center', frameon=False,
         fancybox=False, ncol=3, bbox_to_anchor=(0.000, -0.196, 1.200, 0.100))
     axs[1].text(-1.480, -0.111, 'accuracy', transform=axs[1].transAxes)
-    plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics.pdf'))
+    plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics{suffix}.pdf'))
 
-
-def plot_metrics_indrange():
+def plot_metrics_indrange(suffix=''):
     from string import ascii_lowercase
     import matplotlib.transforms as transforms
     fig, axs = prepare_figure(
@@ -187,16 +188,17 @@ def plot_metrics_indrange():
     yticklabels = ('low', 'standard', 'high')
 
     axs[1].axvline(0.8, lw=0.5, c='#eeeeee')
-    for jsimname, simname in enumerate(simnames):
+    for jsimname, sim in enumerate(simnames):
+        simname = sim + suffix
         metrics = load_object(
             os.path.join(paths['simulation'], simname, 'metrics_e_indranges.p'))
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0)[jindrange], jsimname,
-            linestyle='none', mfc=colscen[simname], alpha=alphascen[simname], marker=marker,
+            linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
             ms=ms, mec='none')
         axs[1].plot(
             np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
-            linestyle='none', mfc=colscen[simname], alpha=alphascen[simname], marker=marker,
+            linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
             ms=ms, mec='none')
 
     axs[0].set_xlim(0.00, 0.15)
@@ -227,9 +229,11 @@ def plot_metrics_indrange():
         axs[0].transAxes, axs[0].transData)
     for jtickl, tickl in enumerate(yticklabels):
         axs[0].text(xpos, jtickl, tickl, va='center', ha='right', transform=trans)
-    plt.savefig(os.path.join(paths['figures'], 'synthetic_metrics_indrange.pdf'))
+    plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-    plot_examples(show_quantile=True)
-#     plot_metrics()
-#     plot_metrics_indrange()
+#     plot_examples(show_quantile=True)
+    for Nbatch in (1, 5, 10, 25):
+        plot_metrics(suffix=f'_{Nbatch}')
+        plot_metrics_indrange(suffix=f'_{Nbatch}')
+
