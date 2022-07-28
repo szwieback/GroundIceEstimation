@@ -217,10 +217,10 @@ class StefanStratigraphy(Stratigraphy):
 
     def _override_stratigraphy(self):
         self.stratigraphy['od'] = (
-            0.2 * np.ones_like(self.stratigraphy['od']))
+            0.1 * np.ones_like(self.stratigraphy['od']))
         self.stratigraphy['n_factor'] = (
-            0.9 * np.ones_like(self.stratigraphy['n_factor']))
-        sat = 0.5 * np.ones_like(self.stratigraphy['e'])
+            0.7 * np.ones_like(self.stratigraphy['n_factor']))
+        sat = 0.9 * np.ones_like(self.stratigraphy['e'])
         ind_above = self._ygrid[np.newaxis, :] < self.stratigraphy['od'][:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)

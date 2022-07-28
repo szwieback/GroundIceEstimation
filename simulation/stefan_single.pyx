@@ -119,7 +119,7 @@ def stefan_integral_balance_single(dailytemp_ens, params=params_default, steps=2
     alphaf = (params['kf'] / params['Cf'])
     step = 0
     while step < steps:
-        # estimate a and w  as function of t
+        # estimate a and w as function of t
         a = - 12 * alphaf[:, np.newaxis] * t[np.newaxis, :] * yf ** (-2)
         w = np.sqrt((9 / 4) - a) - (3 / 2) # w should be time invariant (neglect derivative)
         # estimate heat flux Qf into frozen material (function of time)

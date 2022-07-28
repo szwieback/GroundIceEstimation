@@ -30,9 +30,9 @@ def inversion_point(site='icecut', fnplot=None):
     print(np.sqrt(np.diag(C_obs)))
 
     d0, d1 = '20210602', '20210910'
-    dates = ['20210607', '20210619', '20210701', '20210713', '20210725', '20210806',
-             '20210818', '20210830']
-
+#     dates = ['20210607', '20210619', '20210701', '20210713', '20210725', '20210806',
+#              '20210818', '20210830']
+    dates = np.load(os.path.join(path_ts, 'scenes.npy'))
     dailytemp, ind_scenes = preprocess(df, d0, d1, dates)
 
     strat = StratigraphyMultiple(
