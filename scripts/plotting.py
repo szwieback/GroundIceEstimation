@@ -14,7 +14,7 @@ globfigparams = {
     'ticklength': 2.50, 'minorticklength': 1.1 }
 
 cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
-
+colslist = ['#004053', '#729eb2', '#b29b72']
 def prepare_figure(
         nrows=1, ncols=1, figsize=(1.7, 0.8), figsizeunit='col', sharex='col', sharey='row',
         squeeze=True, bottom=0.10, left=0.15, right=0.95, top=0.95, hspace=0.5, wspace=0.1, 
