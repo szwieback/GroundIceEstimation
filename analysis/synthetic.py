@@ -142,28 +142,37 @@ class InversionSimulator():
         rstr = '' if r is None else f'_{r}'
         return os.path.join(pathout, f'metrics{suffix_}{rstr}.p')
 
-    def results(self, pathout, replicates=None):
-        lw = []
+    def results(self, pathout, prior=False, replicates=None):
+        lw_list = []
         simobs = []
         for r in self._replicate_generator(pathout, replicates=replicates):
             lw_r = load_object(self.filename_sim(pathout, r))
-            lw.append(lw_r)
+            lw_list.append(lw_r)
             simobs.append(load_object(self.filename_simobs(pathout, r)))
-        return SimInvEnsemble(self, np.array(lw), simobs=np.array(simobs))
+        lw = np.array(lw_list)
+        if prior:
+            lw = np.ones_like(lw)
+        return SimInvEnsemble(self, lw, simobs=np.array(simobs))
+
+    def _suffix(self, param, indranges, prior):
+        suffix = (param,) if indranges is None else (param, 'indranges')
+        if prior: suffix = suffix + ('prior',)
+        return suffix
 
     def export_metrics(
             self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None,
-            n_jobs=-8):
+            prior=False, n_jobs=-8):
         def _export(r):
-            sie = self.results(pathout, replicates=(r,))
-            suffix = (param,) if indranges is None else (param, 'indranges')
+            sie = self.results(pathout, replicates=(r,), prior=prior)
+            suffix = self._suffix(param, indranges, prior)
             fnout = self.filename_metrics(pathout, r, suffix=suffix)
             sie.export_metrics(fnout, param=param, metrics=metrics_ind, indranges=indranges)
         from joblib import Parallel, delayed
         rgen = self._replicate_generator(pathout, replicates=None)
         Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in rgen)
         self._assemble_metrics(
-            pathout, param='e', metrics=metrics, delete_temp=True, indranges=indranges)
+            pathout, param='e', metrics=metrics, delete_temp=True, indranges=indranges,
+            prior=prior)
 
     def _validation_metric(self, metrics_dict, metric):
         if metric[0] == 'RMSE':
@@ -183,12 +192,17 @@ class InversionSimulator():
                 covbool = np.abs(metrics_dict['ensemble_quantile'] - 0.5) < target / 2
                 return np.mean(covbool, axis=0)
             m = np.stack([_coverage(target) for target in metric[1]], axis=-1)
+        elif metric[0] == 'quantile':
+            m = np.nanmean(metrics_dict['quantile'], axis=0)
+        else:
+            raise NotImplementedError(f'{metric} not supported.')
         return m
 
     def _validation_metrics(self, metrics_dict, metrics=None):
         if metrics is None:
             metrics = [
-                ('RMSE',), ('bias',), ('MAD',), ('variance',), ('coverage', [0.5, 0.8])]
+                ('RMSE',), ('bias',), ('MAD',), ('variance',), ('coverage', [0.5, 0.8]),
+                ('quantile', (0.1, 0.9))]
         res = {'meta_validation':{}}
         for metric in metrics:
             res[metric[0]] = self._validation_metric(metrics_dict, metric)
@@ -196,11 +210,12 @@ class InversionSimulator():
         return res
 
     def _assemble_metrics(
-            self, pathout, param='e', metrics=None, delete_temp=False, indranges=None):
+            self, pathout, param='e', metrics=None, delete_temp=False, indranges=None,
+            prior=False):
         res = {}
         meta = {}
+        suffix = self._suffix(param, indranges, prior)
         for r in self._replicate_generator(pathout, replicates=None):
-            suffix = (param,) if indranges is None else (param, 'indranges')
             fnr = self.filename_metrics(pathout, r, suffix=suffix)
             res_r = load_object(fnr)
             for metric in res_r:
@@ -340,7 +355,7 @@ class SimInvEnsemble():
     def mean(self, param='e', p=None, replicate=None):
         return self.moment(param=param, p=p, replicate=replicate)
 
-    def _metric(self, metric, param='e', metric_args=(), replicate=None, indranges=None):
+    def _metric(self, metric, param='e', metric_args=(), indranges=None):
         if indranges is None:
             p = self.predictions(param=param)
             ref = self.prescribed(param)
@@ -366,11 +381,11 @@ class SimInvEnsemble():
     def export_metrics(self, fnout, param='e', metrics=None, indranges=None):
         results = {}
         if metrics is None:
-            metrics = [('mean',), ('variance',), ('ensemble_quantile',)]
+            metrics = [
+                ('mean',), ('variance',), ('ensemble_quantile',), ('quantile', (0.1, 0.9))]
         for metric in metrics:
             mr = self._metric(
-                metric[0], param=param, replicate=None, metric_args=metric[1:],
-                indranges=indranges)
+                metric[0], param=param, metric_args=metric[1:], indranges=indranges)
             results[metric[0]] = (mr, metric[1:])
         save_object(results, fnout)
 

@@ -20,7 +20,7 @@ def toolik_sensitivity():
     pathout = os.path.join(paths['simulation'], 'sensitivity')
 
     df = read_toolik_forcing(fnforcing)
-    d0, d1 = '2019-05-15', '2019-09-15'
+    d0, d1 = '2019-05-28', '2019-09-15'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
@@ -77,7 +77,7 @@ def toolik_sensitivity():
         ax.text(
             -0.13, 0.50, ylabels[jax], transform=ax.transAxes, ha='right', va='center', 
             rotation=90)
-
+    
     for nsim in range(len(e_sim)):
         for jdist, ind in enumerate(ind_dist):
             c, lw = colslist[jdist + 1], 0.8
