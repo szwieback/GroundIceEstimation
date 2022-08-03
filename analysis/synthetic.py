@@ -104,6 +104,7 @@ class InversionSimulator():
                     yield r
                 else:
                     break
+
     def prescribed(self, param='e'):
         return self.predens_sim.results[param]
 
@@ -145,14 +146,14 @@ class InversionSimulator():
     def results(self, pathout, prior=False, replicates=None):
         lw_list = []
         simobs = []
-        for r in self._replicate_generator(pathout, replicates=replicates):
+        for r in self._replicate_generator(pathout, replicates):
             lw_r = load_object(self.filename_sim(pathout, r))
             lw_list.append(lw_r)
             simobs.append(load_object(self.filename_simobs(pathout, r)))
-        lw = np.array(lw_list)
+        lw, simobs = np.array(lw_list), np.array(simobs)
         if prior:
-            lw = np.ones_like(lw)
-        return SimInvEnsemble(self, lw, simobs=np.array(simobs))
+            lw = np.ones(lw.shape, dtype=np.float64)
+        return SimInvEnsemble(self, lw, simobs=simobs)
 
     def _suffix(self, param, indranges, prior):
         suffix = (param,) if indranges is None else (param, 'indranges')
@@ -168,7 +169,7 @@ class InversionSimulator():
             fnout = self.filename_metrics(pathout, r, suffix=suffix)
             sie.export_metrics(fnout, param=param, metrics=metrics_ind, indranges=indranges)
         from joblib import Parallel, delayed
-        rgen = self._replicate_generator(pathout, replicates=None)
+        rgen = self._replicate_generator(pathout, replicates=self._replicates(prior))
         Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in rgen)
         self._assemble_metrics(
             pathout, param='e', metrics=metrics, delete_temp=True, indranges=indranges,
@@ -209,13 +210,16 @@ class InversionSimulator():
             res['meta_validation'][metric[0]] = metric[1:]
         return res
 
+    def _replicates(self, prior=False):
+        return [0] if prior else None
+
     def _assemble_metrics(
             self, pathout, param='e', metrics=None, delete_temp=False, indranges=None,
             prior=False):
         res = {}
         meta = {}
         suffix = self._suffix(param, indranges, prior)
-        for r in self._replicate_generator(pathout, replicates=None):
+        for r in self._replicate_generator(pathout, replicates=self._replicates(prior)):
             fnr = self.filename_metrics(pathout, r, suffix=suffix)
             res_r = load_object(fnr)
             for metric in res_r:

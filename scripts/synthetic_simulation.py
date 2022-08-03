@@ -28,7 +28,8 @@ def toolik_simulation(
     pathout = os.path.join(paths['simulation'], simname)
 
     C_obs0 = load_object(fn)['C']
-    C_obs0 += (4e-3) ** 2 * np.eye(C_obs0.shape[0])
+    var_atmo = (3e-3) ** 2
+    C_obs0 += var_atmo * (np.ones_like(C_obs0) + np.eye(C_obs0.shape[0]))
     C_obs = C_obs0 * C_obs_multiplier
     datestr = ['2019-06-02', '2019-06-14', '2019-06-26', '2019-07-08', '2019-07-20',
                '2019-08-01', '2019-08-13', '2019-08-25', '2019-09-06']
@@ -58,21 +59,25 @@ def toolik_simulation(
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-
     invsim = InversionSimulator(predens=predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
-    invsim.export(os.path.join(pathout, 'invsim.p'))
+    fninvsim = os.path.join(pathout, 'invsim.p')
+    invsim.export(fninvsim)
+#     invsim = InversionSimulator.from_file(fninvsim)
     invsim.logweights(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
+    invsim.export_metrics(pathout, param='e', prior=True)
     indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
     invsim.export_metrics(pathout, param='e', indranges=indranges)
+    invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
+
 
 if __name__ == '__main__':
     N = 10000
     Nsim = 500
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
-    Nbatch_list = [1, 5, 10, 25]
+    Nbatch_list = [1, 10]
     for Nbatch in Nbatch_list:
         for accn in multipliers:
             for scenarion in ['spline']:
@@ -80,4 +85,3 @@ if __name__ == '__main__':
                     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
                     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
 
-#     toolik_simulation('spline_plot', Nsim=50, replicates=5, Nbatch=4)
