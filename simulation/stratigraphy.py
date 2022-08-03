@@ -33,10 +33,10 @@ class Stratigraphy():
             self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
             constants=None):
         pass
-    
+
     def _update_rs(self, rs):
         self.rs = rs
-        
+
     @property
     def Nbatch(self):
         return 0
@@ -242,16 +242,18 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
         coeffcorr = self.e_params['coeff_corr']
         coeff = self.rs.normal(size=(self.N, self.Nb))
+        varfac = np.ones(self.Nb)
         for jcoeff in range(1, self.Nb):
             coeff[:, jcoeff] += coeffcorr * coeff[:, jcoeff - 1]
-        coeff *= (1 - coeffcorr ** 2) ** (0.5)  # make asymptotic variance 1
+            varfac[jcoeff] = ((coeffcorr ** 2) * varfac[jcoeff - 1] + 1)
+        coeff *= varfac ** (-0.5)
         coeff = coeffmean + coeff * coeffstd
         basis = self._spline_basis()
         elogit = np.einsum('ij, kj', coeff, basis)
         e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
         e[:, 0] = e[:, 1]
         return e
-    
+
 class StefanStratigraphyConstantE(StefanStratigraphy):
     def _draw_e(self):
         ehigh, elow = self.e_params['low'], self.e_params['high']
@@ -265,21 +267,20 @@ class StefanStratigraphyPrescribedSmoothingSpline(StefanStratigraphySmoothingSpl
     def draw_stratigraphy(self, verbose=True):
         super().draw_stratigraphy(verbose=verbose)
         super()._override_stratigraphy()
-        
+
 class StefanStratigraphyPrescribedConstantE(StefanStratigraphyConstantE):
     def draw_stratigraphy(self, verbose=True):
         super().draw_stratigraphy(verbose=verbose)
         super()._override_stratigraphy()
 
-        
-
 if __name__ == '__main__':
-    strat = StefanStratigraphySmoothingSpline()
+    strat = StefanStratigraphySmoothingSpline(seed=2,N=100000)
     print(strat._cpoints())
 #     print(np.sum(strat._spline_basis(), axis=1))
     e = strat._draw_e()
     import matplotlib.pyplot as plt
     ygrid = strat._ygrid
     plt.plot(ygrid, e[0:50, :].T, alpha=0.5)
-    plt.show()
+    print(np.std(e[:, 3]), np.std(e[:, 500]))
+#     plt.show()
 
