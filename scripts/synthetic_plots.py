@@ -162,18 +162,29 @@ def plot_metrics(ymax=0.8, suffix=''):
     for sim in simnames:
         simname = sim + suffix
         metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
+        metrics_p = load_object(
+            os.path.join(paths['simulation'], simname, 'metrics_e_prior.p'))
+#         axs[0].plot(np.nanmean(metrics_p['MAD'], axis=0), metrics['ygrid'])
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
+        
+        sharpness = np.nanmean(np.sqrt(metrics['variance']), axis=0)
+        sharpness = np.nanmean(
+            metrics['quantile'][..., 1] - metrics['quantile'][..., 0], axis=0) / 2
+        sharpness_p = np.nanmean(
+            metrics_p['quantile'][..., 1] - metrics_p['quantile'][..., 0], axis=0) / 2
+        axs[1].plot(sharpness_p, metrics['ygrid'])
+        
         axs[1].plot(
-            np.nanmean(np.sqrt(metrics['variance']), axis=0), metrics['ygrid'],
+            sharpness, metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
         axs[2].plot(
             np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
 
     axs[0].set_xlim(0.00, 0.20)
-    axs[1].set_xlim(0.00, 0.25)
+    axs[1].set_xlim(0.00, 0.30)#0.25
     axs[2].set_xlim(0.55, 0.95)
     axs[2].set_xticks((0.6, 0.8))
     axs[0].set_ylim(ymax, 0)
@@ -267,9 +278,9 @@ def plot_metrics_indrange(suffix=''):
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-    plot_examples(show_quantile=True)
+#     plot_examples(show_quantile=True)
 #     for Nbatch in (1, 5, 10, 25):
 #         plot_metrics(suffix=f'_{Nbatch}')
 #         plot_metrics_indrange(suffix=f'_{Nbatch}')
-#     Nbatch = 10
-#     plot_metrics(suffix=f'_{Nbatch}')
+    Nbatch = 1
+    plot_metrics(suffix=f'_{Nbatch}')
