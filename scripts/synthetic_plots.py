@@ -136,8 +136,8 @@ def plot_examples(show_quantile=False):
     handles = [
         mlines.Line2D([], [], color=col, lw=1) for col in (cols['true'], cols['est'])]
     axs[0, 0].legend(
-        handles, ('truth', 'estimate'), loc=3, frameon=False, ncol=1, 
-        borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6, 
+        handles, ('truth', 'estimate'), loc=3, frameon=False, ncol=1,
+        borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6,
         labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
 
     plt.savefig(os.path.join(paths['figures'], 'synthetic_examples.pdf'))
@@ -153,46 +153,53 @@ def plot_metrics(ymax=0.8, suffix=''):
     simnames = ('spline_highacc', 'spline_lowacc', 'spline_stdacc')
     colscen = {
         'spline_highacc':colslist[1], 'spline_lowacc':colslist[2],
-        'spline_stdacc':colslist[0]}
-    alphascen = {'spline_highacc':0.5, 'spline_lowacc':0.5, 'spline_stdacc':0.8}
-    lwscen = {'spline_highacc':0.6, 'spline_lowacc':0.6, 'spline_stdacc':1.2}
-    labels = {'spline_highacc':'high', 'spline_lowacc':'low', 'spline_stdacc':'base'}
+        'spline_stdacc':colslist[0], 'prior': colslist[3]}
+    alphascen = {
+        'spline_highacc':0.8, 'spline_lowacc':0.8, 'spline_stdacc':1.0, 'prior': 0.6}
+    lwscen = {
+        'spline_highacc':0.6, 'spline_lowacc':0.6, 'spline_stdacc':1.2, 'prior': 0.3}
+    labels = {
+        'spline_highacc':'high', 'spline_lowacc':'low', 'spline_stdacc':'base'}
 
-    axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
+    axs[2].axvline(80, lw=0.5, c='#eeeeee')
     for sim in simnames:
         simname = sim + suffix
         metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
         metrics_p = load_object(
             os.path.join(paths['simulation'], simname, 'metrics_e_prior.p'))
-#         axs[0].plot(np.nanmean(metrics_p['MAD'], axis=0), metrics['ygrid'])
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
-        
         sharpness = np.nanmean(np.sqrt(metrics['variance']), axis=0)
         sharpness = np.nanmean(
             metrics['quantile'][..., 1] - metrics['quantile'][..., 0], axis=0) / 2
         sharpness_p = np.nanmean(
             metrics_p['quantile'][..., 1] - metrics_p['quantile'][..., 0], axis=0) / 2
-        axs[1].plot(sharpness_p, metrics['ygrid'])
-        
         axs[1].plot(
             sharpness, metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
         axs[2].plot(
-            np.nanmean(metrics['coverage'][..., 1], axis=0), metrics['ygrid'],
+            np.nanmean(metrics['coverage'][..., 1], axis=0) * 100, metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
 
+    axs[0].plot(
+        np.nanmean(metrics_p['MAD'], axis=0), metrics['ygrid'], lw=lwscen['prior'], 
+        c=colscen['prior'], alpha=alphascen['prior'])
+    axs[1].plot(sharpness_p, metrics['ygrid'], lw=lwscen['prior'], 
+        c=colscen['prior'], alpha=alphascen['prior'])
+    axs[0].text(
+        1.03, 0.29, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
+        transform=axs[0].transAxes, va='center', ha='right')
     axs[0].set_xlim(0.00, 0.20)
-    axs[1].set_xlim(0.00, 0.30)#0.25
-    axs[2].set_xlim(0.55, 0.95)
-    axs[2].set_xticks((0.6, 0.8))
+    axs[1].set_xlim(0.00, 0.31)  # 0.25
+    axs[2].set_xlim(55, 95)
+    axs[2].set_xticks((60, 80))
     axs[0].set_ylim(ymax, 0)
     axs[0].text(
         -0.4, 0.5, 'depth [m]', transform=axs[0].transAxes, va='center',
         ha='right', rotation=90)
 
-    xlabels = ['accuracy MAD [-]', 'sharpness $\\sigma$ [-]', 'coverage [\%]']
+    xlabels = ['error MAD [-]', 'uncertainty [-]', 'coverage [\%]']
     for jax, ax in enumerate(axs):
         ax.spines['right'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
@@ -282,5 +289,5 @@ if __name__ == '__main__':
 #     for Nbatch in (1, 5, 10, 25):
 #         plot_metrics(suffix=f'_{Nbatch}')
 #         plot_metrics_indrange(suffix=f'_{Nbatch}')
-    Nbatch = 1
+    Nbatch = 10
     plot_metrics(suffix=f'_{Nbatch}')
