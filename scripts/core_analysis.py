@@ -22,14 +22,14 @@ def extract_core(df):
             drange = (entry['Start'], entry['End'])
             facies = entry['Facies'].lower()
             if facies == 'ice':
-                e = rho_ice / rho_water
+                e = 1.0
             elif facies == 'missing':
                 e = None
             else:
                 V_frozen = entry['Volume'] * 1e-6  # to m3
                 m_e = entry['Excess water wt'] * 1e-3  # kg
                 V_e = m_e / rho_water
-                e = V_e / V_frozen
+                e = (rho_water / rho_ice) * V_e / V_frozen
             data.append(ESeg(drange, e))
             row = row + 1
         except:
@@ -93,7 +93,6 @@ def plot_inset(fnout):
         central_longitude=-149, central_latitude=69)
     ccrspc = ccrs.PlateCarree()
     fig = plt.figure(figsize=(1, 0.8), frameon=True, facecolor='#ffffff')
-#     ax = fig.add_subplot(1, 1, 1, projection=ccrsproj)
     ax = fig.add_axes((0.01, 0.01, 0.98, 0.98), projection=ccrsproj)
     ax.set_extent([-168, -130, 55, 71], crs=ccrspc)
 
@@ -113,8 +112,8 @@ if __name__ == '__main__':
     fns = {
         'IC': 'FSA_Dalton_IC_2022_20220826.xlsx', 'HV': 'FSA_Dalton_HV_2022_20220826.xlsx'}
     fns_abs = {site: os.path.join(paths['cores'], fns[site]) for site in fns}
-#     plot_sites(fns_abs, fnout=os.path.join(paths['figures'], 'cores.pdf'))
-    plot_inset(fnout=os.path.join(paths['figures'], 'tinymap.pdf'))
+    plot_sites(fns_abs, fnout=os.path.join(paths['figures'], 'cores.pdf'))
+#     plot_inset(fnout=os.path.join(paths['figures'], 'tinymap.pdf'))
 #     df_dict = pd.read_excel(fn, sheet_name=None)
 #     data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
 #     e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
