@@ -3,76 +3,17 @@ Created on Sep 7, 2022
 
 @author: simon
 '''
-import rasterio
 import numpy as np
 import pandas as pd
 import datetime
+import os
 
-from greg.preproc import assemble_tril
 
-from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, load_object
+from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
 
-class Geospatial():
-    def __init__(self, transform, crs, shape=None):
-        self.transform = transform
-        self.crs = crs
-        self.shape = shape
-
-    @classmethod
-    def from_file(cls, fn):
-        src = rasterio.open(fn)
-        shape = (src.height, src.width)
-        gsp = Geospatial(transform=src.transform, crs=src.crs, shape=shape)
-        del src
-        return gsp
-
-    def rowcol(self, xy):
-        # xy: lonlat for WGS84
-        r, c = rasterio.transform.rowcol(self.transform, xy[0, :], xy[1, :])
-        return np.stack((r, c), axis=0)
-
-    def __eq__(self, obj):
-        if not isinstance(obj, Geospatial):
-            return False
-        else:
-            eq_transform = (self.transform == obj.transform)
-            eq_shape = (self.shape == obj.shape)
-            eq_crs = (self.crs == obj.crs)
-            return eq_transform and eq_shape and eq_crs
-
-def read_geotiff(fntif):
-    src = rasterio.open(fntif)
-    arr = src.read()
-    del src
-    return arr
-
-def read_K(fntif):
-    K_vec = read_geotiff(fntif)
-    geospatial = Geospatial.from_file(fntif)
-    K = np.moveaxis(assemble_tril(np.moveaxis(K_vec, 0, -1)), (0, 1), (-2, -1))
-    return K, geospatial
-
-def read_referenced_motion(fnunw, xy=None, wavelength=0.055, flip_sign=True):
-    unw = read_geotiff(fnunw)
-    unw *= wavelength / (4 * np.pi)
-    if xy.shape[1] > 1:
-        raise NotImplementedError('Only one reference point')
-    geospatial = Geospatial.from_file(fnunw)
-    rc = geospatial.rowcol(xy)
-    unw_ref = unw[:, rc[0, 0], rc[1, 0]]
-    unw -= unw_ref[:, np.newaxis, np.newaxis]
-    if flip_sign: unw *= -1
-    return unw, geospatial
-
-def add_atmospheric(K, var_atmo, wavelength=0.055, to_length=True):
-    if to_length:
-        K *= (wavelength / (4 * np.pi)) ** 2
-    K_eye = np.eye(K.shape[0])[(Ellipsis,) + (None,) * (len(K.shape) - 2)]
-    K += var_atmo * (np.ones_like(K) + K_eye)
-    return K
 
 def read_merra_subset(fn, field='T2MMEAN[0][0]'):
     with open(fn, 'r') as f:
@@ -119,52 +60,54 @@ def kivalina_forcing(folder_forcing, year=2019):
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-if __name__ == '__main__':
-    import os
-    year = 2019
-    path0 = f'/home/simon/Work/gie/processed/kivalina/{year}/hadamard'
+def process_kivalina(year=2019, rmethod='hadamard'):
+    path0 = f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}'
     folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    pathout = f'/10TBstorage/Work/gie/processed/kivalina/{year}/{rmethod}'
     geom = {'ia': 39.29 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (3e-3) ** 2
     xy_ref = np.array([-164.73101, 67.85766])[:, np.newaxis]
-    xy_point = np.array([-164.732488, 67.850668])[:, np.newaxis]
-
+    N = 10000
+    Nbatch = 10
+    
+    from analysis import (
+        read_K, add_atmospheric, read_referenced_motion, InversionProcessor, 
+        InversionResults)
+    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
+    fnK = os.path.join(path0, 'K_vec.geo.tif')
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
 
-    rc = geospatial.rowcol(xy_point)
-
     dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year)
 
-    N = 10000
-    Nbatch = 1
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N), Nbatch=Nbatch)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
 
-    from inference import lw_mvnormal, psislw, expectation, quantile, _normalize
-    _K = K[..., rc[0, 0], rc[1, 0]]
-    _s_obs = s_obs[..., rc[0, 0], rc[1, 0]]
+#     _K = K[..., rc[0, 0], rc[1, 0]]
+#     _s_obs = s_obs[..., rc[0, 0], rc[1, 0]]
+#     K = K[..., 50:70, 100:105]
+#     s_obs = s_obs[..., 50:70, 100:105]
+    ip = InversionProcessor(predens)
+    ir = ip.results(ind_scenes, s_obs, K, pathout=pathout, n_jobs=1, overwrite=True)
+    ir.save(os.path.join(pathout, 'ir.p'))
+    ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
+    ir.export_expectation(pathout)
+    expecs = [
+        ('e', 'mean'), ('e', 'var'), ('e', 'quantile', {'quantiles': (0.1, 0.9)}),
+        ('yf', 'mean'), ('s_los', 'mean'), 
+        ('frac_thawed', None, {'ind_scene': ind_scenes[-1]})]
+    for expec in expecs:
+        kwargs = expec[2] if len(expec) == 3 else {}
+        ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
-    rng = np.random.default_rng(seed=1)
-    s_pred = predens.extract_predictions(ind_scenes, C_obs=_K, rng=rng)
-    lw = lw_mvnormal(_s_obs[np.newaxis, :], _K[np.newaxis, :], s_pred)
-    lw_ps, _ = psislw(lw)
-    lw_ = _normalize(lw_ps)
-    e_mean = expectation(predens.results['e'], lw_, normalize=False)
-    import matplotlib.pyplot as plt
-    plt.plot(e_mean[0, ...], predens.ygrid)
-    print(_s_obs)
-    plt.show()
-#     print(los[:, rc[0, 0], rc[1, 0]])
-#     print(K.shape, los.shape)
+if __name__ == '__main__':
+    process_kivalina()
 
 '''
     from stackpro import (

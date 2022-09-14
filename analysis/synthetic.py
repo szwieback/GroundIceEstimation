@@ -248,6 +248,8 @@ class InversionSimulator():
                 except:
                     pass
 
+
+
 class SimInvEnsemble():
 
     def __init__(self, invsim, lw, simobs=None):
@@ -293,7 +295,7 @@ class SimInvEnsemble():
         jsim_slice = np.s_[:] if jsim is None else np.s_[jsim]
         lw_ = self.lw[(repl_slice, jsim_slice, Ellipsis)]
         if param is not None and p is None:
-            p = self.invsim.predens.results[param]
+            p = self.predictions(param)
         postquant = quant(
             p, lw_, quantiles, method=method, steps=steps,
             normalize=True, smooth=smooth)
@@ -309,7 +311,7 @@ class SimInvEnsemble():
             return self.simobs[replicate, ...]
 
     def frac_thawed(self, jsim=0, replicate=0):
-        yf = self.invsim.predens.results['yf'][..., self.invsim.ind_scenes[-1]]
+        yf = self.predictions('yf')[..., self.ind_scenes[-1]]
         from inference.isi import sumlogs
         lw_ = self.lw[replicate, jsim, ...]
         lw_ -= sumlogs(lw_)[np.newaxis]
@@ -320,7 +322,7 @@ class SimInvEnsemble():
 
     def predicted_mean_period(self, indranges, param='e'):
         p = self.predictions(param=param)
-        yf = self.invsim.predens.results['yf']
+        yf = self.predictions('yf')
         p_mean = self._mean_period(p, indranges, yf)
         return p_mean
 
@@ -340,7 +342,7 @@ class SimInvEnsemble():
 
     def prescribed_mean_period(self, indranges, param='e'):
         ref = self.prescribed(param)
-        yf = self.invsim.predens_sim.results['yf']
+        yf = self.predictions('yf')
         ref_mean = self._mean_period(ref, indranges, yf)
         return ref_mean
 
@@ -355,6 +357,10 @@ class SimInvEnsemble():
     @property
     def ygrid(self):
         return np.arange(0, self.depth, step=self.dy)
+
+    @property
+    def ind_scenes(self):
+        return self.invsim.ind_scenes
 
     def mean(self, param='e', p=None, replicate=None):
         return self.moment(param=param, p=p, replicate=replicate)
@@ -392,4 +398,3 @@ class SimInvEnsemble():
                 metric[0], param=param, metric_args=metric[1:], indranges=indranges)
             results[metric[0]] = (mr, metric[1:])
         save_object(results, fnout)
-

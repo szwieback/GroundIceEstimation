@@ -99,8 +99,11 @@ class PredictionEnsemble():
         if C_obs is not None:
             if rng is None:
                 rng = np.random.default_rng(seed=1)
-            assert C_obs.shape[0] == s.shape[1]
-            obs_noise = rng.multivariate_normal(
-                np.zeros(s.shape[1]), C_obs, size=(s.shape[0],))
-            s += obs_noise
+            try:
+                assert C_obs.shape[0] == s.shape[1]
+                obs_noise = rng.multivariate_normal(
+                    np.zeros(s.shape[1]), C_obs, size=(s.shape[0],))
+                s += obs_noise
+            except:
+                s += np.nan
         return s
