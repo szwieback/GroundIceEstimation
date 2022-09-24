@@ -289,5 +289,5 @@ if __name__ == '__main__':
 #     for Nbatch in (1, 5, 10, 25):
 #         plot_metrics(suffix=f'_{Nbatch}')
 #         plot_metrics_indrange(suffix=f'_{Nbatch}')
-    Nbatch = 10
+    Nbatch = 1
     plot_metrics(suffix=f'_{Nbatch}')

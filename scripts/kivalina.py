@@ -8,12 +8,10 @@ import pandas as pd
 import datetime
 import os
 
-
 from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
-
 
 def read_merra_subset(fn, field='T2MMEAN[0][0]'):
     with open(fn, 'r') as f:
@@ -61,47 +59,59 @@ def kivalina_forcing(folder_forcing, year=2019):
     return dailytemp, ind_scenes
 
 def process_kivalina(year=2019, rmethod='hadamard'):
-    path0 = f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}'
-    folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
+    path0 = f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}/geocoded'
+    folder_forcing = '/10TBstorage/Work/gie/forcing/kivalina'
     pathout = f'/10TBstorage/Work/gie/processed/kivalina/{year}/{rmethod}'
+    # path0 = f'/home/simon/Work/gie/processed/kivalina/{year}/{rmethod}'
+    # folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
+    # pathout = os.path.join(path0, 'temp')
     geom = {'ia': 39.29 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (3e-3) ** 2
-    xy_ref = np.array([-164.73101, 67.85766])[:, np.newaxis]
-    N = 10000
-    Nbatch = 10
+    xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
+    # xy_ref = np.array([-164.79600, 67.8700])[:, np.newaxis]
+    # ll, ur = (-164.8660, 67.8400), (-164.7185, 67.8600)
+    ll, ur = (-164.8175, 67.8370), (-164.7185, 67.8600)
     
+    N = 10000
+    Nbatch = 1
+
     from analysis import (
-        read_K, add_atmospheric, read_referenced_motion, InversionProcessor, 
+        read_K, add_atmospheric, read_referenced_motion, InversionProcessor,
         InversionResults)
+
     fnunw = os.path.join(path0, 'unwrapped.geo.tif')
     fnK = os.path.join(path0, 'K_vec.geo.tif')
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
-
+    from analysis.ioput import save_geotiff
+    
+    save_geotiff(s_obs - s_obs[4, ...][np.newaxis, ...], geospatial, os.path.join(pathout, 's_obs_late.tif'))
+    
     dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year)
-
+    
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N), Nbatch=Nbatch)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
 
-#     _K = K[..., rc[0, 0], rc[1, 0]]
-#     _s_obs = s_obs[..., rc[0, 0], rc[1, 0]]
-#     K = K[..., 50:70, 100:105]
-#     s_obs = s_obs[..., 50:70, 100:105]
-    ip = InversionProcessor(predens)
-    ir = ip.results(ind_scenes, s_obs, K, pathout=pathout, n_jobs=1, overwrite=True)
+    
+    data = {'s_obs': s_obs, 'K': K}
+    for dname in data.keys():
+        data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
+    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ir = ip.results(
+        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
     ir.save(os.path.join(pathout, 'ir.p'))
     ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
-    ir.export_expectation(pathout)
+    
     expecs = [
-        ('e', 'mean'), ('e', 'var'), ('e', 'quantile', {'quantiles': (0.1, 0.9)}),
-        ('yf', 'mean'), ('s_los', 'mean'), 
-        ('frac_thawed', None, {'ind_scene': ind_scenes[-1]})]
+        ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
+        ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
+        ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)

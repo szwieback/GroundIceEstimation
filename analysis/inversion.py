@@ -78,6 +78,7 @@ class InversionProcessor():
         N = s_obs_flat.shape[-1]
         assert C_obs_flat.shape[-1] == N
         Nbatch = np.int64(np.ceil(N / self.batch_size))
+        print(Nbatch)
         def _res(nbatch):
             return self._logweights_batch(
                 nbatch, ind_scenes, s_obs_flat, C_obs_flat, normalize=normalize,
@@ -93,7 +94,7 @@ class InversionProcessor():
             ind_scenes, s_obs, C_obs, n_jobs=n_jobs, normalize=normalize, pathout=pathout,
             overwrite=overwrite)
         lw = np.reshape(lw, s_obs.shape[1:] + (lw.shape[-1],))
-        return InversionResults(self.predens, lw)
+        return InversionResults(self.predens, lw, geospatial=self.geospatial)
 
     @property
     def depth(self):
@@ -145,24 +146,48 @@ class InversionResults():
         return var
 
     def quantile(
-            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection'):
+            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection',
+            n_jobs=-1):
         from inference import quantile as quant
         p = self.predictions(param=param, p=p)
-        postquant = quant(
-            p, self.lw, quantiles, method=method, steps=steps, normalize=True,
-            smooth=smooth)
+        print(p.shape, self.lw.shape)
+        def _quantile(_lw):
+            _pq = quant(
+                p, _lw, quantiles, method=method, steps=steps, normalize=True,
+                smooth=smooth)
+            return _pq
+        postquant = self._parallel(_quantile, n_jobs=n_jobs)
         return postquant
 
-    def frac_thawed(self, ind_scene):
+    def _lw_generator(self):
+        for _lw in self.lw:
+            yield _lw[np.newaxis, ...]
+
+    def _parallel(self, fun, n_jobs=-1):
+        if n_jobs in (0, 1, None):
+            return fun(self.lw)
+        else:
+            from joblib import Parallel, delayed
+            res = np.concatenate(
+                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator()),
+                axis=0)
+            return res
+
+    def _frac_thawed(self, ind_scene, _lw):
         from inference import _normalize
         yf = self.predictions('yf')[..., ind_scene]
-        w_ = np.exp(_normalize(self.lw, normalize=True))
+        w_ = np.exp(_normalize(_lw, normalize=True))
         frac_thawed = np.zeros((self.ygrid.shape[0],) + w_.shape[:-1])
         # cannot vectorize because of memory issues
         for jy in range(len(self.ygrid)):
             valid = (self.ygrid[jy] < yf)[(np.newaxis,) * len(w_[:-1].shape) + (Ellipsis,)]
             frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
-        return frac_thawed
+        return np.moveaxis(frac_thawed, 0, -1)
+        
+    def frac_thawed(self, ind_scene, n_jobs=-1):
+        def _ft(_lw):
+            return self._frac_thawed(ind_scene, _lw)
+        return self._parallel(_ft, n_jobs=n_jobs)
 
     def expectation(
             self, param='e', etype='mean', p=None, normalize=True, **kwargs):
