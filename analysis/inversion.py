@@ -9,6 +9,23 @@ from analysis import enforce_directory
 import numpy as np
 import os
 
+def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
+    if len(frac_thawed.shape) > 2:
+        ft = np.reshape(frac_thawed, (-1, frac_thawed.shape[-1]))
+        td = thaw_depth(ft, ygrid, frac=frac)
+        td = np.reshape(td, frac_thawed.shape[:-1])
+    elif len(frac_thawed.shape) == 2:
+        ind = np.argmax((frac_thawed < frac), axis=1)
+        td = np.take_along_axis(ygrid, ind, axis=0)
+    else:
+        ind = np.nonzero(frac_thawed < frac)[0][0]
+        td = ygrid[ind]
+    if return_indices:
+        return ind
+    else:
+        return td
+    # 
+
 class InversionProcessor():
     # hard-coded Gaussian PSIS
     # uses the same ensemble but different C_obs
@@ -27,7 +44,7 @@ class InversionProcessor():
         try:
             s_pred = self._simulated_observations_single(ind_scenes, _C_obs)
             lw = lw_mvnormal(
-                _s_obs[np.newaxis, :], _C_obs[np.newaxis, ...], s_pred)
+                _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
             lw_ps, _ = psislw(lw)
             lw_ps = _normalize(lw_ps, normalize=normalize)
         except:
@@ -78,7 +95,6 @@ class InversionProcessor():
         N = s_obs_flat.shape[-1]
         assert C_obs_flat.shape[-1] == N
         Nbatch = np.int64(np.ceil(N / self.batch_size))
-        print(Nbatch)
         def _res(nbatch):
             return self._logweights_batch(
                 nbatch, ind_scenes, s_obs_flat, C_obs_flat, normalize=normalize,
@@ -86,6 +102,15 @@ class InversionProcessor():
         lw = Parallel(n_jobs=n_jobs)(delayed(_res)(nbatch) for nbatch in range(Nbatch))
         lw = np.concatenate(lw, axis=0)
         return lw
+
+    def delete_weight_files(self, pathout):
+        if pathout is not None:
+            import glob
+            for f in glob.glob(self._filename(pathout, 'lw', '*')):
+                try:
+                    os.remove(f)
+                except:
+                    pass
 
     def results(
             self, ind_scenes, s_obs, C_obs, n_jobs=8, normalize=False, pathout=None,
@@ -183,7 +208,7 @@ class InversionResults():
             valid = (self.ygrid[jy] < yf)[(np.newaxis,) * len(w_[:-1].shape) + (Ellipsis,)]
             frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
         return np.moveaxis(frac_thawed, 0, -1)
-        
+
     def frac_thawed(self, ind_scene, n_jobs=-1):
         def _ft(_lw):
             return self._frac_thawed(ind_scene, _lw)
@@ -203,18 +228,18 @@ class InversionResults():
             raise NotImplementedError(f"Expectation type {etype} not recognized.")
 
     def export_expectation(
-            self, pathout, param='e', etype='mean', p=None, normalize=True, fn=None, 
+            self, pathout, param='e', etype='mean', p=None, normalize=True, fn=None,
             **kwargs):
         res = self.expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = os.path.join(pathout, fn)
         np.save(fnout, res)
-        
+
     def save(self, fnout):
         from analysis import save_object
         dictout = {'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens}
         save_object(dictout, fnout)
-        
+
     @classmethod
     def from_file(cls, fn):
         from analysis import load_object

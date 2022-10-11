@@ -18,7 +18,7 @@ def _plot_example(
         axs, sie, days=None, jsim=0, replicate=0, show_quantile=True, smooth_quantile=2,
         ymax=None, slim=None, sticks=None, show_ylabels=False):
     import matplotlib.dates as mdates
-    ygrid = sie.ygrid
+    ygrid = sie.ygrid * 100 #cm
     conv = 100.0
     e_inv = sie.moment('e', replicate=replicate)
     e_inv_std = np.sqrt(sie.variance('e', replicate=replicate))
@@ -87,13 +87,13 @@ def _plot_example(
             edgecolor='none', facecolor=cols['unc'], alpha=0.07)
     axs[1].plot(e_sim[jsim, :], ygrid, lw=1.0, c=cols['true'])
     if ymax is None: ymax = ygrid[-1]
-    ylabxpos = -0.42
+    ylabxpos = -0.31
     if show_ylabels:
         axs[0].text(
             ylabxpos, 0.5, 'subsidence [cm]', transform=axs[0].transAxes, va='center',
             ha='right', rotation=90)
         axs[1].text(
-            ylabxpos, 0.5, 'depth [m]', transform=axs[1].transAxes, va='center',
+            ylabxpos, 0.5, 'depth [cm]', transform=axs[1].transAxes, va='center',
             ha='right', rotation=90)
     else:
         axs[0].set_yticklabels([])
@@ -114,7 +114,7 @@ def plot_examples(show_quantile=False):
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     instances = (Instance(0, 2), Instance(0, 12) , Instance(0, 42))  # (0, 13) (0, 18)
-    ymax = 0.7  # 0.6
+    ymax = 70  # 0.6
     slim = (10, -1)
     sticks = [0, 3, 6, 9]
 
@@ -123,8 +123,8 @@ def plot_examples(show_quantile=False):
     _days = np.arange((d1_ - d0_).days)
     days = np.array([d0_ + datetime.timedelta(days=int(d)) for d in _days])
     fig, axs = prepare_figure(
-        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.15, 0.7),
-        top=0.98, left=0.13, right=0.98, bottom=0.14, wspace=0.30,
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.10, 0.7),
+        top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.35)
     for jinstance, instance in enumerate(instances):
         invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
@@ -170,7 +170,7 @@ def plot_metrics(ymax=0.8, suffix=''):
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
-        sharpness = np.nanmean(np.sqrt(metrics['variance']), axis=0)
+        # sharpness = np.nanmean(np.sqrt(metrics['variance']), axis=0)
         sharpness = np.nanmean(
             metrics['quantile'][..., 1] - metrics['quantile'][..., 0], axis=0) / 2
         sharpness_p = np.nanmean(
@@ -196,10 +196,10 @@ def plot_metrics(ymax=0.8, suffix=''):
     axs[2].set_xticks((60, 80))
     axs[0].set_ylim(ymax, 0)
     axs[0].text(
-        -0.4, 0.5, 'depth [m]', transform=axs[0].transAxes, va='center',
+        -0.4, 0.5, 'depth [cm]', transform=axs[0].transAxes, va='center',
         ha='right', rotation=90)
 
-    xlabels = ['error MAD [-]', 'uncertainty [-]', 'coverage [\%]']
+    xlabels = ['MAD [-]', 'uncertainty [-]', 'coverage [\%]']
     for jax, ax in enumerate(axs):
         ax.spines['right'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
@@ -285,9 +285,9 @@ def plot_metrics_indrange(suffix=''):
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-#     plot_examples(show_quantile=True)
-#     for Nbatch in (1, 5, 10, 25):
-#         plot_metrics(suffix=f'_{Nbatch}')
-#         plot_metrics_indrange(suffix=f'_{Nbatch}')
-    Nbatch = 1
-    plot_metrics(suffix=f'_{Nbatch}')
+    # plot_examples(show_quantile=True)
+    for Nbatch in (1, 10):
+        plot_metrics(suffix=f'_{Nbatch}')
+        # plot_metrics_indrange(suffix=f'_{Nbatch}')
+    # Nbatch = 1
+    # plot_metrics(suffix=f'_{Nbatch}')

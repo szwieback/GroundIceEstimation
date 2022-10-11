@@ -13,7 +13,7 @@ from scripts.pathnames import paths
 from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, load_object
 from simulation import (StefanStratigraphyPrescribedConstantE)
 
-def toolik_sensitivity():
+def toolik_sensitivity(fnout):
     from forcing import read_toolik_forcing
 
     fnforcing = os.path.join(paths['forcing'], 'toolik2019', '1-hour_data.csv')
@@ -59,6 +59,7 @@ def toolik_sensitivity():
     import matplotlib.dates as mdates
     import datetime
     from scripts.plotting import prepare_figure, colslist
+    from string import ascii_lowercase
     ylims = [(0.05, 0.00),(0.8, 0.0),(0.015, -0.015)]
     yticks = [(0.00, 0.02, 0.04), (0.0, 0.3, 0.6), (-0.01, 0.00, 0.01)]
     yticklabels = [(0, 2, 4), (0, 30, 60), (-1, 0, 1)]
@@ -77,6 +78,9 @@ def toolik_sensitivity():
         ax.text(
             -0.13, 0.50, ylabels[jax], transform=ax.transAxes, ha='right', va='center', 
             rotation=90)
+        ax.text(
+            0.02, 0.07, f'{ascii_lowercase[jax]})', ha='left', va='baseline', 
+            transform=ax.transAxes)
     
     for nsim in range(len(e_sim)):
         for jdist, ind in enumerate(ind_dist):
@@ -100,9 +104,11 @@ def toolik_sensitivity():
     axs[1].text(0.60, 0.02, 'baseline', transform=axs[1].transAxes)
     axs[2].text(0.99, 0.11, 'shallow', transform=axs[2].transAxes, ha='right')
     axs[2].text(0.99, 0.89, 'deep', transform=axs[2].transAxes, ha='right')
-
-    plt.show()
+    plt.savefig(fnout)
+    
 
 if __name__ == '__main__':
-    toolik_sensitivity()
+    from scripts.pathnames import paths
+    import os
+    toolik_sensitivity(os.path.join(paths['figures'], 'sensitivity.pdf'))
 

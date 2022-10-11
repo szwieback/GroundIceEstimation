@@ -67,9 +67,9 @@ def plot_sites(fns_abs, fnout=None):
         e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
         e_mean = np.nanmean(e_grid, axis=0)
         axs[jsite].fill_betweenx(
-            y_grid, e_q_mean[0, :], e_q_mean[1, :], edgecolor='none', facecolor=colslist[2], 
+            y_grid, e_q_mean[0, :], e_q_mean[1, :], edgecolor='none', facecolor=colslist[1], 
             alpha=0.20)
-        axs[jsite].plot(e_grid.T, y_grid, c=colslist[1], alpha=0.16, lw=0.5)
+        axs[jsite].plot(e_grid.T, y_grid, c=colslist[2], alpha=0.16, lw=0.5)
         axs[jsite].plot(e_mean, y_grid, c=colslist[0], lw=1.2)
         axs[jsite].text(
             0.50, 0.98, sitenames[site], ha='center', va='baseline', 

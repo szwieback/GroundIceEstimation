@@ -32,6 +32,10 @@ class Geospatial():
         # xy: lonlat for WGS84
         r, c = rasterio.transform.rowcol(self.transform, xy[0,:], xy[1,:])
         return np.stack((r, c), axis=0)
+    
+    def xy(self, rc):
+        r, c = rc[0, :], rc[1, :]
+        return np.array(rasterio.transform.AffineTransformer(self.transform).xy(r, c))
 
     def __eq__(self, obj):
         if not isinstance(obj, Geospatial):
@@ -88,6 +92,25 @@ class Geospatial():
         arr, geospatial = read_geotiff_geospatial(fn)
         return self.warp(arr, geospatial, method=method, dtype=dtype, upscale=upscale)
 
+    def distance(self, xy):
+        import geopandas as gpd
+        from shapely.geometry import Point, LineString
+        from pyproj import Geod
+        g = Geod(ellps='WGS84')
+        s = gpd.GeoSeries(
+            [Point(xy[0, :]), Point(xy[1, :])], crs=self.crs)
+        s_4326 = s.to_crs(epsg='4326')
+        ls = LineString([s_4326[0], s_4326[1]])
+        return g.geometry_length(ls)
+
+    @property
+    def extent(self):
+        xys = [self.xy(np.array([[self.shape[0], 0], self.shape]).T).T,
+               self.xy(np.array([[0, self.shape[1]], self.shape]).T).T]
+        return [self.distance(xy) for xy in xys]
+        
+        
+
 def read_geotiff(fntif):
     src = rasterio.open(fntif)
     arr = src.read()
@@ -117,13 +140,24 @@ def assemble_tril(G_vec):
     G[(slice(None),) * (len(G_vec.shape) - 1) + (ind[1], ind[0])] += G_vec.conj()
     return G
 
-def read_referenced_motion(fnunw, xy=None, wavelength=0.055, flip_sign=True):
+def read_referenced_motion(
+        fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)
-    unw *= wavelength / (4 * np.pi)
     if xy.shape[1] > 1:
         raise NotImplementedError('Only one reference point')
     geospatial = Geospatial.from_file(fnunw)
+    if len(fns_unw_offset) >= 1:
+        import geopandas as gpd
+        from rasterio import features
+        for scene, fn in fns_unw_offset:
+            offset = gpd.read_file(fn).to_crs(geospatial.crs)
+            geom = [(shps, offs) for shps, offs in zip(offset.geometry, offset['offset'])]
+            rasterized = features.rasterize(
+                geom, out_shape=geospatial.shape, fill=0, out=None, 
+                transform=geospatial.transform, default_value=0, dtype=np.int64)
+            unw[scene:, ...] += rasterized * 2 * np.pi
     rc = geospatial.rowcol(xy)
+    unw *= wavelength / (4 * np.pi)
     unw_ref = unw[:, rc[0, 0], rc[1, 0]]
     unw -= unw_ref[:, np.newaxis, np.newaxis]
     if flip_sign: unw *= -1
@@ -157,3 +191,9 @@ def load_object(filename):
         obj = pickle.loads(zlib.decompress(f.read()))
     return obj
 
+if __name__ == '__main__':
+    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/inversion/'
+    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+    
+    print(geospatial.extent)
+    

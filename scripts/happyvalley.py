@@ -1,8 +1,10 @@
 '''
-Created on Sep 7, 2022
+Created on Oct 6, 2022
 
 @author: simon
 '''
+
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -12,7 +14,7 @@ from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
-from forcing import load_forcing_merra_subset, parse_dates
+from forcing import read_daily_noaa_forcing, parse_dates
 
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
@@ -22,35 +24,34 @@ params_distribution = {
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
     'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
 
-def kivalina_forcing(folder_forcing, year=2019):
-    df = load_forcing_merra_subset(folder_forcing)
-    d0 = {2019: '2019-05-10', 2017: '2017-05-10', 2018: '2018-05-10'}[year]
-    d1 = {2019: '2019-09-15', 2017: '2017-09-20', 2018: '2018-09-15'}[year]
+def happyvalley_forcing(fnforcing, year=2022):
+    df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
+    d0 = {2022: '2022-06-06', 2019: '2019-05-18'}[year]
+    d1 = {2022: '2022-09-16', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-    datesstr = {2019:
-             ('20190606', '20190618', '20190630', '20190712', '20190724', '20190805',
-              '20190817', '20190829', '20190910')}
+    datesstr = {2022: ('20220610', '20220622', '20220704', '20220716', '20220728',
+                       '20220809', '20220821', '20220902', '20220914'),
+                2019: ('20190602', '20190614', '20190626', '20190708', '20190720',
+                       '20190801', '20190813', '20190825', '20190906')}
     datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-def process_kivalina(year=2019, rmethod='hadamard'):
-    path0 = f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}/geocoded'
-    folder_forcing = '/10TBstorage/Work/gie/forcing/kivalina'
-    pathout = f'/10TBstorage/Work/gie/processed/kivalina/{year}/{rmethod}'
-    # path0 = f'/home/simon/Work/gie/processed/kivalina/{year}/{rmethod}'
-    # folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
-    # pathout = os.path.join(path0, 'temp')
-    geom = {'ia': 39.29 / 180 * np.pi}
+def process_happyvalley(year=2019, rmethod='hadamard'):
+    path0 = f'/10TBstorage/Work/stacks/Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
+    fnforcing = '/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv'
+    pathout = f'/10TBstorage/Work/gie/processed/happyvalley/{year}/{rmethod}'
+
+    fns_unw_offset = {2019: [(7, os.path.join('/10TBstorage/Work/stacks/Dalton_131_363/2019_unw_offset.gpkg'))],
+                      2022: []}[year]
+
+    geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
-    xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
-    # xy_ref = np.array([-164.79600, 67.8700])[:, np.newaxis]
-    # ll, ur = (-164.8660, 67.8400), (-164.7185, 67.8600)
-    ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
-    
+    xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
+    ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
     N = 10000
     Nbatch = 1
 
@@ -60,16 +61,19 @@ def process_kivalina(year=2019, rmethod='hadamard'):
 
     fnunw = os.path.join(path0, 'unwrapped.geo.tif')
     fnK = os.path.join(path0, 'K_vec.geo.tif')
+    
     K, geospatial_K = read_K(fnK)
+    s_obs, geospatial = read_referenced_motion(
+        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
+
+    if year in (2019, 2022): # remove first acq because still a lot of snow
+        K = K[1:, 1:, ...]
+        s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric(K, var_atmo)
-    s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
-    from analysis.ioput import save_geotiff
-    
-    # save_geotiff(s_obs - s_obs[4, ...][np.newaxis, ...], geospatial, os.path.join(pathout, 's_obs_late.tif'))
-    
-    dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year)
-    
+
+    dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
+
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
@@ -85,7 +89,7 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     ir.save(os.path.join(pathout, 'ir.p'))
     ip.delete_weight_files(pathout)
     ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
-    
+
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
         ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
@@ -95,5 +99,5 @@ def process_kivalina(year=2019, rmethod='hadamard'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    process_kivalina()
+    process_happyvalley(year=2019)
 

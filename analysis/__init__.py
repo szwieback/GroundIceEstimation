@@ -4,4 +4,4 @@ from analysis.ioput import (
 from analysis.prediction import StefanPredictor, Predictor, PredictionEnsemble
 from analysis.synthetic import InversionSimulator
 from analysis.interferometry import add_atmospheric
-from analysis.inversion import InversionProcessor, InversionResults
+from analysis.inversion import InversionProcessor, InversionResults, thaw_depth

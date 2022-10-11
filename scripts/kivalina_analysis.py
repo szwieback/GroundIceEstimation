@@ -5,57 +5,10 @@ Created on Sep 19, 2022
 '''
 import os
 import numpy as np
-from analysis.ioput import Geospatial, save_geotiff, read_geotiff, save_object, load_object
-from analysis.inversion import InversionResults
+from analysis import Geospatial, save_geotiff, save_object, load_object, InversionResults
 
-class ProfileInterpolator():
-    def __init__(self, geospatial, xy_start, xy_end, steps=128):
-        self.geospatial = geospatial
-        self.xy_start = xy_start
-        self.xy_end = xy_end
-        self.steps = steps
-
-    @property
-    def _rowcol_endpoints(self):
-        return self.geospatial.rowcol(np.stack((self.xy_start, self.xy_end), axis=1))
-
-    def _interpolator(self, arr):
-        from scipy.interpolate import RegularGridInterpolator
-        rowcol_grids = self.geospatial.rowcol_grids
-        return RegularGridInterpolator(rowcol_grids, arr)
-
-    def interpolate(self, arr):
-        _ip = self._interpolator(arr)
-        rc = self._rowcol_endpoints
-        rc_steps = np.stack(
-            [np.linspace(rc[ji, 0], rc[ji, 1], num=self.steps) for ji in range(2)], axis=1)
-        return _ip(rc_steps)
-
-    @property
-    def distance(self):
-        import geopandas as gpd
-        from shapely.geometry import Point, LineString
-        from pyproj import Geod
-        g = Geod(ellps='WGS84')
-        s = gpd.GeoSeries(
-            [Point(self.xy_start), Point(self.xy_end)], crs=self.geospatial.crs)
-        s_4326 = s.to_crs(epsg='4326')
-        ls = LineString([s_4326[0], s_4326[1]])
-        return g.geometry_length(ls)
-
-    @property
-    def distance_steps(self):
-        return np.linspace(0, self.distance, num=self.steps)
-
-def _get_index(ygrid, depth):
-    import numbers
-    if isinstance(depth, numbers.Number):
-        return np.argmin(np.abs(ygrid - depth))
-    else:
-        return [_get_index(ygrid, d) for d in depth]
-
-def invalid_mask(K, ind1=0, ind2=-1, wavelength=0.055):
-    from scipy.ndimage import binary_dilation, binary_opening
+def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
+    from scipy.ndimage import binary_dilation, binary_opening, binary_closing
     from analysis import add_atmospheric
     K = add_atmospheric(K, 0.0, wavelength=wavelength)
     K_last = K[ind1, ind1, ...] + K[ind2, ind2, ...] - 2 * K[ind1, ind2, ...]
@@ -64,9 +17,10 @@ def invalid_mask(K, ind1=0, ind2=-1, wavelength=0.055):
         [[ 0, 1, 0], [ 1, 1, 1], [0, 1, 0]])
     s2 = np.array(
         [[0, 0, 1, 0, 0], [0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [0, 0, 1, 0, 0]])
-    
-    invalid = binary_opening(
-        binary_dilation(K_last_crop > thresh ** 2, s1), s2, border_value=1)
+
+    # invalid = binary_opening(
+    #     binary_dilation(K_last_crop > thresh ** 2, s1), s2, border_value=1)
+    invalid = binary_dilation(binary_opening(binary_closing(K_last_crop > thresh ** 2, s1), s1), s1)
     return invalid
 
 def read_core_data(fngpkg, geospatial, layer=None):
@@ -74,8 +28,8 @@ def read_core_data(fngpkg, geospatial, layer=None):
     import geopandas as gpd
     if layer is None: layer = fiona.listlayers(fngpkg)[0]
     gdf = gpd.read_file(fngpkg, layer=layer).to_crs(geospatial.crs)
-    rcs=[]
-    for index, row in gdf.iterrows(): # ugly
+    rcs = []
+    for index, row in gdf.iterrows():  # ugly
         rc = tuple(geospatial.rowcol(np.array(row.geometry.xy))[:, 0])
         rcs.append(rc)
     gdf['rowcol'] = rcs
@@ -85,40 +39,18 @@ def resample_dem(geospatial, fnraw, fnresampled, upscale=None, overwrite=False):
     from analysis import read_geotiff
     if os.path.exists(fnresampled) and not overwrite:
         return read_geotiff(fnresampled)
-    else: 
+    else:
         dem, _gs = geospatial.warp_from_file(fnraw, upscale=upscale)
         save_geotiff(dem, _gs, fnresampled)
         return dem
 
-def contrast(im, percentiles=(2, 98)):
-    for jchannel in range(im.shape[-1]):
-        v0, v1 = np.nanpercentile(im[..., jchannel], percentiles)
-        im[..., jchannel] = (im[..., jchannel] - v0)/(v1-v0)
-    return im
-
-def plot_profile(
-        ax, im, geospatial, xy_start, xy_end, steps=512, vlim=None, cmap=None, ymax=None,
-        ygrid=None, yticks=None, xticks=None):
-    rc = geospatial.rowcol(np.stack((xy_start, xy_end), axis=1))
-    pi = ProfileInterpolator(geospatial, xy_start, xy_end, steps=steps)
-    profile = pi.interpolate(im)
-    # profile_frac = pi.interpolate(frac_thawed)
-    if ymax is not None:
-        profile = profile[:,:_get_index(ygrid, ymax)]
-    vmin, vmax = (0.0, 1.0) if vlim is None else (vlim[0], vlim[1])
-    ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, alpha=1)  # profile_frac.T)
-    if yticks is not None:
-        ax.set_yticks(_get_index(ygrid, yticks))
-        ax.set_yticklabels(yticks)
-    if xticks is not None:
-        ax.set_xticks(_get_index(pi.distance_steps, xticks))
-        ax.set_xticklabels(xticks)
-    ax.set_xlabel('Distance [m]')
-    ax.set_ylabel('Depth [m]')
-    
-
-if __name__ == '__main__':
+def plot_kivalina(fnout=None):
     from analysis import read_K
+    import matplotlib.gridspec as gridspec
+    from scripts.plotting import (
+        initialize_matplotlib, cmap_e, colslist, _get_index, ProfileInterpolator,
+        contrast, add_arrow_line, plot_profile, add_scalebar)
+    import matplotlib.pyplot as plt
 
     pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/inversion/'
     fnK = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/K_vec.geo.tif'
@@ -128,74 +60,148 @@ if __name__ == '__main__':
     fnimres = os.path.join(pathres, 'optical.tif')
     fngpkg = '/home/simon/Work/Kivalina/geology/cores2005.gpkg'
     upscale = 16
-    wavelength, thresh = 0.055, 4e-3
-    nodata = -1
-    
-    # ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
-    # geospatial = ir.geospatial
-    # ygrid = ir.ygrid
-    # save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    ygrid = np.arange(0, 1.5, step=2e-3)
+    wavelength, thresh = 0.055, 4.8e-3
 
+    ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
+    geospatial = ir.geospatial
+    ygrid = ir.ygrid
+    save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
+    # geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+    # ygrid = np.arange(0, 1.5, step=2e-3)
 
     K, geospatial_K = read_K(fnK)
-    invalid = invalid_mask(K, ind1=4, wavelength=wavelength)
-
-    xy_start, xy_end = (-164.7450, 67.8441), (-164.7276, 67.8508)
-    # xy_start, xy_end = (-164.8153, 67.8571), (-164.7870, 67.8573)
-
+    invalid = invalid_mask(K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
+    profiles = [((-164.7440, 67.8420), (-164.7350, 67.8480)),
+                ((-164.8171, 67.8500), (-164.8095, 67.8555))]
+    plabels = [[(0.17, 'polygons'), (0.5, 'rocky bench'), (0.85, 'no polygons')],
+               [(0.24, 'inactive floodplain'), (0.87, 'polygons')]]
     dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale)
     optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale)
     e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
     frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
-    
+
     cores = read_core_data(fngpkg, geospatial)
-    
-    
-    from scripts.plotting import prepare_figure
-    import colorcet as cc
-    import matplotlib.pyplot as plt
-    cmap = cc.cm['bmy']
+
+    cmap = cmap_e
     elim = (0.0, 0.5)
-    yticks = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5)
-    fig, axs = prepare_figure(
-        nrows=2, ncols=3, figsize=(2, 0.8), left=0.02, right=0.99, sharex=False, 
-        sharey=False)
-    ys = [(0.05, 0.15), (0.20, 0.30), (0.40, 0.50)]
-    
+    xticks_im = (25, 65, 105, 145)
+    yticks_im = (10, 50, 90)
+    ys = [(0.05, 0.15), (0.20, 0.30), (0.55, 0.65)]
+    labels = [
+        'a) excess ice 5--15 cm', 'b) excess ice 20--30 cm',
+        'c) excess ice 55--65 cm', 'd) false-color image', 'e) transect T1',
+        'f) transect T2']
+
+    fig = plt.figure()
+    initialize_matplotlib()
+    fig.set_size_inches((7.08, 2.75), forward=True)
+    gs = gridspec.GridSpec(
+        2, 14, left=0.005, right=0.995, top=0.982, bottom=0.084, wspace=4.50, hspace=0.04)
+
+    axs = [[plt.subplot(gs[0, 0:4]), plt.subplot(gs[0, 4:8]), plt.subplot(gs[0, 8:12])],
+           [plt.subplot(gs[1, 0:4]), plt.subplot(gs[1, 4:9]), plt.subplot(gs[1, 9:])]]
+
     for jy, y in enumerate(ys):
         _e_mean = np.mean(
             e_mean[..., _get_index(ygrid, y[0]):_get_index(ygrid, y[1])], axis=-1)
         _e_mean[invalid] = np.nan
-        ax = axs[0, jy]
-        ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
-        ax.set_facecolor('#dddddd')
-    cols = ['w', 'k']
-    c = [cols[int(x)] for x in cores.code]
-    ax.scatter([x[1] for x in cores.rowcol], [x[0] for x in cores.rowcol], s=4, edgecolors=c, linewidths=0.5, c='none')
-    ax.set_xlim(axs[0, 0].get_xlim())
-    ax.set_ylim(axs[0, 0].get_ylim())
-    axs[1, 0].imshow(dem[0, ...], cmap=cc.cm['CET_L10'])
-    axs[1, 1].imshow(contrast(np.moveaxis(optical[0:3, ...], 0, -1)))
+        ax = axs[0][jy]
+        im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
+        ax.set_facecolor('#aaaaaa')
+        ax.set_xticks(xticks_im)
+        ax.set_yticks(yticks_im)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.grid(color='#dddddd', linewidth=0.4)
+    cols_scatter = [('#ffffff', '#cccccc'), ('#000000', '#333333')]
+    marker_size, marker_lw, marker, alpha = 3.5, 0.8, 'o', 0.35
+    c = [cols_scatter[int(x)] for x in cores.code]
+    for _xy, _c in zip(cores.rowcol, c):
+        ax.plot(
+            _xy[1], _xy[0], linestyle='none', ms=marker_size,
+            mec=_c[0], mew=marker_lw, mfc='none', marker=marker, zorder=10)
+        ax.plot(
+            _xy[1], _xy[0], linestyle='none', ms=marker_size,
+            mec='none', mew=0.0, mfc=_c[1], marker=marker, zorder=9, alpha=alpha)
+    ax.set_xlim(axs[0][0].get_xlim())
+    ax.set_ylim(axs[0][0].get_ylim())
+    optical = optical[::-1, ...][0:3]
+    ax = axs[1][0]
+    ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
+    ax.contour(dem[0, ...], colors=['#333333'], linewidths=0.4, alpha=0.4, levels=10)
+    for jp, profile in enumerate(profiles):
+        pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
+        rc = pi._rowcol_endpoints
+        label = f'T{jp + 1}'
+        add_arrow_line(
+            ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(95, -15))
+    ax.set_xticks(np.array(xticks_im) * upscale)
+    ax.set_yticks(np.array(yticks_im) * upscale)
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.grid(color='#aaaaaa', linewidth=0.4)
+    add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km')
+
+    xticks = [0, 200, 400, 600]
+    yticks = (0.0, 0.2, 0.4, 0.6)
+
+    ymax = 0.7  # 0.5
     plot_profile(
-        axs[1, 2], e_mean, geospatial, xy_start, xy_end, steps=512, ymax=0.5, vlim=elim, 
-        ygrid=ygrid, cmap=cmap, yticks=yticks)
-    plt.show()
+        axs[1][1], e_mean, geospatial, profiles[0], steps=512, ymax=ymax, vlim=elim,
+        ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[0])
+    plot_profile(
+        axs[1][2], e_mean, geospatial, profiles[1], steps=512, ymax=ymax, vlim=elim,
+        ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
     
-    
-    e_mean_ = np.mean(e_mean[..., _get_index(ygrid, 0.40):_get_index(ygrid, 0.50)], axis=-1) # 0.5
-    e_mean_[invalid] = nodata
+    bbox_r = axs[1][0].get_position()
+    for ax in (axs[1][1], axs[1][2]):
+        bbox_c = ax.get_position()
+        ax.set_position(
+            (bbox_c.x0, bbox_r.y0, bbox_c.x1 - bbox_c.x0, bbox_r.y1 - bbox_r.y0))
+
+    lax = axs[0][-1].inset_axes([1.10, 0.58, 0.45, 0.40])
+    lax.set_axis_off()
+    x_scatter, y_scatter = [0.2, 0.8], 0.38
+    labels_scatter = ['ice poor', 'ice rich']
+    for _x, _c in zip(x_scatter, cols_scatter):
+        lax.plot(
+            _x, y_scatter, linestyle='none', ms=marker_size, transform=lax.transAxes,
+            mec=_c[0], mew=marker_lw, mfc='none', marker=marker, zorder=10,)
+        lax.plot(
+            _x, y_scatter, linestyle='none', ms=marker_size, transform=lax.transAxes,
+            mec='none', mew=0.0, mfc=_c[1], marker=marker, zorder=9, alpha=alpha)
+    for _x, _l in zip(x_scatter, labels_scatter):
+        lax.text(_x, 0.0, _l, va='baseline', ha='center', transform=lax.transAxes)
+    lax.text(0.5, 0.9, 'upper permafrost', va='top', ha='center', transform=lax.transAxes)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size - 1, mew=0,
+        transform=lax.transAxes, mfc='#666666', marker=marker, zorder=11)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size - 1.5, mew=0,
+        transform=lax.transAxes, mfc='#ffffff', marker=marker, zorder=11)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size, mew=1.5,
+        transform=lax.transAxes, mec='#666666', mfc='none', marker=marker, zorder=8)
+    cax = axs[0][-1].inset_axes([1.10, 0.23, 0.45, 0.10])
+    cax.text(0.5, 1.5, '$e$ [-]', ha='center', va='baseline', transform=cax.transAxes)
+    plt.colorbar(im_e, cax, shrink=0.5, orientation='horizontal')
+    for ax, lab in zip([ax for axr in axs for ax in axr], labels):
+        ax.text(0.01, 1.04, lab, ha='left', va='baseline', transform=ax.transAxes)
+    if fnout is not None:
+        plt.savefig(fnout)
+    else:
+        plt.show()
+
+if __name__ == '__main__':
+    from scripts.pathnames import paths
+    fnplot = os.path.join(paths['figures'], 'kivalina.pdf')
+    plot_kivalina(fnplot)
+    # e_mean_ = np.mean(e_mean[..., _get_index(ygrid, 0.40):_get_index(ygrid, 0.50)], axis=-1)  # 0.5
+    # e_mean_[invalid] = nodata
     # print(np.nanpercentile(e_mean_, (10, 25, 50, 75, 90)))
 
-
-    vmax = 0.5
-    xticks = (0, 500, 1000)
-
-    
     # profile_frac = profile_frac[:,:_get_index(ygrid, ymax)]
-    
-    
+
     # import matplotlib.pyplot as plt
     # fig, ax = plt.subplots()
     # ax.imshow(profile.T, vmin=0.0, vmax=vmax, cmap=cmap, alpha=1)  # profile_frac.T)
@@ -208,5 +214,5 @@ if __name__ == '__main__':
     # ax.set_ylims()
     # # plt.imshow(e_mean_)
     # plt.show()
-    save_geotiff(e_mean_[np.newaxis, ...], geospatial, os.path.join(pathres, 'e_mean.tif'), nodata=nodata)
+    # save_geotiff(e_mean_[np.newaxis, ...], geospatial, os.path.join(pathres, 'e_mean.tif'), nodata=nodata)
 
