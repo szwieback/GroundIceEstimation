@@ -10,24 +10,35 @@ from scripts.kivalina_analysis import resample_dem
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
 
-def read_results(year, fnimraw=None, fndemraw=None, upscale=8):
+def path_results(year):
     pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/hadamard'
-    # ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
-    # geospatial = ir.geospatial
-    # ygrid = ir.ygrid
-    # save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    ygrid = np.arange(0, 1.5, step=2e-3)
+    return pathres
+
+def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True):
+    fngeospatial = os.path.join(pathres, 'geospatial.p')
+    fnygrid = os.path.join(pathres, 'ygrid.p')
+
+    if not os.path.exists(fngeospatial) or not os.path.exists(fnygrid) or overwrite:
+        ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
+        geospatial = ir.geospatial
+        ygrid = ir.ygrid
+        save_object(geospatial, fngeospatial)
+        save_object(ygrid, fnygrid)
+    else:
+        geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+        ygrid = load_object(fnygrid)
     res = {'ygrid': ygrid, 'geospatial': geospatial}
     res['e_mean'] = np.load(os.path.join(pathres, 'e_mean.npy'))
     res['e_quantile'] = np.load(os.path.join(pathres, 'e_quantile.npy'))
     res['frac_thawed'] = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
     if fnimraw is not None:
         fnimres = os.path.join(pathres, 'optical.tif')
-        res['optical'] = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale)
+        res['optical'] = resample_dem(
+            geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
     if fndemraw is not None:
         fndemres = os.path.join(pathres, 'dem.tif')
-        res['dem'] = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale)
+        res['dem'] = resample_dem(
+            geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     return res
 
 def site_analysis():
@@ -43,7 +54,7 @@ def site_analysis():
     # ax.set_ylim((0.55, 0))
     # plt.show()
 
-def happyvalley_map_profiles(fnout=None):
+def happyvalley_map_profiles(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     from scripts.plotting import (
@@ -62,9 +73,12 @@ def happyvalley_map_profiles(fnout=None):
 
     # profile = ((-148.8013, 69.1609), (-148.7717, 69.1609))
     profile = ((-148.7950, 69.1466), (-148.7655, 69.1466))
+    xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
 
-    res0 = read_results(years[0], fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale)
-    res1 = read_results(years[1])
+    res0 = read_results(
+        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale, 
+        overwrite=overwrite)
+    res1 = read_results(path_results(years[1]), overwrite=overwrite)
     geospatial = res0['geospatial']
     assert res1['geospatial'] == geospatial
 
@@ -99,9 +113,13 @@ def happyvalley_map_profiles(fnout=None):
             ax.grid(color='#dddddd', linewidth=0.4)
     optical = res0['optical'][::-1, ...][0:3]
     ax = axs[-1][0]
-    ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
+    ax.imshow(contrast(np.moveaxis(optical, 0, -1), percentiles=(2.0, 92.0)))
     ax.contour(
         res0['dem'][0, ...], colors=['#ffffff'], linewidths=0.4, alpha=0.4, levels=10)
+    rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
+    ax.plot(
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        mec=colslist[0], mfc=colslist[0], zorder=9)
     ax.set_xticks(np.array(xticks_im) * upscale)
     ax.set_yticks(np.array(yticks_im) * upscale)
     ax.set_xticklabels([])
@@ -151,4 +169,4 @@ def happyvalley_map_profiles(fnout=None):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'happyvalley.pdf')
-    happyvalley_map_profiles(fnout=fnplot)
+    happyvalley_map_profiles(fnout=fnplot, overwrite=False)

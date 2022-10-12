@@ -81,8 +81,8 @@ def contrast(im, percentiles=(2, 98)):
 
 def plot_profile(
         ax, im, geospatial, xy_tup, im_frac=None, steps=512, vlim=None, cmap=None,
-        c_td=None, ymax=None, ygrid=None, yticks=None, xticks=None, labels=None, 
-        x_ylabel=-0.11):
+        c_td=None, ymax=None, ygrid=None, yticks=None, xticks=None, labels=None,
+        x_ylabel=-0.11, y_xlabel=-0.27, y_plabels=0.91):
     from analysis import thaw_depth
     xy_start, xy_end = xy_tup
     pi = ProfileInterpolator(geospatial, xy_start, xy_end, steps=steps)
@@ -94,9 +94,11 @@ def plot_profile(
         alpha = 1.0
     else:
         profile_frac = pi.interpolate(im_frac)
-        alpha = 1.0 #profile_frac.T
+        alpha = 1.0  # profile_frac.T
         td = thaw_depth(profile_frac, ygrid, return_indices=True)
     ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto', alpha=alpha)
+    if ymax is not None:
+        ax.set_ylim((_get_index(ygrid, ymax), 0))
     if im_frac is not None:
         if c_td is None: c_td = '#ffffff'
         ax.plot(np.arange(pi.steps), td, c=c_td, lw=0.6, alpha=0.5)
@@ -108,8 +110,11 @@ def plot_profile(
         ax.set_xticklabels(xticks)
     if labels is not None:
         for lx, lt in labels:
-            ax.text(lx, 0.91, lt, c='w', ha='center', va='baseline', transform=ax.transAxes)
-    ax.text(0.50, -0.27, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
+            ax.text(
+                lx, y_plabels, lt, c='w', ha='center', va='baseline', 
+                transform=ax.transAxes)
+    ax.text(
+        0.50, y_xlabel, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
     ax.text(
         x_ylabel, 0.50, 'depth [cm]', ha='right', va='center', rotation=90,
         transform=ax.transAxes)
@@ -179,11 +184,10 @@ def add_arrow_line(
         ax.text(xm + dlabel[0], ym + dlabel[1], label, ha='left', va='center', color=c)
     ax.add_patch(arrow)
 
-def add_scalebar(ax, geospatial, length=500, label=None):
+def add_scalebar(ax, geospatial, length=500, y=-0.10, label=None):
     from matplotlib.lines import Line2D
     hextent = geospatial.extent[0]
     frac = length / hextent
-    y = -0.10
     dx = 0.05
     # ax.plot((1 - dx - frac, 1 - dx), (y, y), transform=ax.transAxes)
     line = Line2D(

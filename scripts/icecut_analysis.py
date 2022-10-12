@@ -5,9 +5,135 @@ Created on Oct 5, 2022
 '''
 import numpy as np
 import os
-from analysis import Geospatial, save_geotiff, load_object, save_object, InversionResults
-from scripts.kivalina_analysis import resample_dem
-year = '2019'#'2022'
+
+from scripts.happyvalley_analysis import read_results 
+
+site = np.array((-148.8317, 69.0414))[:, np.newaxis]
+
+
+def path_results(year):
+    pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
+    return pathres
+
+def icecut_map_profiles(fnout=None, overwrite=True):
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from scripts.plotting import (
+        prepare_figure, cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
+        add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
+    years = (2022, 2019)
+    fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
+    fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
+    upscale = 8
+
+    cmap = cmap_e
+    elim = (0.0, 0.5)
+    xticks_im = (25, 65, 105, 145)
+    yticks_im = (31,)
+    ys = [(0.05, 0.15), (0.20, 0.30), (0.45, 0.55)]
+
+    profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))#(-148.7465, 69.0419))
+    xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
+
+    res0 = read_results(
+        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale, 
+        overwrite=overwrite)
+    res1 = read_results(path_results(years[1]), overwrite=overwrite)
+    geospatial = res0['geospatial']
+    assert res1['geospatial'] == geospatial
+
+    # fig, axs = prepare_figure(ncols=3, nrows=3, sharex='none', sharey='none')
+    fig = plt.figure()
+    initialize_matplotlib()
+    fig.set_size_inches((7.08, 2.37), forward=True)
+    gs = gridspec.GridSpec(
+        3, 14, left=0.007, right=0.995, top=0.950, bottom=0.120, wspace=4.10, hspace=0.30)
+    axs = [[plt.subplot(gs[0, 0:4]), plt.subplot(gs[0, 4:8]), plt.subplot(gs[0, 8:12])],
+           [plt.subplot(gs[1, 0:4]), plt.subplot(gs[1, 4:8]), plt.subplot(gs[1, 8:12])],
+           [plt.subplot(gs[2, 0:4]), plt.subplot(gs[2, 4:9]), plt.subplot(gs[2, 9:])]]
+
+    labels = [
+        'a) 2022: excess ice 5--15 cm', 'b) 2022: excess ice 20--30 cm',
+        'c) 2022: excess ice 45--55 cm', 'd) 2019: excess ice 5--15 cm',
+        'e) 2019: excess ice 20--30 cm', 'f) 2019: excess ice 45--55 cm',
+        'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
+
+    for jyear, res in enumerate([res0, res1]):
+        for jy, y in enumerate(ys):
+            jy0, jy1 = _get_index(res['ygrid'], y[0]), _get_index(res['ygrid'], y[1])
+            _e_mean = np.mean(res['e_mean'][..., jy0:jy1], axis=-1)
+            # _e_mean[invalid] = np.nan
+            ax = axs[jyear][jy]
+            im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
+            ax.set_facecolor('#aaaaaa')
+            ax.set_xticks(xticks_im)
+            ax.set_yticks(yticks_im)
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.grid(color='#dddddd', linewidth=0.4)
+    optical = res0['optical'][::-1, ...][0:3]
+    ax = axs[-1][0]
+    ax.imshow(contrast(np.moveaxis(optical, 0, -1), percentiles=(2.0, 96.0)))
+    ax.contour(
+        res0['dem'][0, ...], colors=['#ffffff'], linewidths=0.4, alpha=0.7, levels=10)
+    rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
+    ax.plot(
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        mec=colslist[0], mfc=colslist[0], zorder=9)
+    ax.set_xticks(np.array(xticks_im) * upscale)
+    ax.set_yticks(np.array(yticks_im) * upscale)
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.grid(color='#666666', linewidth=0.4)
+    pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
+    rc = pi._rowcol_endpoints
+    label = f'T1'
+    add_arrow_line(
+        ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(85, 110))
+    _xy_site = geospatial.upscaled(upscale).rowcol(site)[:, 0]
+    ax.plot(
+        _xy_site[1], _xy_site[0], c=colslist[0], linestyle='none',
+        marker='o', ms=5, mfc='none')
+    ax.text(_xy_site[1] + 10, _xy_site[0] - 60, 'IC', c=colslist[0])
+    add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.2)
+
+    xticks = [0, 250, 500, 750, 1000]
+    yticks = (0.00, 0.25, 0.50)
+    ymax = 0.55
+
+    plabels = [
+        (0.11, 'inactive fp'), (0.52, 'abandoned fp'), (0.93, 'slope')]
+    x_ylabel = -0.11
+    y_xlabel = -0.48
+    plot_profile(
+        axs[-1][1], res0['e_mean'], geospatial, profile, im_frac=res0['frac_thawed'],
+        ymax=ymax, vlim=elim, ygrid=res0['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,
+        labels=None, x_ylabel=x_ylabel, y_xlabel=y_xlabel)
+    axs[-1][1].text(0.05, 0.23, 'thaw depth', c='#ffffff', transform=axs[-1][1].transAxes)
+    plot_profile(
+        axs[-1][2], res1['e_mean'], geospatial, profile, im_frac=res1['frac_thawed'],
+        ymax=ymax, vlim=elim, ygrid=res1['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,
+        labels=plabels, x_ylabel=x_ylabel, y_xlabel=y_xlabel, y_plabels=0.85)
+
+    cax = axs[0][-1].inset_axes([1.17, -0.75, 0.10, 1.20])
+    cax.text(1.0, 1.18, '$e$ [-]', ha='center', va='baseline', transform=cax.transAxes)
+    plt.colorbar(im_e, cax, shrink=0.5, orientation='vertical', ticks=[0.0, 0.25, 0.50])
+
+    for ax, lab in zip([ax for axr in axs for ax in axr], labels):
+        ax.text(0.010, 1.060, lab, ha='left', va='baseline', transform=ax.transAxes)
+    if fnout is None:
+        plt.show()
+    else:
+        plt.savefig(fnout)
+
+if __name__ == '__main__':
+    from scripts.pathnames import paths
+    fnplot = os.path.join(paths['figures'], 'icecut.pdf')
+    icecut_map_profiles(fnout=fnplot, overwrite=False)
+
+
+
+'''year = '2019'#'2022'
 pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
 fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
 fnimres = os.path.join(pathres, 'optical.tif')
@@ -64,3 +190,4 @@ optical = optical[::-1, ...][0:3]
 ax = axs[1][0]
 ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
 plt.show()
+'''

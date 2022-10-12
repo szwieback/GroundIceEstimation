@@ -75,6 +75,7 @@ def plot_kivalina(fnout=None):
                 ((-164.8171, 67.8500), (-164.8095, 67.8555))]
     plabels = [[(0.17, 'polygons'), (0.5, 'rocky bench'), (0.85, 'no polygons')],
                [(0.24, 'inactive floodplain'), (0.87, 'polygons')]]
+    xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
     dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale)
     optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale)
     e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
@@ -129,6 +130,13 @@ def plot_kivalina(fnout=None):
     ax = axs[1][0]
     ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
     ax.contour(dem[0, ...], colors=['#333333'], linewidths=0.4, alpha=0.4, levels=10)
+    
+    rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
+    ax.plot(
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        mec=colslist[0], mfc=colslist[0], zorder=9)
+
+    
     for jp, profile in enumerate(profiles):
         pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
         rc = pi._rowcol_endpoints
@@ -147,12 +155,13 @@ def plot_kivalina(fnout=None):
 
     ymax = 0.7  # 0.5
     plot_profile(
-        axs[1][1], e_mean, geospatial, profiles[0], steps=512, ymax=ymax, vlim=elim,
-        ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[0])
+        axs[1][1], e_mean, geospatial, profiles[0], im_frac=frac_thawed, ymax=ymax,
+         vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[0])
     plot_profile(
-        axs[1][2], e_mean, geospatial, profiles[1], steps=512, ymax=ymax, vlim=elim,
-        ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
-    
+        axs[1][2], e_mean, geospatial, profiles[1], im_frac=frac_thawed, ymax=ymax,
+         vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
+    axs[1][1].text(0.395, 0.120, 'thaw depth', c='#ffffff', transform=axs[1][1].transAxes)
+
     bbox_r = axs[1][0].get_position()
     for ax in (axs[1][1], axs[1][2]):
         bbox_c = ax.get_position()
