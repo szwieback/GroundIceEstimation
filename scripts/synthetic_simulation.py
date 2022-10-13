@@ -8,21 +8,19 @@ import numpy as np
 import os
 import datetime
 
-from forcing import read_toolik_forcing
 from scripts.pathnames import paths
-from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, load_object
+from analysis import (
+    StefanPredictor, InversionSimulator, PredictionEnsemble, load_object, enforce_directory)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
 
-def parse_dates(datestr, strp='%Y%m%d'):
-    if isinstance(datestr, str):
-        return datetime.datetime.strptime(datestr, strp)
-    else:
-        return [parse_dates(ds, strp=strp) for ds in datestr]
 
 def toolik_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
+
+    from forcing import read_toolik_forcing, parse_dates
+    
     fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
     fnforcing = os.path.join(paths['forcing'], 'toolik2019', '1-hour_data.csv')
     pathout = os.path.join(paths['simulation'], simname)
@@ -55,21 +53,101 @@ def toolik_simulation(
     else:
         raise ValueError(f'Simulation {simname} not known')
 
+    fninvsim = os.path.join(pathout, 'invsim.p')
+    enforce_directory(fninvsim)
+
     predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
     invsim = InversionSimulator(predens=predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
-    fninvsim = os.path.join(pathout, 'invsim.p')
     invsim.export(fninvsim)
-#     invsim = InversionSimulator.from_file(fninvsim)
+
     invsim.logweights(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
     invsim.export_metrics(pathout, param='e', prior=True)
     indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
     invsim.export_metrics(pathout, param='e', indranges=indranges)
     invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
+
+def sagwon_forcing(fnforcing):
+    from forcing import read_daily_noaa_forcing, parse_dates
+    df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
+    d0, d1 = '2019-05-11', '2019-09-17'
+    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
+    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp[dailytemp < 0] = 0
+    datesstr = ('20190521', '20190602', '20190614', '20190626', '20190708', '20190720',
+                '20190801', '20190813', '20190825', '20190906')
+    datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr]
+    ind_scenes = [int((d - d0_).days) for d in datesdisp]
+    return dailytemp, ind_scenes
+
+def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multiplier=1.0):
+    from analysis import read_K, add_atmospheric
+
+    if site is None: site = np.array((-148.8317, 69.0414))[:, np.newaxis]
+
+    K, geospatial_K = read_K(fnK)
+    K = add_atmospheric(K, var_atmo, wavelength=wavelength)
+    
+    _rc_site = geospatial_K.rowcol(site)[:, 0]
+    C_obs0 = K[..., _rc_site[0], _rc_site[1]]
+    C_obs = C_obs0 * C_obs_multiplier
+
+    return C_obs
+
+def sagwon_simulation(
+        simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
+    fnforcing = '/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv'
+    fnK = f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
+    pathout = os.path.join(paths['simulation'], simname)
+    params_distribution = {
+        'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':3, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.25, 'low_horizon': 0.10, 'organic_above': 0.1,
+                 'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+        'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
+    geom = {'ia': 40 * np.pi / 180}
+    var_atmo = (4e-3) ** 2
+    wavelength = 0.055
+
+    dailytemp, ind_scenes = sagwon_forcing(fnforcing)
+    
+    C_obs = sagwon_covariance(
+        fnK, var_atmo, wavelength=wavelength, C_obs_multiplier=C_obs_multiplier)
+
+    predictor = StefanPredictor()
+
+    strat = StratigraphyMultiple(
+        StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
+
+    if simname.split('_')[0] in ['constant']:
+        strat_sim = StefanStratigraphyConstantE(N=Nsim, seed=31)
+    elif simname.split('_')[0] in ['spline']:
+        strat_sim = StefanStratigraphySmoothingSpline(N=Nsim, seed=114)
+    else:
+        raise ValueError(f'Simulation {simname} not known')
+
+    fninvsim = os.path.join(pathout, 'invsim.p')
+    enforce_directory(fninvsim)
+
+    predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
+    predens_sim.predict(dailytemp)
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    predens.predict(dailytemp)
+    invsim = InversionSimulator(predens=predens, predens_sim=predens_sim)
+    invsim.register_observations(ind_scenes, C_obs)
+
+    invsim.export(fninvsim)
+    invsim.logweights(replicates=replicates, pathout=pathout)
+    invsim.export_metrics(pathout, param='e')
+    invsim.export_metrics(pathout, param='e', prior=True)
+    # indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
+    # invsim.export_metrics(pathout, param='e', indranges=indranges)
+    # invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
 
 
 if __name__ == '__main__':
@@ -81,7 +159,10 @@ if __name__ == '__main__':
     for Nbatch in Nbatch_list:
         for accn in multipliers:
             for scenarion in ['spline']:
-                toolik_simulation(
-                    f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
-                    Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
+                # toolik_simulation(
+                #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
+                #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
+                sagwon_simulation(
+                    f'{scenarion}_{accn}_{Nbatch}_sagwon', N=N, Nsim=Nsim, Nbatch=Nbatch, 
+                    replicates=replicates, C_obs_multiplier=multipliers[accn])
 

@@ -72,7 +72,7 @@ class InversionSimulator():
         lw_ps, _ = psislw(lw)
         return lw_ps
 
-    def logweights(self, replicates=10, pathout=None, n_jobs=-8):
+    def logweights(self, replicates=10, pathout=None, n_jobs=-1):
         if pathout is None:
             pathout = os.getcwd()
             import warnings
@@ -162,7 +162,7 @@ class InversionSimulator():
 
     def export_metrics(
             self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None,
-            prior=False, n_jobs=-8):
+            prior=False, n_jobs=-1):
         def _export(r):
             sie = self.results(pathout, replicates=(r,), prior=prior)
             suffix = self._suffix(param, indranges, prior)
