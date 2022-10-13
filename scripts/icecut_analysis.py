@@ -6,25 +6,40 @@ Created on Oct 5, 2022
 import numpy as np
 import os
 
-from scripts.happyvalley_analysis import read_results 
+from scripts.happyvalley_analysis import read_results
 
 site = np.array((-148.8317, 69.0414))[:, np.newaxis]
-
 
 def path_results(year):
     pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
     return pathres
 
+def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
+    from scipy.ndimage import binary_dilation, binary_opening, binary_closing
+    from analysis import add_atmospheric
+    K = add_atmospheric(K, 0.0, wavelength=wavelength)
+    K_last = K[ind1, ind1, ...] + K[ind2, ind2, ...] - 2 * K[ind1, ind2, ...]
+    K_last_crop, _ = geospatial.warp(K_last, geospatial_K)
+    s1 = np.array(
+        [[ 0, 1, 0], [ 1, 1, 1], [0, 1, 0]])
+    invalid = binary_closing(binary_opening(
+        binary_dilation(K_last_crop > thresh ** 2, s1), s1, border_value=1), s1)
+    # invalid = binary_dilation(binary_opening(binary_closing(K_last_crop > thresh ** 2, s1), s1), s1)
+    return invalid
+
 def icecut_map_profiles(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
+    from analysis import read_K
     from scripts.plotting import (
-        prepare_figure, cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
+        cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
         add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
     years = (2022, 2019)
     fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
     fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
-    upscale = 8
+    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    wavelength, thresh = 0.055, 4.3e-3
+    upscale = 16
 
     cmap = cmap_e
     elim = (0.0, 0.5)
@@ -32,11 +47,11 @@ def icecut_map_profiles(fnout=None, overwrite=True):
     yticks_im = (31,)
     ys = [(0.05, 0.15), (0.20, 0.30), (0.45, 0.55)]
 
-    profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))#(-148.7465, 69.0419))
+    profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))  # (-148.7465, 69.0419))
     xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
 
     res0 = read_results(
-        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale, 
+        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale,
         overwrite=overwrite)
     res1 = read_results(path_results(years[1]), overwrite=overwrite)
     geospatial = res0['geospatial']
@@ -59,10 +74,14 @@ def icecut_map_profiles(fnout=None, overwrite=True):
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
+        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        K, geospatial_K = read_K(fnK)
+        invalid = invalid_mask(
+            K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
         for jy, y in enumerate(ys):
             jy0, jy1 = _get_index(res['ygrid'], y[0]), _get_index(res['ygrid'], y[1])
             _e_mean = np.mean(res['e_mean'][..., jy0:jy1], axis=-1)
-            # _e_mean[invalid] = np.nan
+            _e_mean[invalid] = np.nan
             ax = axs[jyear][jy]
             im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
             ax.set_facecolor('#aaaaaa')
@@ -78,7 +97,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
         res0['dem'][0, ...], colors=['#ffffff'], linewidths=0.4, alpha=0.7, levels=10)
     rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
     ax.plot(
-        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x',
         mec=colslist[0], mfc=colslist[0], zorder=9)
     ax.set_xticks(np.array(xticks_im) * upscale)
     ax.set_yticks(np.array(yticks_im) * upscale)
@@ -89,12 +108,12 @@ def icecut_map_profiles(fnout=None, overwrite=True):
     rc = pi._rowcol_endpoints
     label = f'T1'
     add_arrow_line(
-        ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(85, 110))
+        ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(85, 210))
     _xy_site = geospatial.upscaled(upscale).rowcol(site)[:, 0]
     ax.plot(
         _xy_site[1], _xy_site[0], c=colslist[0], linestyle='none',
         marker='o', ms=5, mfc='none')
-    ax.text(_xy_site[1] + 10, _xy_site[0] - 60, 'IC', c=colslist[0])
+    ax.text(_xy_site[1] - 160, _xy_site[0] + 250, 'IC', c=colslist[0])
     add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.2)
 
     xticks = [0, 250, 500, 750, 1000]
@@ -130,8 +149,6 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'icecut.pdf')
     icecut_map_profiles(fnout=fnplot, overwrite=False)
-
-
 
 '''year = '2019'#'2022'
 pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'

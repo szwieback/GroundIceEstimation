@@ -5,7 +5,8 @@ Created on Oct 5, 2022
 '''
 import numpy as np
 import os
-from analysis import Geospatial, save_geotiff, load_object, save_object, InversionResults
+from analysis import (
+    Geospatial, load_object, save_object, InversionResults, read_K)
 from scripts.kivalina_analysis import resample_dem
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
@@ -13,6 +14,19 @@ site = np.array((-148.8437, 69.1548))[:, np.newaxis]
 def path_results(year):
     pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/hadamard'
     return pathres
+
+def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
+    from scipy.ndimage import binary_dilation, binary_opening, binary_closing
+    from analysis import add_atmospheric
+    K = add_atmospheric(K, 0.0, wavelength=wavelength)
+    K_last = K[ind1, ind1, ...] + K[ind2, ind2, ...] - 2 * K[ind1, ind2, ...]
+    K_last_crop, _ = geospatial.warp(K_last, geospatial_K)
+    s1 = np.array(
+        [[ 0, 1, 0], [ 1, 1, 1], [0, 1, 0]])
+    invalid = binary_closing(binary_opening(
+        binary_dilation(K_last_crop > thresh ** 2, s1), s1, border_value=1), s1)
+    # invalid = binary_dilation(binary_opening(binary_closing(K_last_crop > thresh ** 2, s1), s1), s1)
+    return invalid
 
 def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True):
     fngeospatial = os.path.join(pathres, 'geospatial.p')
@@ -31,6 +45,7 @@ def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True
     res['e_mean'] = np.load(os.path.join(pathres, 'e_mean.npy'))
     res['e_quantile'] = np.load(os.path.join(pathres, 'e_quantile.npy'))
     res['frac_thawed'] = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+
     if fnimraw is not None:
         fnimres = os.path.join(pathres, 'optical.tif')
         res['optical'] = resample_dem(
@@ -63,6 +78,8 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     years = (2022, 2019)
     fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211417_74_249d/analytic_sr_udm2/20220620_211417_74_249d_3B_AnalyticMS_SR.tif'
     fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
+    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    wavelength, thresh = 0.055, 4.3e-3
     upscale = 8
 
     cmap = cmap_e
@@ -99,10 +116,14 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
+        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        K, geospatial_K = read_K(fnK)
+        invalid = invalid_mask(
+            K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)        
         for jy, y in enumerate(ys):
             jy0, jy1 = _get_index(res['ygrid'], y[0]), _get_index(res['ygrid'], y[1])
             _e_mean = np.mean(res['e_mean'][..., jy0:jy1], axis=-1)
-            # _e_mean[invalid] = np.nan
+            _e_mean[invalid] = np.nan
             ax = axs[jyear][jy]
             im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
             ax.set_facecolor('#aaaaaa')

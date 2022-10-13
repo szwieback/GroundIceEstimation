@@ -52,6 +52,12 @@ def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
     d_mean_bs = np.nanmean(d_bs, axis=1)
     return np.nanpercentile(d_mean_bs, percentiles, axis=0)
         
+def read_site(fn): 
+    df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl')
+    data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
+    e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])       
+    return e_grid
+
 def plot_sites(fns_abs, fnout=None):
     from scripts.plotting import prepare_figure, colslist
     import matplotlib.pyplot as plt
@@ -60,10 +66,7 @@ def plot_sites(fns_abs, fnout=None):
         wspace=0.25, sharex=True)
     y_grid = np.arange(150) # hard-coded for now
     for jsite, site in enumerate(fns_abs.keys()):
-        fn = fns_abs[site]
-        df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl')
-        data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
-        e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
+        e_grid = read_site(fns_abs[site])
         e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
         e_mean = np.nanmean(e_grid, axis=0)
         axs[jsite].fill_betweenx(
