@@ -95,9 +95,9 @@ def plot_kivalina(fnout=None):
 
     fig = plt.figure()
     initialize_matplotlib()
-    fig.set_size_inches((7.08, 2.75), forward=True)
+    fig.set_size_inches((7.08, 2.68), forward=True)
     gs = gridspec.GridSpec(
-        2, 14, left=0.005, right=0.995, top=0.982, bottom=0.084, wspace=4.50, hspace=0.04)
+        2, 14, left=0.005, right=0.995, top=0.980, bottom=0.086, wspace=4.50, hspace=0.03)
 
     axs = [[plt.subplot(gs[0, 0:4]), plt.subplot(gs[0, 4:8]), plt.subplot(gs[0, 8:12])],
            [plt.subplot(gs[1, 0:4]), plt.subplot(gs[1, 4:9]), plt.subplot(gs[1, 9:])]]
@@ -160,7 +160,8 @@ def plot_kivalina(fnout=None):
     plot_profile(
         axs[1][2], e_mean, geospatial, profiles[1], im_frac=frac_thawed, ymax=ymax,
          vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
-    axs[1][1].text(0.395, 0.120, 'thaw depth', c='#ffffff', transform=axs[1][1].transAxes)
+    axs[1][1].text(
+        0.48, 0.13, '$y_f$', c='#ffffff', transform=axs[1][1].transAxes, alpha=0.6)
 
     bbox_r = axs[1][0].get_position()
     for ax in (axs[1][1], axs[1][2]):

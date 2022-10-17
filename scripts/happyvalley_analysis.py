@@ -169,7 +169,8 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         axs[-1][1], res0['e_mean'], geospatial, profile, im_frac=res0['frac_thawed'],
         ymax=ymax, vlim=elim, ygrid=res0['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,
         labels=None, x_ylabel=x_ylabel)
-    axs[-1][1].text(0.05, 0.23, 'thaw depth', c='#ffffff', transform=axs[-1][1].transAxes)
+    axs[-1][1].text(
+        0.05, 0.23, '$y_f$', c='#ffffff', transform=axs[-1][1].transAxes, alpha=0.6)
     plot_profile(
         axs[-1][2], res1['e_mean'], geospatial, profile, im_frac=res1['frac_thawed'],
         ymax=ymax, vlim=elim, ygrid=res1['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,

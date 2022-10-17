@@ -18,7 +18,7 @@ def _plot_example(
         axs, sie, days=None, jsim=0, replicate=0, show_quantile=True, smooth_quantile=2,
         ymax=None, slim=None, sticks=None, show_ylabels=False):
     import matplotlib.dates as mdates
-    ygrid = sie.ygrid * 100 #cm
+    ygrid = sie.ygrid * 100  # cm
     conv = 100.0
     e_inv = sie.moment('e', replicate=replicate)
     e_inv_std = np.sqrt(sie.variance('e', replicate=replicate))
@@ -83,9 +83,9 @@ def _plot_example(
     else:
         axs[1].fill_betweenx(
             ygrid,
-            (e_inv - e_inv_std)[jsim, :], (e_inv + e_inv_std)[jsim, :],
+            (e_inv - e_inv_std)[jsim,:], (e_inv + e_inv_std)[jsim,:],
             edgecolor='none', facecolor=cols['unc'], alpha=0.07)
-    axs[1].plot(e_sim[jsim, :], ygrid, lw=1.0, c=cols['true'])
+    axs[1].plot(e_sim[jsim,:], ygrid, lw=1.0, c=cols['true'])
     if ymax is None: ymax = ygrid[-1]
     ylabxpos = -0.31
     if show_ylabels:
@@ -183,9 +183,9 @@ def plot_metrics(ymax=0.8, suffix=''):
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
 
     axs[0].plot(
-        np.nanmean(metrics_p['MAD'], axis=0), metrics['ygrid'], lw=lwscen['prior'], 
+        np.nanmean(metrics_p['MAD'], axis=0), metrics['ygrid'], lw=lwscen['prior'],
         c=colscen['prior'], alpha=alphascen['prior'])
-    axs[1].plot(sharpness_p, metrics['ygrid'], lw=lwscen['prior'], 
+    axs[1].plot(sharpness_p, metrics['ygrid'], lw=lwscen['prior'],
         c=colscen['prior'], alpha=alphascen['prior'])
     axs[0].text(
         1.03, 0.29, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
@@ -287,7 +287,7 @@ def plot_metrics_indrange(suffix=''):
 if __name__ == '__main__':
     # plot_examples(show_quantile=True)
     for Nbatch in (1, 10):
-        plot_metrics(suffix=f'_{Nbatch}')
+        plot_metrics(suffix=f'_{Nbatch}_sagwon')
         # plot_metrics_indrange(suffix=f'_{Nbatch}')
     # Nbatch = 1
     # plot_metrics(suffix=f'_{Nbatch}')

@@ -101,7 +101,7 @@ def plot_profile(
         ax.set_ylim((_get_index(ygrid, ymax), 0))
     if im_frac is not None:
         if c_td is None: c_td = '#ffffff'
-        ax.plot(np.arange(pi.steps), td, c=c_td, lw=0.6, alpha=0.5)
+        ax.plot(np.arange(pi.steps), td, c=c_td, lw=0.6, alpha=0.3)
     if yticks is not None:
         ax.set_yticks(_get_index(ygrid, yticks))
         ax.set_yticklabels((np.array(yticks) * 100).astype(np.int64))
