@@ -88,6 +88,8 @@ def plot_retrieval(ax, res_site_year, lw_q=0.3, ymax=0.65, xlim=(-0.01, 0.80)):
     alpha = (res_site_year['frac_thawed']) ** 2
     ygrid = res_site_year['ygrid']
     e_mean = res_site_year['e_mean']
+    from analysis import thaw_depth
+    print('50 cm', e_mean[250], thaw_depth(res_site_year['frac_thawed'], ygrid))
     e_q = res_site_year['e_quantile']
 
     for jdepth in np.arange(ygrid.shape[0] - 1):
@@ -126,20 +128,20 @@ def plot_core(ax, site, c='#000000'):
     fns_abs = {site: os.path.join(paths['cores'], fns[site]) for site in fns}
     y_grid_core = np.arange(150) / 100  # hard-coded for now
 
-
     e_grid = read_site(fns_abs[site])
     e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
     e_mean = np.nanmean(e_grid, axis=0)
-    print(np.mean(e_mean[5:25]) * 0.2)
+    # print(np.mean(e_mean[50]) * 0.2)
     ax.fill_betweenx(
         y_grid_core, e_q_mean[0,:], e_q_mean[1,:], edgecolor='none',
         facecolor=c, alpha=0.20)
     ax.plot(e_mean, y_grid_core, c=c, lw=1.2)
 
-def plot_comparison(overwrite=False):
+def plot_comparison(fnout=None, overwrite=False):
     from scripts.plotting import prepare_figure, colslist
-    import matplotlib.pyplot as plt
+    from string import ascii_lowercase
     sites = ('icecut', 'happyvalley')
+    site_labels = ('Ice Cut', 'Happy Valley')
     years = (2022, 2019)
     res = {}
     for site in sites:
@@ -147,19 +149,101 @@ def plot_comparison(overwrite=False):
         for year in years:
             res[site][year] = InSAR_results(site, year, overwrite=overwrite)
 
-    fig, axs = prepare_figure(nrows=2, ncols=3, sharey=False)
+    yyticks = (0.0, 0.2, 0.4, 0.6)
+    syticks = (0.0, 0.02, 0.04)
+    fig, axs = prepare_figure(
+        nrows=2, ncols=3, sharey=False, figsize=(1.40, 0.65), hspace=0.20, wspace=0.55,
+        left=0.124, bottom=0.150, top=0.930, right=0.940)
     for jsite, site in enumerate(sites):
         axs[jsite, 2].axhline(0, lw=0.2, c='#cccccc')
+        axs[jsite, 0].text(
+            -0.50, 0.50, site_labels[jsite], ha='right', va='center',
+            transform=axs[jsite, 0].transAxes, c='k', rotation=90)
         for jyear, year in enumerate(years):
             plot_core(axs[jsite, jyear], site, c=colslist[2])
             plot_retrieval(axs[jsite, jyear], res[site][year])
             plot_subsidence(axs[jsite, 2], res[site][year], c=colslist[jyear])
+            axs[jsite, jyear].text(
+                -0.29, 0.50, 'depth $y$ [cm]', ha='right', va='center',
+                transform=axs[jsite, jyear].transAxes, rotation=90)
+            axs[jsite, jyear].set_yticks(yyticks)
+            axs[jsite, jyear].set_yticklabels((100 * np.array(yyticks)).astype(np.int16))
+            axs[jsite, jyear].set_xticks((0.0, 0.3, 0.6))
         axs[jsite, 2].set_ylim((0.05, -0.02))
+        axs[jsite, 2].set_yticks(syticks)
+        axs[jsite, 2].set_yticklabels((100 * np.array(syticks)).astype(np.int16))
+        axs[jsite, 2].text(
+            -0.26, 0.50, '$s(t)$ [cm]', ha='right', va='center',
+            transform=axs[jsite, 2].transAxes, rotation=90)
+    xlab = ('excess ice $e$ [-]', 'excess ice $e$ [-]', 'date')
+    coltitles = ('2022', '2019', 'subsidence')
+    for jcol, lab in enumerate(xlab):
+        axs[-1, jcol].text(
+            0.50, -0.39, lab, ha='center', va='baseline', transform=axs[-1, jcol].transAxes)
+        axs[0, jcol].text(
+            0.50, 1.07, coltitles[jcol], ha='center', va='baseline', c='k',
+            transform=axs[0, jcol].transAxes)
+    for jax, ax in enumerate(axs.flatten()):
+        xxlab = 0.98 if jax % 3 != 2 else 0.12
+        ax.text(
+            xxlab, 0.03, f'{ascii_lowercase[jax]})', ha='right', va='baseline',
+            transform=ax.transAxes)
+    xyearlab = 1.03
+    axs[0, 2].text(
+        xyearlab, 0.32, '2022', ha='left', transform=axs[0, 2].transAxes, c=colslist[0])
+    axs[0, 2].text(
+        xyearlab, 0.06, '2019', ha='left', transform=axs[0, 2].transAxes, c=colslist[1])
+    axs[0, 0].text(
+        0.40, 0.84, 'InSAR', ha='left', transform=axs[0, 0].transAxes, c=colslist[0])
+    axs[0, 0].text(
+        0.55, 0.22, 'cores', ha='left', transform=axs[0, 0].transAxes, c=colslist[2])
+    doy_ticks = (152, 182, 213, 244)
+    axs[1, 2].set_xticks(doy_ticks)
+    axs[1, 2].set_xticklabels(('Jun', 'Jul', 'Aug', 'Sep'))
+    if fnout is None:
+        import matplotlib.pyplot as plt
+        plt.show()
+    else:
+        fig.savefig(fnout)
 
-    
+def comparison_thaw_depth(site='happyvalley', year=2022, ind=-1):
+    from analysis import InversionResults, thaw_depth
+    path_res = f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/hadamard'
 
-    plt.show()
+    ir = InversionResults.from_file(os.path.join(path_res, 'ir.p'))
+    _rc_site = ir.geospatial.rowcol(xy_site[site])[:, 0]
+    ir.lw = ir.lw[_rc_site[0], _rc_site[1],:][np.newaxis, ...]
+    frac_thawed = ir.frac_thawed(ind_scene=ind)
+    return thaw_depth(frac_thawed, ir.ygrid)[0]
+    # print(ir.geospatial)
+    # InSAR_results('icecut', 2022, overwrite=True)
 
 if __name__ == '__main__':
-    plot_comparison(overwrite=False)
+    from scripts.pathnames import paths
+    fnout = os.path.join(paths['figures'], f'northslope_comparison.pdf')
+    # plot_comparison(fnout=fnout, overwrite=False)
+    from forcing import parse_dates
+    dates = {
+        'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
+        'icecut': {2022: ('2022-05-24', '2022-08-15'), 2019: ('2019-05-11', '2019-08-25')}}
+    dates = {
+        'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
+        'icecut': {2022: ('2022-05-24', '2022-09-15'), 2019: ('2019-05-11', '2019-09-15')}}
 
+    # site = 'icecut'
+    # year = 2022
+    # d0, do = parse_dates(dates[site][year], strp='%Y-%m-%d')
+    # ind = (do - d0).days
+    # print(comparison_thaw_depth(site=site, year=year, ind=ind))
+    
+    from forcing import read_daily_noaa_forcing
+    import pandas as pd
+    fnforcing = os.path.join(paths['forcing'], 'sagwon/sagwon.csv')
+    df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
+    year = 2019
+    d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
+    d1 = {2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
+    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    print(dailytemp)
+    # dailytemp[dailytemp < 0] = 0
+    print(np.sum(dailytemp))

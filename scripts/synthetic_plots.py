@@ -107,18 +107,19 @@ def _plot_example(
 
 def plot_examples(show_quantile=False):
     from collections import namedtuple
-    from scripts.synthetic_simulation import parse_dates
+    from forcing import parse_dates
     import matplotlib.lines as mlines
     import datetime
-    simname = 'spline_plot'
+    simname = 'spline_plot_sagwon'
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
-    instances = (Instance(0, 2), Instance(0, 12) , Instance(0, 42))  # (0, 13) (0, 18)
-    ymax = 70  # 0.6
-    slim = (10, -1)
+    #0, 12
+    instances = (Instance(0, 2), Instance(1, 12) , Instance(0, 42))  # (0, 13) (0, 18)
+    ymax = 70  
+    slim = (11, -1)
     sticks = [0, 3, 6, 9]
 
-    d0, d1 = '2019-05-27', '2019-09-15'
+    d0, d1 = '2019-05-11', '2019-09-18'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     _days = np.arange((d1_ - d0_).days)
     days = np.array([d0_ + datetime.timedelta(days=int(d)) for d in _days])
@@ -140,7 +141,7 @@ def plot_examples(show_quantile=False):
         borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6,
         labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
 
-    plt.savefig(os.path.join(paths['figures'], 'synthetic_examples.pdf'))
+    plt.savefig(os.path.join(paths['figures'], 'synthetic_examples_sagwon.pdf'))
 
 def plot_metrics(ymax=0.8, suffix=''):
     from string import ascii_lowercase
@@ -285,9 +286,8 @@ def plot_metrics_indrange(suffix=''):
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-    # plot_examples(show_quantile=True)
-    for Nbatch in (1, 10):
-        plot_metrics(suffix=f'_{Nbatch}_sagwon')
+    plot_examples(show_quantile=True)
+    # for Nbatch in (1, 10):
+    #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
         # plot_metrics_indrange(suffix=f'_{Nbatch}')
-    # Nbatch = 1
-    # plot_metrics(suffix=f'_{Nbatch}')
+        

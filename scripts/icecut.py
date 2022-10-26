@@ -18,15 +18,16 @@ from forcing import read_daily_noaa_forcing, parse_dates
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
     'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':3, 'coeff_std': 3, 'coeff_corr': 0.7},
-    'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
-    'soil': {'high_horizon': 0.25, 'low_horizon': 0.10, 'organic_above': 0.1,
-             'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
-    'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
+    'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
+    'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+             'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
+    'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
+
 
 def icecut_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]#HV:20210604, 20190518
-    d1 = {2022: '2022-09-16', 2022: '2021-09-14', 2019: '2019-09-17'}[year]#HV:20210914; 20190917
+    d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
+    d1 = {2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
@@ -92,5 +93,6 @@ def process_icecut(year=2019, rmethod='hadamard'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
+    process_icecut(year=2022)
     process_icecut(year=2019)
 

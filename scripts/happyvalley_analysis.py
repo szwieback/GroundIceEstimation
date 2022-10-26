@@ -131,7 +131,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
             ax.set_yticks(yticks_im)
             ax.set_xticklabels([])
             ax.set_yticklabels([])
-            ax.grid(color='#dddddd', linewidth=0.4)
+            ax.grid(color='#dddddd', linewidth=0.4, alpha=0.5)
     optical = res0['optical'][::-1, ...][0:3]
     ax = axs[-1][0]
     ax.imshow(contrast(np.moveaxis(optical, 0, -1), percentiles=(2.0, 92.0)))

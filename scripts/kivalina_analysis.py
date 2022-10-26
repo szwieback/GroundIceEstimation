@@ -113,7 +113,7 @@ def plot_kivalina(fnout=None):
         ax.set_yticks(yticks_im)
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-        ax.grid(color='#dddddd', linewidth=0.4)
+        ax.grid(color='#dddddd', linewidth=0.4, alpha=0.5)
     cols_scatter = [('#ffffff', '#cccccc'), ('#000000', '#333333')]
     marker_size, marker_lw, marker, alpha = 3.5, 0.8, 'o', 0.35
     c = [cols_scatter[int(x)] for x in cores.code]

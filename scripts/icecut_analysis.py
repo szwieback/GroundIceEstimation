@@ -43,7 +43,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
 
     cmap = cmap_e
     elim = (0.0, 0.5)
-    xticks_im = (25, 65, 105, 145)
+    xticks_im = (35, 70, 105, 140, 175)
     yticks_im = (31,)
     ys = [(0.05, 0.15), (0.20, 0.30), (0.45, 0.55)]
 
@@ -89,7 +89,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
             ax.set_yticks(yticks_im)
             ax.set_xticklabels([])
             ax.set_yticklabels([])
-            ax.grid(color='#dddddd', linewidth=0.4)
+            ax.grid(color='#dddddd', linewidth=0.4, alpha=0.5)
     optical = res0['optical'][::-1, ...][0:3]
     ax = axs[-1][0]
     ax.imshow(contrast(np.moveaxis(optical, 0, -1), percentiles=(2.0, 96.0)))
@@ -149,7 +149,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'icecut.pdf')
-    icecut_map_profiles(fnout=fnplot, overwrite=False)
+    icecut_map_profiles(fnout=fnplot, overwrite=True)
 
 '''year = '2019'#'2022'
 pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
