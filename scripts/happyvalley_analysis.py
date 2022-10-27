@@ -86,7 +86,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     elim = (0.0, 0.5)
     xticks_im = (25, 65, 105, 145)
     yticks_im = (25, 65, 105)
-    ys = [(0.05, 0.15), (0.20, 0.30), (0.45, 0.55)]
+    ys = [(0.05, 0.15), (0.20, 0.30), (0.40, 0.50)]
 
     # profile = ((-148.8013, 69.1609), (-148.7717, 69.1609))
     profile = ((-148.7950, 69.1466), (-148.7655, 69.1466))
@@ -111,8 +111,8 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
 
     labels = [
         'a) 2022: excess ice 5--15 cm', 'b) 2022: excess ice 20--30 cm',
-        'c) 2022: excess ice 45--55 cm', 'd) 2019: excess ice 5--15 cm',
-        'e) 2019: excess ice 20--30 cm', 'f) 2019: excess ice 45--55 cm',
+        'c) 2022: excess ice 40--50 cm', 'd) 2019: excess ice 5--15 cm',
+        'e) 2019: excess ice 20--30 cm', 'f) 2019: excess ice 40--50 cm',
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
@@ -160,7 +160,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
 
     xticks = [0, 250, 500, 750, 1000]
     yticks = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5)
-    ymax = 0.55
+    ymax = 0.50
 
     plabels = [
         (0.13, 'inactive fp'), (0.45, 'abandoned fp'), (0.75, 'rocky'), (0.93, 'slope')]

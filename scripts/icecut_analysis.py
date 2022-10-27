@@ -45,7 +45,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
     elim = (0.0, 0.5)
     xticks_im = (35, 70, 105, 140, 175)
     yticks_im = (31,)
-    ys = [(0.05, 0.15), (0.20, 0.30), (0.45, 0.55)]
+    ys = [(0.05, 0.15), (0.20, 0.30), (0.40, 0.50)]
 
     profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))  # (-148.7465, 69.0419))
     xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
@@ -69,8 +69,8 @@ def icecut_map_profiles(fnout=None, overwrite=True):
 
     labels = [
         'a) 2022: excess ice 5--15 cm', 'b) 2022: excess ice 20--30 cm',
-        'c) 2022: excess ice 45--55 cm', 'd) 2019: excess ice 5--15 cm',
-        'e) 2019: excess ice 20--30 cm', 'f) 2019: excess ice 45--55 cm',
+        'c) 2022: excess ice 40--50 cm', 'd) 2019: excess ice 5--15 cm',
+        'e) 2019: excess ice 20--30 cm', 'f) 2019: excess ice 40--50 cm',
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
@@ -118,7 +118,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
 
     xticks = [0, 250, 500, 750, 1000]
     yticks = (0.00, 0.25, 0.50)
-    ymax = 0.55
+    ymax = 0.50
 
     plabels = [
         (0.11, 'inactive fp'), (0.52, 'abandoned fp'), (0.93, 'slope')]
@@ -149,7 +149,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'icecut.pdf')
-    icecut_map_profiles(fnout=fnplot, overwrite=True)
+    icecut_map_profiles(fnout=fnplot, overwrite=False)
 
 '''year = '2019'#'2022'
 pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'

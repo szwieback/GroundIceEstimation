@@ -224,26 +224,26 @@ if __name__ == '__main__':
     # plot_comparison(fnout=fnout, overwrite=False)
     from forcing import parse_dates
     dates = {
-        'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
+        'happyvalley': {2022: ('2022-06-06', '2022-08-17')},
         'icecut': {2022: ('2022-05-24', '2022-08-15'), 2019: ('2019-05-11', '2019-08-25')}}
-    dates = {
-        'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
-        'icecut': {2022: ('2022-05-24', '2022-09-15'), 2019: ('2019-05-11', '2019-09-15')}}
+    # dates = {
+    #     'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
+    #     'icecut': {2022: ('2022-05-24', '2022-09-15'), 2019: ('2019-05-11', '2019-09-15')}}
 
-    # site = 'icecut'
-    # year = 2022
-    # d0, do = parse_dates(dates[site][year], strp='%Y-%m-%d')
-    # ind = (do - d0).days
-    # print(comparison_thaw_depth(site=site, year=year, ind=ind))
+    site = 'happyvalley'
+    year = 2022
+    d0, do = parse_dates(dates[site][year], strp='%Y-%m-%d')
+    ind = (do - d0).days
+    print(comparison_thaw_depth(site=site, year=year, ind=ind))
     
-    from forcing import read_daily_noaa_forcing
-    import pandas as pd
-    fnforcing = os.path.join(paths['forcing'], 'sagwon/sagwon.csv')
-    df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    year = 2019
-    d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
-    d1 = {2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
-    print(dailytemp)
-    # dailytemp[dailytemp < 0] = 0
-    print(np.sum(dailytemp))
+    # from forcing import read_daily_noaa_forcing
+    # import pandas as pd
+    # fnforcing = os.path.join(paths['forcing'], 'sagwon/sagwon.csv')
+    # df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
+    # year = 2019
+    # d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
+    # d1 = {2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
+    # dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    # print(dailytemp)
+    # # dailytemp[dailytemp < 0] = 0
+    # print(np.sum(dailytemp))

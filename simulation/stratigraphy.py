@@ -22,7 +22,7 @@ params_default_distribution = {
     'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
 params_default_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
@@ -237,8 +237,7 @@ class StefanStratigraphy(Stratigraphy):
 
 class StefanStratigraphySmoothingSpline(StefanStratigraphy):
     def _draw_e(self):
-        # draw Bspline coefficients; all independent; 0, 1
-        ehigh, elow = self.e_params['low'], self.e_params['high']
+        ehigh, elow = self.e_params['high'], self.e_params['low']
         coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
         coeffcorr = self.e_params['coeff_corr']
         coeff = self.rs.normal(size=(self.N, self.Nb))
@@ -253,10 +252,10 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
         e[:, 0] = e[:, 1]
         return e
-
+    
 class StefanStratigraphyConstantE(StefanStratigraphy):
     def _draw_e(self):
-        ehigh, elow = self.e_params['low'], self.e_params['high']
+        ehigh, elow = self.e_params['high'], self.e_params['low']
         coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
         coeff = coeffmean + self.rs.normal(size=(self.N, 1)) * coeffstd
         og = np.ones_like(self._ygrid)
