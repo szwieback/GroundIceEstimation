@@ -44,7 +44,7 @@ def resample_dem(geospatial, fnraw, fnresampled, upscale=None, overwrite=False):
         save_geotiff(dem, _gs, fnresampled)
         return dem
 
-def plot_kivalina(fnout=None):
+def plot_kivalina(fnout=None, overwrite=False):
     from analysis import read_K
     import matplotlib.gridspec as gridspec
     from scripts.plotting import (
@@ -52,8 +52,8 @@ def plot_kivalina(fnout=None):
         contrast, add_arrow_line, plot_profile, add_scalebar)
     import matplotlib.pyplot as plt
 
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/inversion/'
-    fnK = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/K_vec.geo.tif'
+    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/'
+    fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
     fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
     fndemres = os.path.join(pathres, 'DEM.tif')
     fnimraw = '/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif'
@@ -70,14 +70,15 @@ def plot_kivalina(fnout=None):
     # ygrid = np.arange(0, 1.5, step=2e-3)
 
     K, geospatial_K = read_K(fnK)
-    invalid = invalid_mask(K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
+    invalid = invalid_mask(
+        K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
     profiles = [((-164.7440, 67.8420), (-164.7350, 67.8480)),
                 ((-164.8171, 67.8500), (-164.8095, 67.8555))]
     plabels = [[(0.17, 'polygons'), (0.5, 'rocky bench'), (0.85, 'no polygons')],
                [(0.24, 'inactive floodplain'), (0.87, 'polygons')]]
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
-    dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale)
-    optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale)
+    dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
+    optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
     e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
     frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
 
@@ -148,12 +149,15 @@ def plot_kivalina(fnout=None):
     ax.set_xticklabels([])
     ax.set_yticklabels([])
     ax.grid(color='#aaaaaa', linewidth=0.4)
-    add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km')
+    add_scalebar(
+        ax, geospatial.upscaled(upscale), length=1000, label='1 km')
+    ax.text(0.01, -0.06, 'Planet Labs', ha='left', va='top', transform=ax.transAxes)
+
 
     xticks = [0, 200, 400, 600]
     yticks = (0.0, 0.2, 0.4, 0.6)
 
-    ymax = 0.7  # 0.5
+    ymax = 0.65  # 0.5
     plot_profile(
         axs[1][1], e_mean, geospatial, profiles[0], im_frac=frac_thawed, ymax=ymax,
          vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[0])
@@ -161,7 +165,7 @@ def plot_kivalina(fnout=None):
         axs[1][2], e_mean, geospatial, profiles[1], im_frac=frac_thawed, ymax=ymax,
          vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
     axs[1][1].text(
-        0.48, 0.13, '$y_f$', c='#ffffff', transform=axs[1][1].transAxes, alpha=0.6)
+        0.48, 0.08, '$y_f$', c='#ffffff', transform=axs[1][1].transAxes, alpha=0.6)
 
     bbox_r = axs[1][0].get_position()
     for ax in (axs[1][1], axs[1][2]):
@@ -205,7 +209,7 @@ def plot_kivalina(fnout=None):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'kivalina.pdf')
-    plot_kivalina(fnplot)
+    plot_kivalina(fnplot, overwrite=False)
     # e_mean_ = np.mean(e_mean[..., _get_index(ygrid, 0.40):_get_index(ygrid, 0.50)], axis=-1)  # 0.5
     # e_mean_[invalid] = nodata
     # print(np.nanpercentile(e_mean_, (10, 25, 50, 75, 90)))

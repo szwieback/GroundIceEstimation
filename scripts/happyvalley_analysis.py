@@ -80,7 +80,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
     path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
     wavelength, thresh = 0.055, 4.3e-3
-    upscale = 8
+    upscale = 32
 
     cmap = cmap_e
     elim = (0.0, 0.5)
@@ -93,7 +93,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
 
     res0 = read_results(
-        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale, 
+        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale,
         overwrite=overwrite)
     res1 = read_results(path_results(years[1]), overwrite=overwrite)
     geospatial = res0['geospatial']
@@ -119,7 +119,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
-            K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)        
+            K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
         for jy, y in enumerate(ys):
             jy0, jy1 = _get_index(res['ygrid'], y[0]), _get_index(res['ygrid'], y[1])
             _e_mean = np.mean(res['e_mean'][..., jy0:jy1], axis=-1)
@@ -139,7 +139,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         res0['dem'][0, ...], colors=['#ffffff'], linewidths=0.4, alpha=0.4, levels=10)
     rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
     ax.plot(
-        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x',
         mec=colslist[0], mfc=colslist[0], zorder=9)
     ax.set_xticks(np.array(xticks_im) * upscale)
     ax.set_yticks(np.array(yticks_im) * upscale)
@@ -150,13 +150,15 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     rc = pi._rowcol_endpoints
     label = f'T1'
     add_arrow_line(
-        ax, rc, label=label, c='#ffffff', lw=0.7, alpha=0.9, dlabel=(95, -45))
+        ax, rc, label=label, c='#ffffff', lw=0.7, alpha=0.9, dlabel=(380, -180), hwidth=140, 
+        hlength=180)
     _xy_site = geospatial.upscaled(upscale).rowcol(site)[:, 0]
     ax.plot(
         _xy_site[1], _xy_site[0], c='#ffffff', linestyle='none',
         marker='o', ms=5, mfc='none')
-    ax.text(_xy_site[1] + 30, _xy_site[0] - 40, 'HV', c='#ffffff')
+    ax.text(_xy_site[1] + 120, _xy_site[0] - 160, 'HV', c='#ffffff')
     add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km')
+    ax.text(0.01, -0.06, 'Planet Labs', ha='left', va='top', transform=ax.transAxes)
 
     xticks = [0, 250, 500, 750, 1000]
     yticks = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5)
@@ -186,7 +188,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         plt.show()
     else:
         plt.savefig(fnout)
-    #save
+    # save
 
 if __name__ == '__main__':
     from scripts.pathnames import paths

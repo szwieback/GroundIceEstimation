@@ -105,11 +105,11 @@ def sagwon_simulation(
     pathout = os.path.join(paths['simulation'], simname)
     params_distribution = {
         'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
-        'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
-        'soil': {'high_horizon': 0.25, 'low_horizon': 0.10, 'organic_above': 0.1,
-                 'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
-        'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
+        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+                 'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
+        'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
     geom = {'ia': 40 * np.pi / 180}
     var_atmo = (4e-3) ** 2
     wavelength = 0.055
@@ -156,15 +156,15 @@ if __name__ == '__main__':
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
     Nbatch_list = [1, 10]
-    # for Nbatch in Nbatch_list:
-    #     for accn in multipliers:
-    #         for scenarion in ['spline']:
-    #             # toolik_simulation(
-    #             #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
-    #             #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
-    #             sagwon_simulation(
-    #                 f'{scenarion}_{accn}_{Nbatch}_sagwon', N=N, Nsim=Nsim, Nbatch=Nbatch, 
-    #                 replicates=replicates, C_obs_multiplier=multipliers[accn])
+    for Nbatch in Nbatch_list:
+        for accn in multipliers:
+            for scenarion in ['spline']:
+                # toolik_simulation(
+                #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
+                #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
+                sagwon_simulation(
+                    f'{scenarion}_{accn}_{Nbatch}_sagwon', N=N, Nsim=Nsim, Nbatch=Nbatch, 
+                    replicates=replicates, C_obs_multiplier=multipliers[accn])
 
     sagwon_simulation('spline_plot_sagwon', Nsim=50, N=N, replicates=5, Nbatch=1)
     

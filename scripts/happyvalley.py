@@ -3,8 +3,6 @@ Created on Oct 6, 2022
 
 @author: simon
 '''
-
-
 import numpy as np
 import pandas as pd
 import datetime
@@ -23,7 +21,7 @@ params_distribution = {
     'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
-
+ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
 
 def happyvalley_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
@@ -52,7 +50,6 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
-    ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
     N = 10000
     Nbatch = 1
 

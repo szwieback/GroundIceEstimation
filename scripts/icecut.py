@@ -22,6 +22,7 @@ params_distribution = {
     'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
+ll, ur = (-148.8415, 69.0360), (-148.7216, 69.0493)
 
 def icecut_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
@@ -50,7 +51,7 @@ def process_icecut(year=2019, rmethod='hadamard'):
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
-    ll, ur = (-148.8415, 69.0360), (-148.7216, 69.0493)
+    
     N = 10000
     Nbatch = 1
 

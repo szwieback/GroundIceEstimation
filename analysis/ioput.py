@@ -23,7 +23,21 @@ class Geospatial():
         gsp = Geospatial(transform=src.transform, crs=src.crs, shape=shape)
         del src
         return gsp
-
+    
+    @classmethod
+    def plate_carree(cls, bbox, dlat=-2e-4, dlon=None):
+        from rasterio.transform import Affine
+        from rasterio.crs import CRS
+        crs = CRS.from_epsg(4326)
+        assert dlat < 0
+        if dlon is None: dlon = np.abs(dlat) / np.cos(bbox[0] * np.pi / 180)
+        transform = Affine(dlon, 0.0, bbox[2], 0.0, dlat, bbox[1])
+        shape = (
+            int((bbox[1] - bbox[0]) / np.abs(dlat)),
+            int((bbox[3] - bbox[2]) / np.abs(dlon)))
+        gsp = Geospatial(transform=transform, crs=crs, shape=shape)
+        return gsp
+    
     @property
     def rowcol_grids(self):
         return (np.arange(self.shape[0]), np.arange(self.shape[1]))
@@ -51,13 +65,17 @@ class Geospatial():
             f"Transform: {self.transform}", f"CRS: {self.crs}", f"Shape: {self.shape}")
         return '\n'.join(strlist)
 
-    def crop(self, arr, ll=None, ur=None):
-        if ll is None and ur is None:
-            return arr, self
+    def _rc_bbox(self, ll, ur):
         rc_ll = self.rowcol(np.array(ll)[:, np.newaxis])[:, 0]
         rc_ur = self.rowcol(np.array(ur)[:, np.newaxis])[:, 0]
         r = (min(rc_ll[0], rc_ur[0]), max(rc_ll[0], rc_ur[0]))
         c = (min(rc_ll[1], rc_ur[1]), max(rc_ll[1], rc_ur[1]))
+        return r, c
+
+    def crop(self, arr, ll=None, ur=None):
+        if ll is None and ur is None:
+            return arr, self
+        r, c = self._rc_bbox(ll, ur)
         window = rasterio.windows.Window(c[0], r[0], c[1] - c[0], r[1] - r[0])
 
         transform = rasterio.windows.transform(window, self.transform)

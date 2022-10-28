@@ -111,7 +111,7 @@ def plot_profile(
     if labels is not None:
         for lx, lt in labels:
             ax.text(
-                lx, y_plabels, lt, c='w', ha='center', va='baseline', 
+                lx, y_plabels, lt, c='w', ha='center', va='baseline',
                 transform=ax.transAxes)
     ax.text(
         0.50, y_xlabel, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
@@ -184,17 +184,24 @@ def add_arrow_line(
         ax.text(xm + dlabel[0], ym + dlabel[1], label, ha='left', va='center', color=c)
     ax.add_patch(arrow)
 
-def add_scalebar(ax, geospatial, length=500, y=-0.10, label=None):
+def add_scalebar(
+        ax, geospatial, length=500, y=-0.10, dx=0.05, label=None, color=None, lw=None, 
+        ylab=None, llabel=None):
     from matplotlib.lines import Line2D
     hextent = geospatial.extent[0]
     frac = length / hextent
-    dx = 0.05
-    # ax.plot((1 - dx - frac, 1 - dx), (y, y), transform=ax.transAxes)
+    if dx is None: dx = 0.05
+    if color is None: color = '#666666'
+    if lw is None: lw = 0.8
+    if ylab is None: ylab = 1.6 * y
     line = Line2D(
-        (1 - dx - frac, 1 - dx), (y, y), lw=0.8, color='#666666', transform=ax.transAxes)
+        (1 - dx - frac, 1 - dx), (y, y), lw=lw, color=color, transform=ax.transAxes)
     line.set_clip_on(False)
     ax.add_line(line)
     if label is not None:
         ax.text(
-            1 - dx - frac / 2, 1.6 * y, label, ha='center', va='top',
-            transform=ax.transAxes)
+            1 - dx - frac / 2, ylab, label, ha='center', va='top',
+            transform=ax.transAxes, c=color)
+    if llabel is not None:
+        ax.text(
+            dx, ylab, llabel, ha='left', va='top', transform=ax.transAxes, c=color)

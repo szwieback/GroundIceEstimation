@@ -55,7 +55,7 @@ def _plot_example(
     axs[0].xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     axs[0].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
     axs[0].set_xlim((days[0], days[-1]))
-    alpha = sie.frac_thawed(replicate=replicate, jsim=jsim)
+    alpha = sie.frac_thawed(replicate=replicate, jsim=jsim) ** 3
     for jdepth in np.arange(ygrid.shape[0] - 1):
         axs[1].plot(
             e_inv[jsim, jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=1.0,
@@ -115,7 +115,7 @@ def plot_examples(show_quantile=False):
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     #0, 12
     instances = (Instance(0, 2), Instance(1, 12) , Instance(0, 42))  # (0, 13) (0, 18)
-    ymax = 70  
+    ymax = 65
     slim = (11, -1)
     sticks = [0, 3, 6, 9]
 
@@ -289,5 +289,5 @@ if __name__ == '__main__':
     plot_examples(show_quantile=True)
     # for Nbatch in (1, 10):
     #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
-        # plot_metrics_indrange(suffix=f'_{Nbatch}')
+    #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
         

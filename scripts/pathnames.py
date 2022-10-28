@@ -22,4 +22,5 @@ paths = {'simulation': os.path.join(path0, 'simulation'),
          'processed': os.path.join(path0, 'processed'),
          'forcing': os.path.join(path0, 'forcing'),
          'figures': os.path.join(path0, 'figures'),
-         'cores': os.path.join(path0, 'cores')}
+         'cores': os.path.join(path0, 'cores'),
+         'ancillary': os.path.join(path0, 'ancillary')}

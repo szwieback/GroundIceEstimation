@@ -39,7 +39,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
     fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
     path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
     wavelength, thresh = 0.055, 4.3e-3
-    upscale = 16
+    upscale = 32
 
     cmap = cmap_e
     elim = (0.0, 0.5)
@@ -108,13 +108,16 @@ def icecut_map_profiles(fnout=None, overwrite=True):
     rc = pi._rowcol_endpoints
     label = f'T1'
     add_arrow_line(
-        ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(85, 210))
+        ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(170, 420), 
+        hwidth=140, hlength=180)
     _xy_site = geospatial.upscaled(upscale).rowcol(site)[:, 0]
     ax.plot(
         _xy_site[1], _xy_site[0], c=colslist[0], linestyle='none',
         marker='o', ms=5, mfc='none')
-    ax.text(_xy_site[1] - 160, _xy_site[0] + 250, 'IC', c=colslist[0])
-    add_scalebar(ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.2)
+    ax.text(_xy_site[1] - 320, _xy_site[0] + 500, 'IC', c=colslist[0])
+    add_scalebar(
+        ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.2)
+    ax.text(0.01, -0.09, 'Planet Labs', ha='left', va='top', transform=ax.transAxes)
 
     xticks = [0, 250, 500, 750, 1000]
     yticks = (0.00, 0.25, 0.50)

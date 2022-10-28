@@ -16,11 +16,11 @@ from forcing import load_forcing_merra_subset, parse_dates
 
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
-    'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
-    'soil': {'high_horizon': 0.25, 'low_horizon': 0.10, 'organic_above': 0.1,
-             'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
-    'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0}}
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
+    'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+             'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
+    'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
 
 def kivalina_forcing(folder_forcing, year=2019):
     df = load_forcing_merra_subset(folder_forcing)
