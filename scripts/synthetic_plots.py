@@ -113,10 +113,10 @@ def plot_examples(show_quantile=False):
     simname = 'spline_plot_sagwon'
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
-    #0, 12
-    instances = (Instance(0, 2), Instance(1, 12) , Instance(0, 42))  # (0, 13) (0, 18)
-    ymax = 65
-    slim = (11, -1)
+    instances = (Instance(0, 54), Instance(1, 52), Instance(0, 95))
+
+    ymax = 60
+    slim = (10.1, -1.2)
     sticks = [0, 3, 6, 9]
 
     d0, d1 = '2019-05-11', '2019-09-18'
@@ -142,6 +142,48 @@ def plot_examples(show_quantile=False):
         labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
 
     plt.savefig(os.path.join(paths['figures'], 'synthetic_examples_sagwon.pdf'))
+
+def plot_examples_exploratory(show_quantile=False):
+    from collections import namedtuple
+    from forcing import parse_dates
+    import matplotlib.lines as mlines
+    import datetime
+    simname = 'spline_plot_sagwon'
+    pathsim = os.path.join(paths['simulation'], simname)
+    Instance = namedtuple('instance', ['replicate', 'jsim'])
+    k = 90
+    # instances = (Instance(0, k), Instance(0, k+1) , Instance(0, k+2), 
+    #              Instance(0, k+3), Instance(0, k+4), Instance(0, k+5))  
+    instances = (Instance(0, 3), Instance(0, 34) , Instance(0, 51), 
+                 Instance(0, 52), Instance(0, 54), Instance(0, 95))  
+#0, 3; #0, 34, 51, 52; 54
+    ymax = 65
+    slim = (11, -1)
+    sticks = [0, 3, 6, 9]
+
+    d0, d1 = '2019-05-11', '2019-09-18'
+    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
+    _days = np.arange((d1_ - d0_).days)
+    days = np.array([d0_ + datetime.timedelta(days=int(d)) for d in _days])
+    fig, axs = prepare_figure(
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(2.10, 0.7),
+        top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
+        hspace=0.35)
+    for jinstance, instance in enumerate(instances):
+        invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
+        sie = invsim.results(pathsim, replicates=(instance.replicate,))
+        _plot_example(
+            axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,
+            show_quantile=show_quantile, ymax=ymax, show_ylabels=(jinstance == 0),
+            slim=slim, sticks=sticks)
+    handles = [
+        mlines.Line2D([], [], color=col, lw=1) for col in (cols['true'], cols['est'])]
+    axs[0, 0].legend(
+        handles, ('truth', 'estimate'), loc=3, frameon=False, ncol=1,
+        borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6,
+        labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
+
+    plt.show()
 
 def plot_metrics(ymax=0.8, suffix=''):
     from string import ascii_lowercase
@@ -189,10 +231,10 @@ def plot_metrics(ymax=0.8, suffix=''):
     axs[1].plot(sharpness_p, metrics['ygrid'], lw=lwscen['prior'],
         c=colscen['prior'], alpha=alphascen['prior'])
     axs[0].text(
-        1.03, 0.29, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
+        1.09, 0.16, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
         transform=axs[0].transAxes, va='center', ha='right')
-    axs[0].set_xlim(0.00, 0.20)
-    axs[1].set_xlim(0.00, 0.31)  # 0.25
+    axs[0].set_xlim(0.00, 0.21)
+    axs[1].set_xlim(0.00, 0.32)  # 0.25
     axs[2].set_xlim(55, 95)
     axs[2].set_xticks((60, 80))
     axs[0].set_ylim(ymax, 0)
@@ -287,7 +329,9 @@ def plot_metrics_indrange(suffix=''):
 
 if __name__ == '__main__':
     plot_examples(show_quantile=True)
-    # for Nbatch in (1, 10):
+    # plot_examples_exploratory(show_quantile=False)
+
+    # for Nbatch in (1, 10,):
     #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
-        
+

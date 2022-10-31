@@ -156,15 +156,15 @@ if __name__ == '__main__':
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
     Nbatch_list = [1, 10]
-    for Nbatch in Nbatch_list:
-        for accn in multipliers:
-            for scenarion in ['spline']:
-                # toolik_simulation(
-                #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
-                #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
-                sagwon_simulation(
-                    f'{scenarion}_{accn}_{Nbatch}_sagwon', N=N, Nsim=Nsim, Nbatch=Nbatch, 
-                    replicates=replicates, C_obs_multiplier=multipliers[accn])
+    # for Nbatch in Nbatch_list:
+    #     for accn in multipliers:
+    #         for scenarion in ['spline']:
+    #             # toolik_simulation(
+    #             #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
+    #             #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
+    #             sagwon_simulation(
+    #                 f'{scenarion}_{accn}_{Nbatch}_sagwon', N=N, Nsim=Nsim, Nbatch=Nbatch, 
+    #                 replicates=replicates, C_obs_multiplier=multipliers[accn])
 
-    sagwon_simulation('spline_plot_sagwon', Nsim=50, N=N, replicates=5, Nbatch=1)
+    sagwon_simulation('spline_plot_sagwon', Nsim=100, N=N, replicates=5, Nbatch=1)
     
