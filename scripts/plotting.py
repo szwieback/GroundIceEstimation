@@ -14,7 +14,6 @@ globfigparams = {
     'ticklength': 2.50, 'minorticklength': 1.1 }
 
 cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
-colslist = ['#324145', '#69818c', '#8c8169', '#aaaaaa']
 colslist = ['#2b2d47', '#8a698c', '#b29274', '#aaaaaa']
 cmap_e = cc.cm['bmy']
 

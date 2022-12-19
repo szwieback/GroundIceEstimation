@@ -12,7 +12,7 @@ from scripts.plotting import prepare_figure, colslist
 from analysis import load_object
 from analysis import InversionSimulator
 
-cols = {'true': colslist[0], 'est': colslist[2], 'unc': colslist[2]}
+cols = {'est': colslist[2], 'true': colslist[0], 'unc': colslist[2]}
 
 def _plot_example(
         axs, sie, days=None, jsim=0, replicate=0, show_quantile=True, smooth_quantile=2,
@@ -231,7 +231,7 @@ def plot_metrics(ymax=0.8, suffix=''):
     axs[1].plot(sharpness_p, metrics['ygrid'], lw=lwscen['prior'],
         c=colscen['prior'], alpha=alphascen['prior'])
     axs[0].text(
-        1.09, 0.16, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
+        1.10, 0.12, 'prior', rotation=270, color=colscen['prior'], alpha=alphascen['prior'],
         transform=axs[0].transAxes, va='center', ha='right')
     axs[0].set_xlim(0.00, 0.21)
     axs[1].set_xlim(0.00, 0.32)  # 0.25
@@ -331,7 +331,7 @@ if __name__ == '__main__':
     plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
 
-    # for Nbatch in (1, 10,):
-    #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
+    for Nbatch in (1, 10,):
+        plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
 

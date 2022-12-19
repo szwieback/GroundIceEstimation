@@ -83,7 +83,7 @@ def InSAR_results(site, year, rmethod='hadamard', overwrite=False):
         siteres = load_object(fnsite)
     return siteres
 
-def plot_retrieval(ax, res_site_year, lw_q=0.3, ymax=0.60, xlim=(-0.01, 0.80)):
+def plot_retrieval(ax, res_site_year, lw_q=0.3, ymax=0.60, xlim=(-0.01, 0.80), c=None):
     from scripts.plotting import colslist
     from analysis import thaw_depth
     alpha = (res_site_year['frac_thawed']) ** 3
@@ -93,18 +93,19 @@ def plot_retrieval(ax, res_site_year, lw_q=0.3, ymax=0.60, xlim=(-0.01, 0.80)):
     td = thaw_depth(res_site_year['frac_thawed'], ygrid)
     print(td)
     ax.axhline(td, c='#cccccc', lw=0.2, alpha=0.5, zorder=1)
+    if c is None: c = colslist[1]
     for jdepth in np.arange(ygrid.shape[0] - 1):
         ax.plot(
             e_mean[jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=1.0,
-            c=colslist[0], alpha=alpha[jdepth])
+            c=c, alpha=alpha[jdepth])
         ax.plot(
             e_q[jdepth:jdepth + 2, 0], ygrid[jdepth:jdepth + 2], lw=lw_q,
-            c=colslist[0], alpha=alpha[jdepth])
+            c=c, alpha=alpha[jdepth])
         ax.plot(
             e_q[jdepth:jdepth + 2, 1], ygrid[jdepth:jdepth + 2], lw=lw_q,
-            c=colslist[0], alpha=alpha[jdepth])
+            c=c, alpha=alpha[jdepth])
     ax.fill_betweenx(
-        ygrid, e_q[:, 0], e_q[:, 1], edgecolor='none', facecolor=colslist[1],
+        ygrid, e_q[:, 0], e_q[:, 1], edgecolor='none', facecolor=c,
         alpha=0.10)
     ax.set_ylim((ymax, ygrid[0]))
     ax.set_xlim(xlim)
@@ -161,8 +162,8 @@ def plot_comparison(fnout=None, overwrite=False):
             transform=axs[jsite, 0].transAxes, c='k', rotation=90)
         for jyear, year in enumerate(years):
             print(year, site)
-            plot_core(axs[jsite, jyear], site, c=colslist[2])
-            plot_retrieval(axs[jsite, jyear], res[site][year])
+            plot_retrieval(axs[jsite, jyear], res[site][year], c=colslist[2])
+            plot_core(axs[jsite, jyear], site, c=colslist[0])
             plot_subsidence(axs[jsite, 2], res[site][year], c=colslist[jyear])
             axs[jsite, jyear].text(
                 -0.29, 0.50, 'depth $y$ [cm]', ha='right', va='center',
@@ -195,9 +196,9 @@ def plot_comparison(fnout=None, overwrite=False):
     axs[0, 2].text(
         xyearlab, 0.06, '2019', ha='left', transform=axs[0, 2].transAxes, c=colslist[1])
     axs[0, 0].text(
-        0.30, 0.80, 'InSAR', ha='left', transform=axs[0, 0].transAxes, c=colslist[0])
+        0.30, 0.80, 'InSAR', ha='left', transform=axs[0, 0].transAxes, c=colslist[2])
     axs[0, 0].text(
-        0.30, 0.34, 'cores', ha='left', transform=axs[0, 0].transAxes, c=colslist[2])
+        0.30, 0.34, 'cores', ha='left', transform=axs[0, 0].transAxes, c=colslist[0])
     axs[0, 0].text(
         0.80, 0.28, '$y_f$', ha='left', transform=axs[0, 0].transAxes, c='#cccccc')
     doy_ticks = (152, 182, 213, 244)
@@ -225,18 +226,19 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     fnout = os.path.join(paths['figures'], f'northslope_comparison.pdf')
     # plot_comparison(fnout=fnout, overwrite=False)
+    # raise
     from forcing import parse_dates
+    # hv calm: 2019-08-12: 0.46
     dates = {
-        'happyvalley': {2022: ('2022-06-06', '2022-08-17')},
+        'happyvalley': {2022: ('2022-06-06', '2022-08-17'), 2019: ('2019-05-18', '2019-09-06')},
         'icecut': {2022: ('2022-05-24', '2022-08-15'), 2019: ('2019-05-11', '2019-08-25')}}
-    # dates = {
-    #     'happyvalley': {2022: ('2022-06-06', '2022-08-16')},
-    #     'icecut': {2022: ('2022-05-24', '2022-09-15'), 2019: ('2019-05-11', '2019-09-15')}}
+    '2019-08-12'
 
-    site = 'icecut'
-    year = 2022
+    site = 'happyvalley'
+    year = 2019
     d0, do = parse_dates(dates[site][year], strp='%Y-%m-%d')
     ind = (do - d0).days
+    print(do)
     print(comparison_thaw_depth(site=site, year=year, ind=ind))
     
     # from forcing import read_daily_noaa_forcing
