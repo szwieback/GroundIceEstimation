@@ -134,10 +134,12 @@ class InversionProcessor():
         return self.predens.ygrid
 
 class InversionResults():
-    def __init__(self, predens, lw, geospatial=None):
+    blocksize_default = 1024
+    def __init__(self, predens, lw, geospatial=None, blocksize=None):
         self.predens = predens
         self.lw = lw
         self.geospatial = geospatial
+        self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
 
     @property
     def depth(self):
@@ -184,17 +186,21 @@ class InversionResults():
         postquant = self._parallel(_quantile, n_jobs=n_jobs)
         return postquant
 
-    def _lw_generator(self):
-        for _lw in self.lw:
-            yield _lw[np.newaxis, ...]
+    def _lw_generator(self, block_size=None):
+        if block_size is None:
+            block_size = self.blocksize
+        for _lw in np.array_split(self.lw, block_size, axis=0): # not tested
+            yield _lw
+        # for _lw in self.lw:
+        #     yield _lw[np.newaxis, ...]
 
-    def _parallel(self, fun, n_jobs=-1):
+    def _parallel(self, fun, n_jobs=-1, block_size=None):
         if n_jobs in (0, 1, None):
             return fun(self.lw)
         else:
             from joblib import Parallel, delayed
             res = np.concatenate(
-                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator()),
+                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator(block_size)),
                 axis=0)
             return res
 

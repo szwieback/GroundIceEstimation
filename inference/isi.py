@@ -60,7 +60,7 @@ def psislw(lw, Reff=1.0):
             np.logical_or(k < k_min, np.logical_not(np.isfinite(k))))
         sti = np.arange(0.5, N_large) / N_large
         qq = np.log(gpinv(sti, k, sigma) + expcutoff[:, np.newaxis])
-        qq[ind_nonsmooth_m[0], :] = lw_out_large[ind_nonsmooth_m[0], :]
+        qq[ind_nonsmooth_m[0],:] = lw_out_large[ind_nonsmooth_m[0],:]
         lw_out[(np.arange(M)[:, np.newaxis], ind_sort[:, cutoff_ind:])] = qq
         lw_out[lw_out > 0] = 0
     lw_out -= sumlogs(lw_out, axis=1)[:, np.newaxis]
@@ -71,10 +71,10 @@ def gpdfit(w):
     N = w.shape[1]
     prior = 3
     G = 30 + int(np.sqrt(N))
-    b = (1 - np.sqrt(G / (np.arange(1, G + 1, dtype=float) - 0.5)))[np.newaxis, :]
+    b = (1 - np.sqrt(G / (np.arange(1, G + 1, dtype=float) - 0.5)))[np.newaxis,:]
     bs = (b / (prior * w[:, int(N / 4 + 0.5) - 1][:, np.newaxis]))
     bs += 1 / w[:, -1][:, np.newaxis]
-    ks = np.mean(np.log1p(-bs[:, np.newaxis, :] * w[..., np.newaxis]), axis=1)
+    ks = np.mean(np.log1p(-bs[:, np.newaxis,:] * w[..., np.newaxis]), axis=1)
     L = N * (np.log(-bs / ks) - ks - 1)
     wsum = np.empty_like(L)
     for jG in range(G):
@@ -98,9 +98,9 @@ def gpinv(p, k, sigma):
     assert p.ndim == 1
     assert k.ndim == 1
     assert k.shape == sigma.shape
-    x = (sigma[:, np.newaxis] * np.expm1(-k[:, np.newaxis] * np.log1p(-p[np.newaxis, :]))
+    x = (sigma[:, np.newaxis] * np.expm1(-k[:, np.newaxis] * np.log1p(-p[np.newaxis,:]))
          / k[:, np.newaxis])
-    x2 = -sigma[:, np.newaxis] * np.log1p(-p[np.newaxis, :])
+    x2 = -sigma[:, np.newaxis] * np.log1p(-p[np.newaxis,:])
     x = np.where((np.abs(k) < 10 * np.finfo(float).eps)[:, np.newaxis], x2, x)
     return x
 
@@ -125,7 +125,7 @@ def _sqr_eigen(C , invert=False, cond_thresh=1e-6):
     maxlamabs = np.max(np.abs(lam), axis=1)
     minlam = np.min(lam, axis=1)
     ind_invalid = minlam < -maxlamabs * cond_thresh
-    lam[ind_invalid, :] = 1
+    lam[ind_invalid,:] = 1
     ind_singular = np.logical_and(lam < maxlamabs[:, np.newaxis] * cond_thresh,
                                   lam >= -maxlamabs[:, np.newaxis] * cond_thresh)
     lam[ind_singular] = 1
@@ -176,18 +176,18 @@ def lw_mvnormal(y_obs, C_obs, y_ref, cond_thresh=1e-6, normalize=False):
     assert C_obs.shape == (M, P, P)
     assert y_ref.shape[1] == P
     lam_isqr, U, ind = _sqr_eigen(C_obs, cond_thresh=cond_thresh, invert=True)
-    C_obs_isqrT = U * lam_isqr[:, np.newaxis, :]
+    C_obs_isqrT = U * lam_isqr[:, np.newaxis,:]
     logdetfac, normfac = _nondata_terms_mvnormal(lam_isqr, ind_singular=ind['singular'])
 
     lw = np.zeros((M, N)) + logdetfac[:, np.newaxis] + normfac[:, np.newaxis]
 
     for n in np.arange(N):
-        prod = np.einsum('mqp, mq -> mp', C_obs_isqrT, y_obs - y_ref[n, :][np.newaxis, :])
+        prod = np.einsum('mqp, mq -> mp', C_obs_isqrT, y_obs - y_ref[n,:][np.newaxis,:])
         maha = -0.5 * np.sum(prod ** 2, axis=1)
         lw[:, n] += maha
 
     lw = _normalize(lw, normalize=normalize)
-    lw[ind['invalid'], :] = np.nan
+    lw[ind['invalid'],:] = np.nan
 
     return lw
 
@@ -242,7 +242,7 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
         for step in range(steps):
             vals_j = 0.5 * (vals_left_j + vals_right_j)
             indicator = np.ones(vals.shape, np.float64)
-            indicator[vals > vals_j[np.newaxis, :]] = 0.0
+            indicator[vals > vals_j[np.newaxis,:]] = 0.0
             indicator *= wj[:, np.newaxis]
             d = np.sum(indicator, axis=0) - q
             np.putmask(vals_right_j, d >= 0, vals_j)
@@ -250,39 +250,44 @@ def _quantile_bisection(vals, lw_, q=0.5, steps=8, normalize=False):
         vals_j = 0.5 * (vals_left_j + vals_right_j)
         qvals[jlw, ...] = vals_j
     return qvals.reshape(lw_.shape[:-1] + (qvals.shape[-1],))
-    
 
-def quantile(vals, lw, q, steps=8, method='bisection', normalize=True, smooth=None):
+def quantile(vals, lw, q, steps=7, method='bisection', normalize=True, smooth=None):
     # only works for lw: [1, samples]
     if isinstance(q, float):
         if len(lw.shape) == 1:
-            lw_ = lw[np.newaxis, :]
+            lw_ = lw[np.newaxis,:]
         else:
             lw_ = lw
-        if method == 'bisection':
+        if method == 'bisection_python':
             valq = _quantile_bisection(vals, lw_, q, steps=steps, normalize=normalize)
         elif method == 'grid':
             valq = _quantile_grid(vals, lw_, q, steps=steps, normalize=normalize)
+        elif method == 'bisection':
+            from inference import quantile_bisection
+            vals = vals.astype(np.float32, copy=False)
+            lw = _normalize(lw, normalize=normalize).astype(np.float32, copy=False)
+            valq = quantile_bisection(vals, lw, q, steps)
         else:
             raise ValueError(f'Method {method} not known')
         if smooth is not None and smooth > 0:
             from scipy.ndimage import gaussian_filter1d
             valq = gaussian_filter1d(valq, smooth, axis=-1, mode='nearest')
         if len(lw.shape) == 1:
-            valq = valq[0, :]
+            valq = valq[0,:]
         return valq
     else:
         def _quantile(q_):
             valq = quantile(
-                vals, lw, q_, method=method, steps=steps, normalize=normalize, 
+                vals, lw, q_, method=method, steps=steps, normalize=normalize,
                 smooth=smooth)
             return valq
         valql = np.stack(
             [_quantile(q_) for q_ in q], axis=-1)
-        
+
         return valql
 
 def ensemble_quantile(vals, lw, vals_reference, n_jobs=1):
+    # quantile of vals_reference with respect to vals and lw
     # may need to generalize broadcasting otherwise
     assert len(vals.shape) == 2
     assert len(vals_reference.shape) == 2
@@ -290,7 +295,7 @@ def ensemble_quantile(vals, lw, vals_reference, n_jobs=1):
     from joblib import Parallel, delayed
     w_ = np.exp(_normalize(lw, normalize=True))
     def _quantile(jy):
-        ind = vals[:, jy][np.newaxis, :] < vals_reference[:, jy][:, np.newaxis]
+        ind = vals[:, jy][np.newaxis,:] < vals_reference[:, jy][:, np.newaxis]
         return np.sum(w_, axis=-1, where=ind)
     q = np.stack(
         Parallel(n_jobs=n_jobs)(
@@ -299,5 +304,29 @@ def ensemble_quantile(vals, lw, vals_reference, n_jobs=1):
     return q
 
 if __name__ == '__main__':
-    pass
+    # y_obs: (M replicates, P observations over time, )
+    # y_ref: (N samples, P_observations over time, )
+    # returns log weights (M, N); default: not normalized
+    M = 128
+    P = 10
+    N = 10000
+    R = 100
+    q = 0.9
+    rng = np.random.default_rng(seed=1)
+    y_obs = rng.standard_normal((M, P))
+    x_obs = rng.standard_normal((N, R))
+    y_ref = rng.standard_normal((N, P))
+    C_obs = np.broadcast_to(np.eye(P), (M, P, P))
+    lw = lw_mvnormal(y_obs, C_obs, y_ref, normalize=True)
+    print(lw.shape, x_obs.shape)
+    import time
+    from inference import quantile_bisection
+    tic = time.perf_counter()
+    xq = quantile(x_obs, lw, q, method='bisection', normalize=False, steps=7)
+    print(f"{time.perf_counter() - tic:0.4f} seconds")
 
+    tic = time.perf_counter()
+    xqo = quantile(x_obs, lw, q, method='bisection_python', normalize=False, steps=7)
+    print(f"{time.perf_counter() - tic:0.4f} seconds")
+
+    print((xq - xqo))
