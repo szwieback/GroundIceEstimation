@@ -51,6 +51,16 @@ class Geospatial():
         r, c = rc[0, :], rc[1, :]
         return np.array(rasterio.transform.AffineTransformer(self.transform).xy(r, c))
 
+    def xy_raster(self):
+        from affine import Affine
+        assert isinstance(self.transform, Affine)
+        sa, sb, sc, sd, se, sf, _, _, _ = self.transform
+        r, c = np.meshgrid(range(self.shape[0]), range(self.shape[1]), indexing='ij')
+        x = r * sa + c * sb + sc
+        y = r * sd + c * se + sf
+        xy = np.stack((x, y), axis=-1)
+        return xy
+
     def __eq__(self, obj):
         if not isinstance(obj, Geospatial):
             return False
