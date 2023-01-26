@@ -55,13 +55,13 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric, read_referenced_motion, InversionProcessor,
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
         InversionResults)
 
     fnunw = os.path.join(path0, 'unwrapped.geo.tif')
     fnK = os.path.join(path0, 'K_vec.geo.tif')
     K, geospatial_K = read_K(fnK)
-    K = add_atmospheric(K, var_atmo)
+    K = add_atmospheric_K(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
     from analysis.ioput import save_geotiff

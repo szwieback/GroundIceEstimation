@@ -9,8 +9,8 @@ from analysis import Geospatial, save_geotiff, save_object, load_object, Inversi
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
     from scipy.ndimage import binary_dilation, binary_opening, binary_closing
-    from analysis import add_atmospheric
-    K = add_atmospheric(K, 0.0, wavelength=wavelength)
+    from analysis import add_atmospheric_K
+    K = add_atmospheric_K(K, 0.0, wavelength=wavelength)
     K_last = K[ind1, ind1, ...] + K[ind2, ind2, ...] - 2 * K[ind1, ind2, ...]
     K_last_crop, _ = geospatial.warp(K_last, geospatial_K)
     s1 = np.array(

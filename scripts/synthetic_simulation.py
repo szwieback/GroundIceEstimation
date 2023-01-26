@@ -85,12 +85,12 @@ def sagwon_forcing(fnforcing):
     return dailytemp, ind_scenes
 
 def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multiplier=1.0):
-    from analysis import read_K, add_atmospheric
+    from analysis import read_K, add_atmospheric_K
 
     if site is None: site = np.array((-148.8317, 69.0414))[:, np.newaxis]
 
     K, geospatial_K = read_K(fnK)
-    K = add_atmospheric(K, var_atmo, wavelength=wavelength)
+    K = add_atmospheric_K(K, var_atmo, wavelength=wavelength)
     
     _rc_site = geospatial_K.rowcol(site)[:, 0]
     C_obs0 = K[..., _rc_site[0], _rc_site[1]]

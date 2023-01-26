@@ -54,7 +54,7 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric, read_referenced_motion, InversionProcessor,
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
         InversionResults)
 
     fnunw = os.path.join(path0, 'unwrapped.geo.tif')
@@ -67,7 +67,7 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     if year in (2019, 2022): # remove first acq because still a lot of snow
         K = K[1:, 1:, ...]
         s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
-    K = add_atmospheric(K, var_atmo)
+    K = add_atmospheric_K(K, var_atmo)
     assert geospatial == geospatial_K
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)

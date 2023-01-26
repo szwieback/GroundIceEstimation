@@ -4,7 +4,7 @@ Created on Oct 5, 2022
 @author: simon
 '''
 import numpy as np
-from analysis import read_referenced_motion, save_geotiff, read_K, add_atmospheric
+from analysis import read_referenced_motion, save_geotiff, read_K, add_atmospheric_K
 # improve phase ref
 # export displacement
 # test masking
@@ -25,7 +25,7 @@ s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
 
 ind1, ind2 = 1, -1
 K, geospatial_K = read_K(fnK)
-K = add_atmospheric(K, 0.0, wavelength=wavelength)
+K = add_atmospheric_K(K, 0.0, wavelength=wavelength)
 K_last = K[ind1, ind1, ...] + K[ind2, ind2, ...] - 2 * K[ind1, ind2, ...]
 # K_last_crop, _ = geospatial.warp(K_last, geospatial_K)
 save_geotiff(s_obs, geospatial, '/home/simon/Work/gie/processed/Dalton_131_363/s_obs.tif')

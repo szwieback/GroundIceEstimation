@@ -8,7 +8,7 @@ import os
 import datetime
 
 from scripts.happyvalley_analysis import read_results
-from analysis import (read_K, add_atmospheric, read_referenced_motion)
+from analysis import (read_K, add_atmospheric_K, read_referenced_motion)
 from ioput import save_object, load_object
 
 fngpkg = '/home/simon/Work/gie/processed/Dalton_131_363/2019_unw_offset.gpkg'
@@ -54,7 +54,7 @@ def InSAR_results(site, year, rmethod='hadamard', overwrite=False):
         dates = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[site][year]]
         doys = [d.timetuple().tm_yday for d in dates]
         K, geospatial_K = read_K(fnK)
-        K = add_atmospheric(K, var_atmo)
+        K = add_atmospheric_K(K, var_atmo)
         s_obs, geospatial = read_referenced_motion(
             fnunw, xy=xy_ref[site], wavelength=wavelength,
             fns_unw_offset=fns_unw_offset[site][year])
