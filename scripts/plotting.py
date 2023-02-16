@@ -11,10 +11,10 @@ globfigparams = {
     'preamble': r'\usepackage{amsmath} \usepackage{times} \usepackage{mathtools}',
     'column_inch':229.8775 / 72.27, 'markersize':24, 'markercolour':'#AA00AA',
     'fontcolour':'#666666', 'tickdirection':'out', 'linewidth': 0.5,
-    'ticklength': 2.50, 'minorticklength': 1.1 }
+    'ticklength': 2.50, 'minorticklength': 1.1}
 
 cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
-colslist = ['#2b2d47', '#8a698c', '#b29274', '#aaaaaa']
+colslist = ['#2b2d47', '#8a698c', '#b29274', '#aaaaaa', '#6f5a48']
 cmap_e = cc.cm['bmy']
 
 def initialize_matplotlib():

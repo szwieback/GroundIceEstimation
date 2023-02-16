@@ -172,6 +172,15 @@ def assemble_tril(G_vec):
     G[(slice(None),) * (len(G_vec.shape) - 1) + (ind[1], ind[0])] += G_vec.conj()
     return G
 
+def vectorize_tril(G):
+    # ..., P, P to ..., P * (P + 1) / 2
+    P = G.shape[-1]
+    assert G.shape[-2] == P
+    ind = np.tril_indices(P)
+    ind_ = (slice(None),) * (len(G.shape) - 2) + ind
+    G_vec = G[ind_]
+    return G_vec
+
 def read_referenced_motion(
         fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)

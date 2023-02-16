@@ -123,11 +123,9 @@ def plot_subsidence(ax, res_site_year, c='#000000'):
 
 def plot_core(ax, site, c='#000000'):
     from scripts.pathnames import paths
-    from scripts.core_analysis import read_site, bootstrap_percentiles
-    fns = {
-        'icecut': 'FSA_Dalton_IC_2022_20220826.xlsx',
-        'happyvalley': 'FSA_Dalton_HV_2022_20220826.xlsx'}
-    fns_abs = os.path.join(paths['cores'], fns[site])
+    from scripts.core_analysis import read_site, bootstrap_percentiles, fns
+    site_abbr = {'happyvalley': 'HV', 'icecut': 'IC'}
+    fns_abs = os.path.join(paths['cores'], fns[site_abbr[site]])
     y_grid_core = np.arange(150) / 100  # hard-coded for now
 
     e_grid = read_site(fns_abs)
@@ -200,7 +198,7 @@ def plot_comparison(fnout=None, overwrite=False):
     axs[0, 0].text(
         0.30, 0.34, 'cores', ha='left', transform=axs[0, 0].transAxes, c=colslist[0])
     axs[0, 0].text(
-        0.80, 0.28, '$y_f$', ha='left', transform=axs[0, 0].transAxes, c='#cccccc')
+        0.80, 0.28, '$y_\\mathrm{f}$', ha='left', transform=axs[0, 0].transAxes, c='#cccccc')
     doy_ticks = (152, 182, 213, 244)
     axs[1, 2].set_xticks(doy_ticks)
     axs[1, 2].set_xticklabels(('Jun', 'Jul', 'Aug', 'Sep'))
@@ -225,8 +223,8 @@ def comparison_thaw_depth(site='happyvalley', year=2022, ind=-1):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     fnout = os.path.join(paths['figures'], f'northslope_comparison.pdf')
-    # plot_comparison(fnout=fnout, overwrite=False)
-    # raise
+    plot_comparison(fnout=fnout, overwrite=False)
+    raise
     from forcing import parse_dates
     # hv calm: 2019-08-12: 0.46
     dates = {

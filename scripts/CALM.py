@@ -28,11 +28,11 @@ def read_CALM_csv(fn, sep=';'):
                 datadict[entries[0]] = np.array([float(x) for x in entries[1:]])
     return datadict
 
-def plot_CALM_HV(fn_hv, year_min=None, xticks=None):
+def plot_CALM_HV(fn_hv, year_min=None, xticks=None, fnout=None):
     from plotting import prepare_figure, colslist
     import matplotlib.pyplot as plt
     fig, ax = prepare_figure(
-        nrows=1, ncols=1, figsize=(1.8, 1.0), figsizeunit='in', bottom=0.20, left=0.16)
+        figsize=(2.1, 1.3), figsizeunit='in', bottom=0.23, left=0.18, right=0.98, top=0.96)
     datadict = read_CALM_csv(fn_hv)
     if year_min is None: year_min = min(datadict['year'])
     years, means = (datadict[k][datadict['year'] >= year_min] for k in ('year', 'mean'))
@@ -52,12 +52,17 @@ def plot_CALM_HV(fn_hv, year_min=None, xticks=None):
         ax.set_xticks(xticks)
     ax.set_ylim(ylim)
     ax.text(
-        -0.14, 0.50, 'thaw depth [cm]', va='center', ha='right', transform=ax.transAxes, rotation=90)
-    plt.show()
+        -0.16, 0.50, 'thaw depth [cm]', va='center', ha='right', transform=ax.transAxes, rotation=90)
+    ax.text(0.50, -0.29, 'year', ha='center', va='baseline', transform=ax.transAxes)    
+    if fnout is not None:
+        fig.savefig(fnout)
+    else:
+        plt.show()
 
 if __name__ == '__main__':
     from pathnames import paths
     import os
     fn_hv = os.path.join(paths['ancillary'], 'CALM', 'U9b_alt_2007_2022.csv')
-    plot_CALM_HV(fn_hv, year_min=2013, xticks=[2013, 2016, 2019, 2022])
+    fnout = os.path.join(paths['figures'], 'CALM.pdf')
+    plot_CALM_HV(fn_hv, year_min=2013, xticks=[2013, 2016, 2019, 2022], fnout=fnout)
 

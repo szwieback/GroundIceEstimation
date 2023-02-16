@@ -165,7 +165,7 @@ def plot_kivalina(fnout=None, overwrite=False):
         axs[1][2], e_mean, geospatial, profiles[1], im_frac=frac_thawed, ymax=ymax,
          vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[1])
     axs[1][1].text(
-        0.48, 0.08, '$y_f$', c='#ffffff', transform=axs[1][1].transAxes, alpha=0.6)
+        0.48, 0.08, '$y_\\mathrm{f}$', c='#ffffff', transform=axs[1][1].transAxes, alpha=0.6)
 
     bbox_r = axs[1][0].get_position()
     for ax in (axs[1][1], axs[1][2]):
