@@ -78,6 +78,11 @@ class Geospatial():
         strlist = (
             f"Transform: {self.transform}", f"CRS: {self.crs}", f"Shape: {self.shape}")
         return '\n'.join(strlist)
+    
+    def __repr__(self):
+        strlist = (
+            f"Transform: {repr(self.transform)}", f"CRS: {repr(self.crs)}", f"Shape: {self.shape}")
+        return '\n'.join(strlist)    
 
     def _rc_bbox(self, ll, ur):
         rc_ll = self.rowcol(np.array(ll)[:, np.newaxis])[:, 0]

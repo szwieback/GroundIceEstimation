@@ -145,9 +145,9 @@ def sagwon_simulation(
     invsim.logweights(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
     invsim.export_metrics(pathout, param='e', prior=True)
-    # indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
-    # invsim.export_metrics(pathout, param='e', indranges=indranges)
-    # invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
+    indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
+    invsim.export_metrics(pathout, param='e', indranges=indranges)
+    invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
 
 
 if __name__ == '__main__':

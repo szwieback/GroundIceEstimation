@@ -248,8 +248,6 @@ class InversionSimulator():
                 except:
                     pass
 
-
-
 class SimInvEnsemble():
 
     def __init__(self, invsim, lw, simobs=None):
