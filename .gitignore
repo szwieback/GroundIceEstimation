@@ -96,6 +96,7 @@ ENV/
 # PyDev
 .project
 .pydevproject
+.settings/
 
 # python path script
 .pythonpath
