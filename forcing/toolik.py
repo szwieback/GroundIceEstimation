@@ -18,6 +18,8 @@ def read_toolik_forcing(fn, year=2019):
         dtp = dtp + pd.Timedelta(1, 'h')
         return dtp
 
-    df = pd.read_csv(fn, parse_dates={'datetime': ['date', 'hour']}, date_parser=dp)
+    df = pd.read_csv(
+        fn, parse_dates={'datetime': ['date', 'hour']}, date_format={'date': '%Y-%m-%d', 'time': '%H%M'})
     df = df.set_index('datetime')
+    
     return df
