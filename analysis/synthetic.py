@@ -110,7 +110,7 @@ class InversionSimulator():
 
     def prescribed_mean_period(self, indranges, param='e'):
         ref = self.prescribed(param)
-        yf = self.predens_sim.results['yf']
+        yf = self.prescribed('yf')
         ref_mean = self._mean_period(ref, indranges, yf)
         return ref_mean
 
@@ -319,7 +319,7 @@ class SimInvEnsemble():
         return frac_thawed
 
     def predicted_mean_period(self, indranges, param='e'):
-        p = self.predictions(param=param)
+        p = self.predictions(param)
         yf = self.predictions('yf')
         p_mean = self._mean_period(p, indranges, yf)
         return p_mean
@@ -340,7 +340,7 @@ class SimInvEnsemble():
 
     def prescribed_mean_period(self, indranges, param='e'):
         ref = self.prescribed(param)
-        yf = self.predictions('yf')
+        yf = self.prescribed('yf')
         ref_mean = self._mean_period(ref, indranges, yf)
         return ref_mean
 
