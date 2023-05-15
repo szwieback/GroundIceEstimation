@@ -300,12 +300,12 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
         mec=colslist[0], mfc=colslist[0], zorder=9)
 
     
-    for jp, profile in enumerate(profiles):
-        pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
-        rc = pi._rowcol_endpoints
-        label = f'T{jp + 1}'
-        add_arrow_line(
-            ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(95, -15))
+    # for jp, profile in enumerate(profiles):
+    #     pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
+    #     rc = pi._rowcol_endpoints
+    #     label = f'T{jp + 1}'
+    #     add_arrow_line(
+    #         ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(95, -15))
     ax.set_xticks(np.array(xticks_im) * upscale)
     ax.set_yticks(np.array(yticks_im) * upscale)
     ax.set_xticklabels([])
