@@ -256,6 +256,8 @@ def quantile(vals, lw, q, steps=7, method='bisection', normalize=True, smooth=No
     if isinstance(q, float):
         if len(lw.shape) == 1:
             lw_ = lw[np.newaxis,:]
+        elif len(lw.shape) > 2:
+            lw_ = lw.reshape((-1, lw.shape[-1]))
         else:
             lw_ = lw
         if method == 'bisection_python':
@@ -265,8 +267,8 @@ def quantile(vals, lw, q, steps=7, method='bisection', normalize=True, smooth=No
         elif method == 'bisection':
             from inference import quantile_bisection
             vals = vals.astype(np.float32, copy=False)
-            lw = _normalize(lw, normalize=normalize).astype(np.float32, copy=False)
-            valq = quantile_bisection(vals, lw, q, steps)
+            lw_ = _normalize(lw_, normalize=normalize).astype(np.float32, copy=False)
+            valq = quantile_bisection(vals, lw_, q, steps)
         else:
             raise ValueError(f'Method {method} not known')
         if smooth is not None and smooth > 0:
@@ -274,6 +276,8 @@ def quantile(vals, lw, q, steps=7, method='bisection', normalize=True, smooth=No
             valq = gaussian_filter1d(valq, smooth, axis=-1, mode='nearest')
         if len(lw.shape) == 1:
             valq = valq[0,:]
+        elif len(lw.shape) > 2:
+            valq = valq.reshape((lw_.shape[:-1] + (valq.shape[-1],)))
         return valq
     else:
         def _quantile(q_):

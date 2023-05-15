@@ -9,7 +9,7 @@ from libc.math cimport exp, abs
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.initializedcheck(False)
-cpdef quantile_bisection(float[:, :] vals, float[:, :] lw, float q, int steps):
+cpdef quantile_bisection(const float[:, :] vals, const float[:, :] lw, float q, int steps):
     # lw must be normalized and 2D
     cdef Py_ssize_t M = lw.shape[0]
     cdef Py_ssize_t N = lw.shape[1]
