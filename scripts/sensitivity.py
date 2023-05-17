@@ -19,62 +19,65 @@ def toolik_sensitivity(fnout):
     pathout = os.path.join(paths['simulation'], 'sensitivity')
 
     df = read_toolik_forcing(fnforcing)
-    d0, d1 = '2019-05-28', '2019-09-15'
+    d0, d1 = '2019-05-20', '2019-09-15'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     geom = {'ia': 0.0}
     e_sim = [0.05],  # [0.01, 0.1]
-    ind_dist = [75, 200]
+    ind_dist = [75, 225]
 
     results, profiles, meta = compute_sensitivity(e_sim, geom, dailytemp, ind_dist)
 
     plot_sensitivity(e_sim, results, d0_, meta, fnout=fnout)
 
-def sagwon_sensitivity(fnout):
-    from forcing import read_daily_noaa_forcing, parse_dates
-
+def sensitivity_scenario(fnout):
+    from scripts.synthetic_simulation import sagwon_covariance, sagwon_forcing
+    from scripts.kivalina import kivalina_forcing
     fnforcing = os.path.join(paths['forcing'], 'sagwon', 'sagwon.csv')
-    pathout = os.path.join(paths['simulation'], 'sensitivity')
-
-    df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0, d1 = '2019-05-18', '2019-09-17'
-    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
-    dailytemp[dailytemp < 0] = 0
-    geom = {'ia': 0.0}
+    dailytemp, ind_scenes = sagwon_forcing(fnforcing)
+    # dailytemp, ind_scenes = kivalina_forcing(os.path.join(paths['forcing'], 'kivalina'))
+    d0_ = dailytemp.index[0]
+    
+    geom = {'ia': 40 * np.pi / 180}
     e_sim = [0.05],  # [0.01, 0.1]
     ind_dist = [75, 200]
-
-    results, profiles, meta = compute_sensitivity(e_sim, geom, dailytemp, ind_dist)
+    de, hind = 0.45, 25 #0.55, 15
+    results, meta = compute_sensitivity(e_sim, geom, dailytemp, ind_dist, de=de, hind=hind)
 
     plot_sensitivity(e_sim, results, d0_, meta, fnout=fnout)
 
-def compute_sensitivity(e_sim, geom, dailytemp, ind_dist, hind=20):
+def compute_sensitivity(e_sim, geom, dailytemp, ind_dist, de=0.3, hind=20):
     predictor = StefanPredictor()
     results = {}
-    profiles = {}
+    predens_simulation = []
     strat_sim = StefanStratigraphyPrescribedConstantE(N=len(e_sim))
     strat_sim.draw_stratigraphy()
-    strat_sim.stratigraphy['e'][:,:] = np.array(e_sim)[:, np.newaxis]
+    e = strat_sim.stratigraphy['e']
+    e[:,:] = np.array(e_sim)[:, np.newaxis]
+    strat_sim.replace_e(e)
     predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
     predens_sim.predict(dailytemp)
     results['baseline'] = predens_sim.results
-    profiles['baseline'] = strat_sim.stratigraphy['e']
+    predens_simulation.append(predens_sim)
     ygrid = strat_sim._ygrid
 
-    results['sensitivity'], profiles['sensitivity'] = [], []
+    results['sensitivity']= []
     y_dist = [ygrid[ind] for ind in ind_dist]
 
     for ind in ind_dist:
         strat_sim_sens = copy.deepcopy(strat_sim)
-        strat_sim_sens.stratigraphy['e'][:, ind - hind:ind + hind] += 0.1
+        e = strat_sim_sens.stratigraphy['e']
+        e[:, ind - hind:ind + hind] += de
+        strat_sim_sens.replace_e(e)
         predens_sim_sens = PredictionEnsemble(strat_sim_sens, predictor, geom=geom)
         predens_sim_sens.predict(dailytemp)
         results['sensitivity'].append(predens_sim_sens.results)
-        profiles['sensitivity'].append(strat_sim_sens.stratigraphy['e'])
-    meta = {'y_dist': y_dist, 'ind_dist': ind_dist, 'ygrid': ygrid, 'hind': hind}
-    return results, profiles, meta
+        predens_simulation.append(predens_sim_sens)
+    meta = {
+        'y_dist': y_dist, 'ind_dist': ind_dist, 'ygrid': ygrid, 'hind': hind, 
+        'predens_sim': predens_simulation}
+    return results, meta
 
 def plot_sensitivity(e_sim, results, d0_, meta, fnout=None):
     import matplotlib.pyplot as plt
@@ -82,14 +85,14 @@ def plot_sensitivity(e_sim, results, d0_, meta, fnout=None):
     import datetime
     from scripts.plotting import prepare_figure, colslist
     from string import ascii_lowercase
-    ylims = [(0.04, 0.00), (0.6, 0.0), (0.05, -0.05)]
+    ylims = [(0.08, 0.00), (0.6, 0.0), (0.035, -0.035)]
 
-    yticks = [(0.00, 0.02, 0.04), (0.0, 0.3, 0.6), (-0.05, 0.00, 0.05)]
-    yticklabels = [(0, 2, 4), (0, 30, 60), (-5, 0, 5)]
+    yticks = [(0.00, 0.03, 0.06), (0.0, 0.3, 0.6), (-0.03, 0.00, 0.03)]
+    yticklabels = [(0, 3, 6), (0, 30, 60), (-3, 0, 3)]
     ylabels = ['$s(t)$ [cm]', '$y_f(t)$ [cm]', '$\\delta y_f(t)$ [cm]']
     fig, axs = prepare_figure(
-        ncols=len(e_sim), nrows=3, figsize=(0.7, 0.65), sharex='col', bottom=0.1,
-        left=0.17, right=0.98)
+        ncols=len(e_sim), nrows=3, figsize=(0.7, 0.65), sharex='col', bottom=0.09,
+        left=0.17, right=0.98, top=0.95)
     _days = np.arange(results['baseline']['s'].shape[1])
     days = [d0_ + datetime.timedelta(days=int(d)) for d in _days]
     print(meta['ygrid'][0:2])
@@ -114,6 +117,7 @@ def plot_sensitivity(e_sim, results, d0_, meta, fnout=None):
             axs[1].axhspan(
                 ygrid[ind - hind], ygrid[ind + hind], edgecolor='none', facecolor=c,
                 alpha=0.12)
+            axs[1].plot(days, results['sensitivity'][jdist]['yf'][nsim,:], c=c, lw=0.3)
             axs[2].plot(days, dyf, c=c, lw=lw)
 #             ds = (results['sensitivity'][jdist]['s'][nsim, :]
 #                   -results['baseline']['s'][nsim, :])
@@ -123,15 +127,16 @@ def plot_sensitivity(e_sim, results, d0_, meta, fnout=None):
         axs[1].plot(days, results['baseline']['yf'][nsim,:], c=c, lw=lw)
     axs[0].xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     axs[0].xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-    axs[0].set_xlim((days[0], days[-1]))
+    axs[0].set_xlim((days[0], days[-7]))
     axs[1].text(0.50, 0.02, 'baseline', transform=axs[1].transAxes)
-    axs[2].text(0.44, 0.99, 'shallow', transform=axs[2].transAxes, ha='right')
+    axs[2].text(0.47, 0.99, 'shallow', transform=axs[2].transAxes, ha='right')
     axs[2].text(0.99, 0.99, 'deep', transform=axs[2].transAxes, ha='right')
+    fig.text(0.5, 0.96, 'simulation', c='k', ha='center', va='baseline', transform=fig.transFigure)
     if fnout is not None:
         fig.savefig(fnout)
     else:
         plt.show()
 
 if __name__ == '__main__':
-    sagwon_sensitivity(os.path.join(paths['figures'], 'sensitivity.pdf'))
+    sensitivity_scenario(os.path.join(paths['figures'], 'sensitivity.pdf'))
 

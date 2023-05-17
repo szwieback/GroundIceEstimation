@@ -217,23 +217,30 @@ class StefanStratigraphy(Stratigraphy):
 
     def _override_stratigraphy(self):
         self.stratigraphy['od'] = (
-            0.1 * np.ones_like(self.stratigraphy['od']))
+            0.20 * np.ones_like(self.stratigraphy['od']))
         self.stratigraphy['n_factor'] = (
-            0.7 * np.ones_like(self.stratigraphy['n_factor']))
-        sat = 0.9 * np.ones_like(self.stratigraphy['e'])
+            0.88 * np.ones_like(self.stratigraphy['n_factor']))
         ind_above = self._ygrid[np.newaxis, :] < self.stratigraphy['od'][:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)
         o = np.zeros_like(ind_above, dtype=np.float64)
+        sat = np.zeros_like(ind_above, dtype=np.float64)
         e = self.stratigraphy['e']
         np.putmask(m, ind_above, (1 - e) * self.soil_params['mineral_above'])
         np.putmask(o, ind_above, (1 - e) * self.soil_params['organic_above'])
         np.putmask(m, ind_below, (1 - e) * self.soil_params['mineral_below'])
         np.putmask(o, ind_below, (1 - e) * self.soil_params['organic_below'])
+        np.putmask(sat, ind_above, 0.6 * np.ones_like(sat))
+        np.putmask(sat, ind_below, 0.9 * np.ones_like(sat))
+        w = (1 - e - m - o) * sat        
         w = (1 - e - m - o) * sat
         self.stratigraphy.update({'m': m.astype(self.dtype), 'o': o.astype(self.dtype),
             'w': w.astype(self.dtype)})
         self.stratigraphy.update(self._thermal_conductivity_thawed())
+
+    def replace_e(self, e):
+        self.stratigraphy['e'] = e
+        self._override_stratigraphy()
 
 class StefanStratigraphySmoothingSpline(StefanStratigraphy):
     def _draw_e(self):
