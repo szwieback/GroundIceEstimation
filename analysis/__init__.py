@@ -3,5 +3,7 @@ from analysis.ioput import (
     read_referenced_motion, Geospatial, save_geotiff, vectorize_tril, read_geotiff_geospatial)
 from analysis.prediction import StefanPredictor, Predictor, PredictionEnsemble
 from analysis.synthetic import InversionSimulator
-from analysis.interferometry import add_atmospheric_K
+from analysis.interferometry import (
+    add_atmospheric_K, RationalQuadraticSepDiagCovMV, spatial_referencing, extract_reference,
+    distance_to_ref, add_nugget)
 from analysis.inversion import InversionProcessor, InversionResults, thaw_depth

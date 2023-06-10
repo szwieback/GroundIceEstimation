@@ -54,6 +54,11 @@ def combined_K(K_speckle, covmodel):
     K_comb = K_speckle + K_atmo[(Ellipsis,) + (np.newaxis,) * (len(K_speckle.shape) - 2)]
     return K_comb
 
+def add_nugget(K, nugget=0.0):
+    # to C or K; nugget is variance
+    K += nugget * np.eye(K.shape[0])[(Ellipsis,) + (np.newaxis, ) * (len(K.shape) - 2)]
+    return K
+
 def compute_distances(xy_point, xy_ref, geospatial):
     def _compute_distance_jref(jref):
         _xy_ref = xy_ref[:, jref][:, np.newaxis]
@@ -129,7 +134,7 @@ def extract_reference(K_speckle, unw, dist, geospatial, xy_ref, covmodel):
     # to phase differences (w.r.t first)
     K_ref_atmo = np.einsum('ij,jk...,lk ->il...', A_block, C_comb, A_block)
     K_ref_comb = K_ref_atmo + K_ref
-    return unw_ref, K_ref_comb
+    return unw_ref, K_ref_comb, dist_matrix
 
 def extract_cross_covariance(dist, covmodel):
     # phase difference
@@ -157,10 +162,8 @@ def _phase_history_matrix(P, reference=0, blocks=1):
 def K_from_phase_covariance(C_phase, reference=0):
     P = C_phase.shape[0]
     assert C_phase.shape[1] == P
-    A = _phase_history_matrix(P, reference=reference)
-    K = np.einsum('ij,jk...,lk ->il...', A, C_phase, A)
-    # test = np.einsum('ij,jk...->...ik', A, C_phase)
-    # print(test.shape)
+    A = _phase_history_matrix(P, reference=reference) # incidence matrix
+    K = np.einsum('ij,jk...,lk ->il...', A, C_phase, A) # phase difference
     return K
 
 def K_reference_block(K):
@@ -248,22 +251,22 @@ class RationalQuadraticSepDiagCovMV(SepDiagCovMV):
         self.alpha = alpha
 
     def covariance_spatial(self, dist):
-        cov = (1 + (dist ** 2) / (2 * self.alpha * (l ** 2))) ** (-self.alpha)
+        cov = (1 + (dist ** 2) / (2 * self.alpha * (self.l ** 2))) ** (-self.alpha)
         return cov
 
 def spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial, n_jobs=7, fnunw=None, fnK=None, fndist=None,
-        convert_to_length=True, overwrite=False):
-    # covmodel in length; unw, K in phase unless convert_to_length is False
+        wvl=None, convert_to_length=True, overwrite=False):
+    # covmodel in length; unw_cor, K_cor [speckle only] in rad unless convert_to_length is False
     from joblib import Parallel, delayed
     P = K.shape[0] + 1
     unw -= np.nanmean(unw, axis=(1, 2))[:, np.newaxis, np.newaxis]
-    if convert_to_length:
+    if convert_to_length and wvl is not None:
         K = phase_to_length(K, wavelength=wvl, variance=True)
         unw = phase_to_length(unw, wavelength=wvl, variance=False)        
-    K_comb = combined_K(K, covmodel)
-    dist = distance_to_ref(geospatial, xy_ref, fndist=fndist, overwrite=False)
-    unw_ref, K_ref_comb = extract_reference(K, unw, dist, geospatial, xy_ref, covmodel)
+    K_comb = combined_K(K, covmodel) #speckle and atmo
+    dist = distance_to_ref(geospatial, xy_ref, fndist=fndist, overwrite=overwrite)
+    unw_ref, K_ref_comb, _ = extract_reference(K, unw, dist, geospatial, xy_ref, covmodel)
     krig_matrices = kriging_inverses(K_ref_comb, P)
     def _phase_history_reference_row(row):
         _unw = np.moveaxis(unw[:, row,:], 0, 1).copy()
@@ -309,8 +312,16 @@ if __name__ == '__main__':
     
     fndist = os.path.join(path0, 'distance.p')
     unw_cor, K_cor = spatial_referencing(
-        unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist)
+        unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, wvl=wvl, 
+        convert_to_length=False, overwrite=False)
     from analysis import assemble_tril
-    K = assemble_tril(K_cor[:, 600, 400])
-
+    K_matrix = assemble_tril(K_cor[:, 600, 400])
+    print(K.shape, K_cor.shape, K_matrix.shape, unw.shape, unw_cor.shape)
+    dunw = unw_cor - unw
+    import matplotlib.pyplot as plt
+    # plt.imshow(dunw[-5, ...])
+    # plt.imshow(K[-1, -1, ...] - K_cor[-1, ...])
+    plt.imshow(unw_cor[-2, ...], vmin=-11, vmax=3)
+    plt.show()
+    
 
