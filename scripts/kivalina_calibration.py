@@ -24,35 +24,31 @@ def prepare_references(path0, reftype='regular'):
     print(geospatial)
     refs = {}
     refs_latlon = {}
-    # regular references; geospatial x,y coords (or yx)
-    refs['regular'] = np.array([   [1226, 357],
-                                       [1099, 621],
-                                       [883, 590],
-                                       [859, 295],
-                                       [824, 410],
-                                       [722, 448],                   
-                                       [674, 176],
-                                       [527, 470],
-                                       [343, 77], 
-                                       [298, 319]])
-    # additional points close to existing ref points for calibration
-    refs['short'] = np.array([
-                                   [775, 399],
-                                   [555, 486],
-                                   [565, 396],
-                                   [364, 93], 
-                                   [297, 302]])
+    refs['regular'] = np.array([    [-164.25190,  67.83774],
+                                    [-164.31991,  67.87082],
+                                    [-164.39611,  67.81081],
+                                    [-164.52571,  67.81786],
+                                    [-164.54011,  67.88491],
+                                    [-164.56111,  67.85877],
+                                    [-164.62231,  67.85014],
+                                    [-164.65111,  67.91196],
+                                    [-164.73931,  67.84514],
+                                    [-164.84971,  67.93446],
+                                    [-164.87671,  67.87946]])
+    refs['short'] = np.array([  [-164.59051,  67.86127],
+                                [-164.72251,  67.84150],
+                                [-164.71651,  67.86195],
+                                [-164.83711,  67.93082],
+                                [-164.87731,  67.88332]])
     refs['all'] = np.concatenate((refs['regular'], refs['short']), axis=0)
-    for _reftype in refs:
-        rc_ref = refs[_reftype][...,::-1].T
-        print(_reftype)
-        refs_latlon[_reftype] = geospatial.xy(rc_ref)
-        print(refs_latlon[_reftype])
+    refs_latlon = {_reftype: refs[_reftype][::-1, ...].T for _reftype in refs}
     save_object(refs_latlon, os.path.join(path0, 'references_latlon.p'))
+    np.savetxt(
+        os.path.join(path0, 'references_latlon.csv'), refs_latlon['all'].T, delimiter=',', fmt='%10.5f')
     return refs_latlon[reftype]
 
 def evaluate_calibration(path0, caldict, overwrite=False):
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
+    fnunw = os.path.join(path0, 'unwrapped_corr.geo.tif')
     fnK = os.path.join(path0, 'K_vec.geo.tif')
     K, geospatial_K = read_K(fnK)
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
@@ -95,7 +91,7 @@ def plot_calibration(dist_c, svar_pred_c, svar_obs_c):
     import matplotlib.pyplot as plt
     from statsmodels.nonparametric.kernel_regression import KernelReg as kr 
     dist_plot = np.linspace(0, np.max(dist_c))
-    def interpolate(svar, bw=2.5e3):
+    def interpolate(svar, bw=2e3):
         _svar, _  = kr(
             endog=svar, exog=dist_c, var_type='c', bw=[bw], reg_type='ll').fit(data_predict=dist_plot)
         return _svar
@@ -109,12 +105,12 @@ def plot_calibration(dist_c, svar_pred_c, svar_obs_c):
     ax.plot(dist_c, svar_pred_c, linestyle='none', marker='o', mfc='k', mec='none', ms=2, alpha=alpha)
     ax.plot(dist_plot, svar_obs_kr, c='#999999', alpha=alpha_l)
     ax.plot(dist_plot, svar_pred_kr, c='k', alpha=alpha_l)
-    ax.set_xlim((3e2, 1.5e4))
+    ax.set_xlim((3e2, 1.4e4))
     ax.set_ylim((0, 2))
     plt.show()    
 
 if __name__ == '__main__':
     path0 = f'/home/simon/Work/gie/processed/kivalina/2019'
     
-    dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict)
+    dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict, overwrite=False)
     plot_calibration(dist_c, svar_pred_c, svar_obs_c)
