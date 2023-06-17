@@ -127,8 +127,8 @@ def plot_examples(show_quantile=False):
         ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.10, 0.7),
         top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.35)
+    invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
     for jinstance, instance in enumerate(instances):
-        invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,
@@ -265,12 +265,60 @@ def plot_metrics(ymax=0.8, suffix=''):
     axs[1].text(-1.10, -0.09, 'accuracy', transform=axs[1].transAxes)
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics{suffix}.pdf'))
 
+def plot_scatter_indrange(suffix='', subsample=100):
+    import colorcet as cc
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    import statsmodels.api as sm
+    
+    cmap = cc.cm['CET_CBL1']
+    fig, ax = prepare_figure(
+        ncols=1, sharey=True, sharex=False, figsize=(1.62, 0.90), figsizeunit='in',
+        top=0.955, left=0.150, right=0.710, bottom=0.215, wspace=0.38, hspace=0.46, remove_spines=False)
+    simname = f'spline_stdacc{suffix}'
+    pathsim = os.path.join(paths['simulation'], simname)
+    metrics = load_object(os.path.join(pathsim, 'metrics_e_indranges.p'))
+    post_mean = metrics['mean']
+    presc = np.ones_like(post_mean)
+    presc[:,...] = metrics['sim'][np.newaxis, ...]
+    values = np.vstack((presc.ravel(), post_mean.ravel()))
+    values = values[:, ::subsample]
+    gridparms = (0, 0.9, 100)
+    xx, yy = np.mgrid[gridparms[0]:gridparms[1]:gridparms[2]*1j, gridparms[0]:gridparms[1]:gridparms[2]*1j]
+    positions = np.vstack((xx.ravel(), yy.ravel()))
+    dens_c = sm.nonparametric.KDEMultivariateConditional(
+        endog=[values[1, :]], exog=[values[0, :]], dep_type='c', indep_type='c', bw=(0.05,)*2)
+    vlim = (0.00, 5.00)
+    f = dens_c.pdf(positions[1, :], positions[0, :]).reshape(xx.shape)
+    ax.imshow(
+        f, extent=(gridparms[0], gridparms[1])*2, cmap=cmap, origin='lower', vmin=vlim[0], vmax=vlim[1])
+    ax.set_aspect('equal')
+    ticks = (0.0, 0.3, 0.6, 0.9)
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.text(
+        -0.395, 0.500, 'estim. $\\bar{e}$ [$-$]', rotation=90, transform=ax.transAxes, ha='right', 
+        va='center')
+    ypos = -0.235
+    ax.text(
+        1.160, ypos, '$\\bar{e}_{\\mathrm{true}}$ [$-$]', transform=ax.transAxes, ha='left', va='baseline')
+    ax.text(
+        -0.520, ypos, 'a)', transform=ax.transAxes, ha='left', va='baseline')
+    cax = fig.add_axes((0.80, 0.25, 0.05, 0.52))
+    csmap = cm.ScalarMappable(norm=Normalize(vlim[0], vlim[1], clip=True), cmap=cmap)
+    cbar = fig.colorbar(csmap , cax=cax, orientation='vertical')
+    cbar.set_ticks(vlim)
+    cbar.solids.set_rasterized(True)
+    cbarlabel = 'KDE [$-$]'
+    cax.text(1.0, 1.2, cbarlabel, ha='center', va='baseline', transform=cax.transAxes)
+    fig.savefig(os.path.join(paths['figures'], f'synthetic_scatter_indrange{suffix}.pdf'))
+
 def plot_metrics_indrange(suffix=''):
     from string import ascii_lowercase
     import matplotlib.transforms as transforms
     fig, axs = prepare_figure(
-        ncols=2, sharey=True, sharex=False, figsize=(2.2, 0.9), figsizeunit='in',
-        top=0.87, left=0.21, right=0.98, bottom=0.34, wspace=0.30, hspace=0.46)
+        ncols=3, sharey=True, sharex=False, figsize=(2.5, 0.9), figsizeunit='in',
+        top=0.87, left=0.18, right=0.98, bottom=0.34, wspace=0.38, hspace=0.46)
     simnames = ['spline_lowacc', 'spline_stdacc', 'spline_highacc']
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
@@ -279,44 +327,62 @@ def plot_metrics_indrange(suffix=''):
     jindrange = 0
     marker = 'o'
     ms = 4
+    colp, msp, mewp, alphap = '#999999', 3, 0.5, 0.4    
     ylim = (-0.3, 2.5)
     yticks = (0, 1, 2)
     yticklabels = ('low', 'standard', 'high')
-
-    axs[1].axvline(0.8, lw=0.5, c='#eeeeee')
+    def _sharpness(m):
+        return np.nanmean(
+            m['quantile'][..., 1] - m['quantile'][..., 0], axis=0) / 2
+    axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
     for jsimname, sim in enumerate(simnames):
         simname = sim + suffix
         metrics = load_object(
             os.path.join(paths['simulation'], simname, 'metrics_e_indranges.p'))
+        metrics_p = load_object(
+            os.path.join(paths['simulation'], simname, 'metrics_e_indranges_prior.p'))        
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
             ms=ms, mec='none')
+        axs[0].plot(
+            np.nanmean(metrics_p['MAD'], axis=0)[jindrange], jsimname,
+            linestyle='none', mec=colp, alpha=alphap, marker=marker,
+            mew=mewp, ms=msp, mfc='none')
         axs[1].plot(
+            _sharpness(metrics), jsimname, linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], 
+            marker=marker, ms=ms, mec='none')
+        axs[1].plot(
+            _sharpness(metrics_p), jsimname, linestyle='none', mec=colp, alpha=alphap, marker=marker,
+            mew=mewp, ms=msp, mfc='none')        
+        axs[2].plot(
             np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
             ms=ms, mec='none')
-
-    axs[0].set_xlim(0.00, 0.15)
-    axs[1].set_xlim(0.55, 0.95)
-    axs[1].set_xticks((0.6, 0.8))
+    axs[0].text(
+        0.99, 0.45, 'prior', rotation=270, ha='left', va='center', transform=axs[0].transAxes)
+    axs[0].set_xlim(0.00, 0.23)
+    axs[0].set_xticks((0.00, 0.10, 0.20))
+    axs[1].set_xlim(0.00, 0.35)
+    axs[1].set_xticks((0.00, 0.20))
+    axs[2].set_xlim(0.55, 0.95)
+    axs[2].set_xticks((0.6, 0.8))
     axs[0].set_ylim(ylim)
 #
-    titles = ['error', 'coverage']
-    xlabels = ['MAD [-]', 'fraction [-]']
+    xlabels = ['MAD [$-$]', 'uncertainty [$-$]', 'coverage [\%]']
     ypos = 1.08
     xpos = -0.07
     for jax, ax in enumerate(axs):
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.set_yticks(yticks)
-        ax.text(
-            0.54, ypos, titles[jax], ha='center', va='baseline', c='k',
-            transform=ax.transAxes)
+        # ax.text(
+        #     0.54, ypos, titles[jax], ha='center', va='baseline', c='k',
+        #     transform=ax.transAxes)
         ax.text(
             0.54, -0.58, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
         ax.text(
-            0.03, 0.07, ascii_lowercase[jax] + ')', ha='left', va='baseline',
+            0.03, 0.07, ascii_lowercase[jax + 1] + ')', ha='left', va='baseline',
             transform=ax.transAxes)
     axs[0].text(
         xpos, ypos, 'accuracy', va='baseline', ha='right', transform=axs[0].transAxes)
@@ -328,10 +394,11 @@ def plot_metrics_indrange(suffix=''):
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-    plot_examples(show_quantile=True)
+    # plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
-
-    for Nbatch in (1, 10,):
-        plot_metrics(suffix=f'_{Nbatch}_sagwon')
+    plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
+    # plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
+    # for Nbatch in (1, 10,):
+        # plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
 
