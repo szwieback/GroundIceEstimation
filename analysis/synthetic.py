@@ -319,30 +319,10 @@ class SimInvEnsemble():
         return frac_thawed
 
     def predicted_mean_period(self, indranges, param='e'):
-        p = self.predictions(param)
-        yf = self.predictions('yf')
-        p_mean = self._mean_period(p, indranges, yf)
-        return p_mean
-
-    def _mean_period(self, p, indranges, yf):
-        ygrid = self.ygrid
-        p_mean = []
-        for indrange in indranges:
-            yfrange = yf[:, indrange]
-            invalid = np.logical_or(
-                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
-                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
-            p_ = p.copy()
-            np.putmask(p_, invalid, np.nan)
-            p_mean.append(np.nanmean(p_, axis=1))
-        p_mean = np.stack(p_mean, axis=-1)
-        return p_mean
+        return self.invsim.predens.mean_period(indranges, param=param)
 
     def prescribed_mean_period(self, indranges, param='e'):
-        ref = self.prescribed(param)
-        yf = self.prescribed('yf')
-        ref_mean = self._mean_period(ref, indranges, yf)
-        return ref_mean
+        return self.invsim.predens_sim.mean_period(indranges, param=param)
 
     @property
     def depth(self):

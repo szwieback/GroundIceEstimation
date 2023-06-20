@@ -23,7 +23,6 @@ def prepare_references(path0, reftype='regular'):
     geospatial = Geospatial.from_file(fnunw)
     print(geospatial)
     refs = {}
-    refs_latlon = {}
     refs['regular'] = np.array([    [-164.25190,  67.83774],
                                     [-164.31991,  67.87082],
                                     [-164.39611,  67.81081],

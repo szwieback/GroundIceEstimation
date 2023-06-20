@@ -42,6 +42,7 @@ class InversionProcessor():
     def _logweights_single(self, ind_scenes, _s_obs, _C_obs, normalize=False):
         from inference import lw_mvnormal, psislw, _normalize
         try:
+            assert np.count_nonzero(np.isnan(_s_obs)) == 0
             s_pred = self._simulated_observations_single(ind_scenes, _C_obs)
             lw = lw_mvnormal(
                 _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
@@ -177,14 +178,13 @@ class InversionResults():
             n_jobs=-1):
         from inference import quantile as quant
         p = self.predictions(param=param, p=p)
-        print(p.shape, self.lw.shape)
         def _quantile(_lw):
             _pq = quant(
                 p, _lw, quantiles, method=method, steps=steps, normalize=True,
                 smooth=smooth)
             return _pq
         postquant = self._parallel(_quantile, n_jobs=n_jobs)
-        return postquant
+        return np.reshape(postquant, self.lw.shape[0:-1] + postquant.shape[1:])
 
     def _lw_generator(self, block_size=None):
         if block_size is None:

@@ -7,6 +7,8 @@ from simulation import stefan_integral_balance
 
 import numpy as np
 
+
+
 class Predictor():
     def __init__(self):
         pass
@@ -73,6 +75,28 @@ class PredictionEnsemble():
                                 (self.results[k], res_batch[k]), axis=0)
                     else:
                         self.results[k] = res_batch[k]
+    
+    def predict_mean_period(self, indranges, param='e'):
+        if isinstance(param, str):
+            self.results[f'{param}_mean_period'] = self.mean_period(indranges, param=param)
+        else:
+            for _p in param: self.predict_mean_period(indranges, _p) 
+    
+    def mean_period(self, indranges, param='e'):
+        ygrid = self.ygrid
+        yf = self.results['yf']
+        p = self.results[param]
+        p_mean = []
+        for indrange in indranges:
+            yfrange = yf[:, indrange]
+            invalid = np.logical_or(
+                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
+                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
+            p_ = p.copy()
+            np.putmask(p_, invalid, np.nan)
+            p_mean.append(np.nanmean(p_, axis=1))
+        p_mean = np.stack(p_mean, axis=-1)
+        return p_mean
 
     @property
     def depth(self):

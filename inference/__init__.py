@@ -4,3 +4,4 @@ from inference.isi import (
 # from inference.gmi import fit_gaussian_mixture, posterior_gm_mvnormal
 import pyximport; pyximport.install(language_level=3)
 from inference.isi_quantile import quantile_bisection
+# avoided compiling errors by removing boundscheck and then adding it back 

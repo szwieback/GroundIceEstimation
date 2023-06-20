@@ -186,11 +186,17 @@ def vectorize_tril(G):
     G_vec = G[ind_]
     return G_vec
 
+
+
 def read_referenced_motion(
         fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)
     if xy.shape[1] > 1:
         raise NotImplementedError('Only one reference point')
+    def unw_to_motion(unw, wavelength=0.055, flip_sign=True):
+        unw *= wavelength / (4 * np.pi)
+        if flip_sign: unw *= -1
+        return unw    
     geospatial = Geospatial.from_file(fnunw)
     if len(fns_unw_offset) >= 1:
         import geopandas as gpd
@@ -203,11 +209,10 @@ def read_referenced_motion(
                 transform=geospatial.transform, default_value=0, dtype=np.int64)
             unw[scene:, ...] += rasterized * 2 * np.pi
     rc = geospatial.rowcol(xy)
-    unw *= wavelength / (4 * np.pi)
     unw_ref = unw[:, rc[0, 0], rc[1, 0]]
     unw -= unw_ref[:, np.newaxis, np.newaxis]
-    if flip_sign: unw *= -1
-    return unw, geospatial
+    m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
+    return m, geospatial
 
 def read_K(fntif):
     K_vec, geospatial = read_geotiff_geospatial(fntif)
@@ -223,7 +228,7 @@ def enforce_directory(path):
             pass
 
 def save_object(obj, filename):
-    enforce_directory(os.path.dirname(filename))
+    enforce_directory(filename)
     if os.path.splitext(filename)[1].strip() == '.npy':
         np.save(filename, obj)
     else:
