@@ -11,7 +11,8 @@ import datetime
 from forcing import load_forcing_merra_subset, parse_dates, ind_TDD_exceedance
 from analysis import (save_object, load_object, read_K, read_geotiff_geospatial, 
     RationalQuadraticSepDiagCovMV, add_nugget, length_conversion, spatial_referencing, InversionProcessor,
-    InversionResults, StefanPredictor, PredictionEnsemble, assemble_tril)
+    InversionResults, StefanPredictor, PredictionEnsemble, assemble_tril, vectorize_tril, 
+    InversionResultsMmap)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
@@ -90,7 +91,9 @@ def process_index_kivalina(
     fndist = os.path.join(pathout, 'distance_cal.p')
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
-    # to motion
+    # import warnings
+    # warnings.warn('atmos corr deactivated')
+    # unw_cor, K_cor = unw, np.moveaxis(vectorize_tril(np.moveaxis(K, (0, 1), (-2, -1))), -1, 0)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     
     # check whether 2018 needs different references
@@ -103,22 +106,22 @@ def process_index_kivalina(
     
     data, geospatial_crop = {'s_obs': s_obs, 'K': K_s}, geospatial_unw
     # # for testing only
-    # ll, ur = (-164.8200, 67.8370), (-164.7800, 67.8450)    
-    # for dname in data:
-    #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
+    ll, ur = (-164.8200, 67.8370), (-164.7800, 67.8450)    
+    for dname in data:
+        data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
+        
+    geospatial_crop = geospatial_unw
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
-        ind_scenes, data['s_obs'], _K, pathout=pathout, n_jobs=-1, overwrite=overwrite)
+        ind_scenes, data['s_obs'], _K, pathout=pathout, n_jobs=-1, overwrite=overwrite, memory=False)
+    
     ir.save(os.path.join(pathout, 'ir.p'))
-    raise
-    ip.delete_weight_files(pathout)
-    ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
-
+    # ip.delete_weight_files(pathout)
+    ir = InversionResultsMmap.from_file(os.path.join(pathout, 'ir.p'))
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
         ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-        ('e', 'quantile', {'quantiles': (0.1, 0.9)}),
         ('e_mean_period', 'mean'), ('e_mean_period', 'var'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
     for expec in expecs:

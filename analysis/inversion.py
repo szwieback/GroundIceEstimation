@@ -8,6 +8,9 @@ from analysis import enforce_directory
 
 import numpy as np
 import os
+from collections import namedtuple
+
+Mmap = namedtuple('Mmap', ('filename', 'dtype', 'shape'))
 
 def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
     if len(frac_thawed.shape) > 2:
@@ -29,11 +32,11 @@ def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
 class InversionProcessor():
     # hard-coded Gaussian PSIS
     # uses the same ensemble but different C_obs
-    def __init__(self, predens=None, geospatial=None, batch_size=1000):
+    def __init__(self, predens=None, geospatial=None, batch_size=1024):
         self.predens = predens
         self.geospatial = geospatial
         self.batch_size = batch_size
-
+        
     def _simulated_observations_single(self, ind_scenes, _C_obs):
         s_pred = self.predens.extract_predictions(
             ind_scenes, C_obs=_C_obs, rng=None)  # hardcoded seed for now
@@ -68,7 +71,7 @@ class InversionProcessor():
 
     def _logweights_batch(
             self, nbatch, ind_scenes, s_obs_flat, C_obs_flat, normalize=False, pathout=None,
-            overwrite=False):
+            memory=True, overwrite=False):
         _fn = self._filename(pathout, 'lw', nbatch)
         if self._overwrite(_fn, overwrite=overwrite):
             n0 = nbatch * self.batch_size
@@ -85,10 +88,11 @@ class InversionProcessor():
                 np.save(_fn, lw)
         else:
             lw = np.load(_fn)
-        return lw
+        outp = lw if memory else len(lw)            
+        return outp
 
     def logweights(
-            self, ind_scenes, s_obs, C_obs, n_jobs=8, normalize=False, pathout=None,
+            self, ind_scenes, s_obs, C_obs, n_jobs=8, normalize=False, pathout=None, memory=True,
             overwrite=False):
         from joblib import Parallel, delayed
         s_obs_flat = np.reshape(s_obs, (s_obs.shape[0], -1))
@@ -98,11 +102,25 @@ class InversionProcessor():
         Nbatch = np.int64(np.ceil(N / self.batch_size))
         def _res(nbatch):
             return self._logweights_batch(
-                nbatch, ind_scenes, s_obs_flat, C_obs_flat, normalize=normalize,
-                pathout=pathout, overwrite=overwrite)
+                nbatch, ind_scenes, s_obs_flat, C_obs_flat, normalize=normalize, memory=memory,
+                pathout=pathout, overwrite=overwrite,)
         lw = Parallel(n_jobs=n_jobs)(delayed(_res)(nbatch) for nbatch in range(Nbatch))
-        lw = np.concatenate(lw, axis=0)
-        return lw
+        if memory:
+            outp = np.concatenate(lw, axis=0)
+        else:
+            fnmmap = self._filename(pathout, 'lwmmap')
+            _lw = np.load(self._filename(pathout, 'lw', 0))
+            shape = (np.sum(np.array(lw).flatten()), _lw.shape[1])
+            fp = np.memmap(fnmmap, dtype=_lw.dtype, mode='w+', shape=shape)
+            rm, nrm = 0, 0
+            for nbatch in range(Nbatch):
+                _lw = np.load(self._filename(pathout, 'lw', nbatch))
+                nrm = rm + _lw.shape[0]
+                fp[rm:nrm, :] = _lw[:, :]
+                rm = nrm 
+            fp.flush()
+            outp = Mmap(fnmmap, _lw.dtype, shape)
+        return outp
 
     def delete_weight_files(self, pathout):
         if pathout is not None:
@@ -114,13 +132,20 @@ class InversionProcessor():
                     pass
 
     def results(
-            self, ind_scenes, s_obs, C_obs, n_jobs=8, normalize=False, pathout=None,
+            self, ind_scenes, s_obs, C_obs, n_jobs=8, normalize=False, pathout=None, memory=True,
             overwrite=False):
-        lw = self.logweights(
-            ind_scenes, s_obs, C_obs, n_jobs=n_jobs, normalize=normalize, pathout=pathout,
+        _lw = self.logweights(
+            ind_scenes, s_obs, C_obs, n_jobs=n_jobs, normalize=normalize, pathout=pathout, memory=memory,
             overwrite=overwrite)
-        lw = np.reshape(lw, s_obs.shape[1:] + (lw.shape[-1],))
-        return InversionResults(self.predens, lw, geospatial=self.geospatial)
+        shape = s_obs.shape[1:] + (_lw.shape[-1],)
+        if memory:
+            return InversionResults(self.predens, np.reshape(_lw, shape), geospatial=self.geospatial)
+        else:
+            # these two should be equivalent, hence simply overwrite tuple
+            # lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=_lw.shape).reshape(shape)
+            # _lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=shape)
+            mmap = Mmap(_lw.filename, _lw.dtype, shape)
+            return InversionResultsMmap(self.predens, mmap, geospatial=self.geospatial)
 
     @property
     def depth(self):
@@ -133,6 +158,7 @@ class InversionProcessor():
     @property
     def ygrid(self):
         return self.predens.ygrid
+
 
 class InversionResults():
     blocksize_default = 1024
@@ -159,12 +185,16 @@ class InversionResults():
             p = self.predens.results[param]
         return p
 
-    def moment(self, param='e', power=1, p=None, normalize=True):
+    def moment(self, param='e', power=1, p=None, normalize=True, n_jobs=-1):
         from inference import expectation
         p = self.predictions(param=param, p=p)
-        postmean = expectation(
-            np.power(p, power), self.lw, normalize=normalize)
-        return postmean
+        # postmean = expectation(
+        #     np.power(p, power), self.lw, normalize=normalize)
+        def _moment(_lw):
+            _m = expectation(np.power(p, power), _lw, normalize=normalize)
+            return _m
+        mom = self._parallel(_moment, n_jobs=n_jobs)
+        return mom
 
     def variance(self, param='e', p=None, normalize=True):
         # improvement needed to deal with numerical issues
@@ -189,10 +219,10 @@ class InversionResults():
     def _lw_generator(self, block_size=None):
         if block_size is None:
             block_size = self.blocksize
-        for _lw in np.array_split(self.lw, block_size, axis=0): # not tested
-            yield _lw
-        # for _lw in self.lw:
-        #     yield _lw[np.newaxis, ...]
+        step = block_size if len(self.lw.shape) == 2 else np.product(self.lw.shape[:-1])//block_size
+        ind = np.arange(self.lw.shape[0], step=max((1, step)))[1:]
+        for _lw in np.array_split(self.lw, ind, axis=0): # not tested for mmap
+            yield np.array(_lw) #make sure it's a numpy array
 
     def _parallel(self, fun, n_jobs=-1, block_size=None):
         if n_jobs in (0, 1, None):
@@ -243,12 +273,35 @@ class InversionResults():
 
     def save(self, fnout):
         from analysis import save_object
-        dictout = {'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens}
+        dictout = {
+            'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens, 
+            'blocksize': self.blocksize}
         save_object(dictout, fnout)
 
     @classmethod
     def from_file(cls, fn):
         from analysis import load_object
         dictin = load_object(fn)
-        ir = InversionResults(**dictin)
+        ir = cls(**dictin) #InversionResults
         return ir
+    
+class InversionResultsMmap(InversionResults):
+    
+    def __init__(self, predens, lwmmap, geospatial=None, blocksize=None):
+        InversionResults.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
+        self.lwmmap = lwmmap
+        self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+        
+    def save(self, fnout):
+        from analysis import save_object
+        dictout = {
+            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
+            'blocksize': self.blocksize}
+        save_object(dictout, fnout)
+            
+    # @classmethod
+    # def from_file(cls, fn):
+    #     from analysis import load_object
+    #     dictin = load_object(fn)
+    #     ir = InversionResultsMmap(**dictin)
+    #     return ir    

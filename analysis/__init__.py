@@ -6,4 +6,4 @@ from analysis.synthetic import InversionSimulator
 from analysis.interferometry import (
     add_atmospheric_K, RationalQuadraticSepDiagCovMV, spatial_referencing, extract_reference,
     distance_to_ref, add_nugget, length_conversion)
-from analysis.inversion import InversionProcessor, InversionResults, thaw_depth
+from analysis.inversion import InversionProcessor, InversionResults, InversionResultsMmap, thaw_depth
