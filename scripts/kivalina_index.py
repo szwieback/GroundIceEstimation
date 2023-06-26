@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import os
 import datetime
+from collections import namedtuple
 
 from forcing import load_forcing_merra_subset, parse_dates, ind_TDD_exceedance
 from analysis import (save_object, load_object, read_K, read_geotiff_geospatial, 
@@ -17,6 +18,8 @@ from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
 wavelength = 0.055   
+
+Scenario = namedtuple('Scenario', ['name', 'year', 'remove_last', 'reference', 'extended_metrics'])
 
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
@@ -56,8 +59,8 @@ def indranges_kivalina(dailytemp, ind_scenes, TDD=[900, 1000]):
     return indranges_dict
 
 def process_index_kivalina(
-        TDD, geom, pathin, pathout, folder_forcing, fnref, wavelength=wavelength, N=10000, Nbatch=1, 
-        year=2019, remove_last=False, overwrite=True):
+        TDD, geom, pathin, pathout, folder_forcing, xy_ref, wavelength=wavelength, N=10000, Nbatch=1, 
+        year=2019, remove_last=False, extended_metrics=False, overwrite=True):
     dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year, remove_last=remove_last)
     indranges_dict = indranges_kivalina(dailytemp, ind_scenes, TDD=TDD)
     indranges_names, indranges = tuple(indranges_dict.keys()), tuple(indranges_dict.values())
@@ -86,14 +89,9 @@ def process_index_kivalina(
     # apply nugget
     K = add_nugget(K, caldict['nugget_speckle'])
     
-    # todo: add option for only ref 10 
-    xy_ref = load_object(fnref)['regular']
     fndist = os.path.join(pathout, 'distance_cal.p')
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
-    # import warnings
-    # warnings.warn('atmos corr deactivated')
-    # unw_cor, K_cor = unw, np.moveaxis(vectorize_tril(np.moveaxis(K, (0, 1), (-2, -1))), -1, 0)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     
     # check whether 2018 needs different references
@@ -106,30 +104,34 @@ def process_index_kivalina(
     
     data, geospatial_crop = {'s_obs': s_obs, 'K': K_s}, geospatial_unw
     # # for testing only
-    ll, ur = (-164.8200, 67.8370), (-164.7800, 67.8450)    
-    for dname in data:
-        data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
-        
-    geospatial_crop = geospatial_unw
+    # ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
+    # for dname in data:
+    #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
         ind_scenes, data['s_obs'], _K, pathout=pathout, n_jobs=-1, overwrite=overwrite, memory=False)
     
     ir.save(os.path.join(pathout, 'ir.p'))
-    # ip.delete_weight_files(pathout)
+    ip.delete_weight_files(pathout)
     ir = InversionResultsMmap.from_file(os.path.join(pathout, 'ir.p'))
     expecs = [
-        ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
-        ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-        ('e_mean_period', 'mean'), ('e_mean_period', 'var'),
+        ('yf', 'mean'),  ('e_mean_period', 'var'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
+    if extended_metrics:
+        expecs = expecs + [('e', 'mean'), ('e', 'var'), ('s_los', 'mean'),
+                           ('s_los', 'var'), ('e_mean_period', 'mean'),]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    scenarios = {'2019': (2019, False), '2019r': (2019, True), '2018': (2018, False)}
+    #'name', 'year', 'remove_last', 'reference'
+    scenarios = [
+        Scenario(name='2019', year=2019, remove_last=False, reference=None, extended_metrics=True),
+        Scenario(name='2019r', year=2019, remove_last=True, reference=None, extended_metrics=True),
+        Scenario(name='2018', year=2018, remove_last=False, reference=None, extended_metrics=False),
+        Scenario(name='2019rs', year=2019, remove_last=True, reference=(5,), extended_metrics=False)]
     TDD = (850, 950)
     N, Nbatch = 10000, 1    
     geom = {'ia': 39.29 / 180 * np.pi}
@@ -141,17 +143,19 @@ if __name__ == '__main__':
     
     fnref= 'references_latlon.p' #adjust this with only 10th ref, rename out
     
-    overwrite = False
+    overwrite = True
     # loop over scenarios
-
-    scenario = '2019r'
-    year, remove_last = scenarios[scenario]
-    pathout = os.path.join(pathout0, scenario)
-    pathin = os.path.join(pathin0, str(year), 'proc', 'hadamard', 'geocoded')
-    fnref_full = os.path.join(pathin, fnref)
-    process_index_kivalina(
-        TDD, geom, pathin, pathout, folder_forcing, fnref_full, wavelength=wavelength, N=N, Nbatch=Nbatch, 
-        year=year, remove_last=remove_last, overwrite=overwrite)
+    for scenario in scenarios:
+        pathout = os.path.join(pathout0, scenario.name)
+        pathin = os.path.join(pathin0, str(scenario.year), 'proc', 'hadamard', 'geocoded')
+        fnref_full = os.path.join(pathin, fnref)
+        xy_ref = load_object(fnref_full)['regular']
+        if scenario.reference is not None:
+            xy_ref = xy_ref[:, scenario.reference]
+        process_index_kivalina(
+            TDD, geom, pathin, pathout, folder_forcing, xy_ref, wavelength=wavelength, N=N, 
+            Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last, 
+            extended_metrics=scenario.extended_metrics, overwrite=overwrite)
 
         
         

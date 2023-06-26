@@ -11,7 +11,7 @@ import os
 from collections import namedtuple
 
 Mmap = namedtuple('Mmap', ('filename', 'dtype', 'shape'))
-
+# clean memory leaks: rm -r /dev/shm/job*
 def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
     if len(frac_thawed.shape) > 2:
         ft = np.reshape(frac_thawed, (-1, frac_thawed.shape[-1]))
@@ -44,9 +44,9 @@ class InversionProcessor():
 
     def _logweights_single(self, ind_scenes, _s_obs, _C_obs, normalize=False):
         from inference import lw_mvnormal, psislw, _normalize
+        s_pred = self._simulated_observations_single(ind_scenes, _C_obs)
         try:
-            assert np.count_nonzero(np.isnan(_s_obs)) == 0
-            s_pred = self._simulated_observations_single(ind_scenes, _C_obs)
+            if np.count_nonzero(np.isnan(_s_obs)) > 0: raise ValueError('Cannot handle NaN')
             lw = lw_mvnormal(
                 _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
             lw_ps, _ = psislw(lw)
@@ -219,16 +219,22 @@ class InversionResults():
     def _lw_generator(self, block_size=None):
         if block_size is None:
             block_size = self.blocksize
-        step = block_size if len(self.lw.shape) == 2 else np.product(self.lw.shape[:-1])//block_size
+        step = block_size if len(self.lw.shape) == 2 else np.product(self.lw.shape[1:-1])//block_size
         ind = np.arange(self.lw.shape[0], step=max((1, step)))[1:]
-        for _lw in np.array_split(self.lw, ind, axis=0): # not tested for mmap
-            yield np.array(_lw) #make sure it's a numpy array
+        for _lw in np.array_split(self.lw, ind, axis=0):
+            yield _lw# view to avoid memory issues
 
     def _parallel(self, fun, n_jobs=-1, block_size=None):
         if n_jobs in (0, 1, None):
             return fun(self.lw)
         else:
             from joblib import Parallel, delayed
+            # import gc
+            # def _fun(_lw):
+            #     res = fun(_lw)
+            #     del _lw
+            #     gc.collect()
+            #     return res
             res = np.concatenate(
                 Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator(block_size)),
                 axis=0)
