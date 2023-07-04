@@ -295,8 +295,9 @@ class InversionResultsMmap(InversionResults):
     
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None):
         InversionResults.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
-        self.lwmmap = lwmmap
-        self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+        if lwmmap is not None:
+            self.lwmmap = lwmmap
+            self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         
     def save(self, fnout):
         from analysis import save_object
@@ -305,9 +306,11 @@ class InversionResultsMmap(InversionResults):
             'blocksize': self.blocksize}
         save_object(dictout, fnout)
             
-    # @classmethod
-    # def from_file(cls, fn):
-    #     from analysis import load_object
-    #     dictin = load_object(fn)
-    #     ir = InversionResultsMmap(**dictin)
-    #     return ir    
+    @classmethod
+    def from_file(cls, fn):
+        from analysis import load_object
+        dictin = load_object(fn)
+        if not os.path.exists(dictin['lwmmap'].filename):
+            dictin['lwmmap'] = None
+        ir = InversionResultsMmap(**dictin)
+        return ir    

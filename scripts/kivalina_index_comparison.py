@@ -11,7 +11,8 @@ import numpy as np
 from rasterio.crs import CRS
 from rasterio.transform import Affine
 
-from analysis import Geospatial, load_object, read_geotiff, K_from_K_vec, save_object, InversionResults
+from analysis import (
+    Geospatial, load_object, read_geotiff, K_from_K_vec, save_object, InversionResultsMmap)
 
 path0 = '/home/simon/Work/gie/processed/kivalina/index/'
 pathfig = '/home/simon/Work/gie/figures/index/'
@@ -41,11 +42,12 @@ def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), appl
     geospatial_mean = load_object(os.path.join(path0, scenario, 'ir.p'))['geospatial']
     def _read(metric, mask=None):
         fnm = os.path.join(path0, scenario, f'e_mean_period_{metric}.npy')
-        metric = np.moveaxis(load_object(fnm), -1, 0)
+        arrm = np.moveaxis(load_object(fnm), -1, 0)
         if mask is not None:
-            np.putmask(metric, np.broadcast_to(mask, metric.shape), np.nan)
-        arr, _ = geospatial.warp(metric, geospatial_mean)
-        return arr
+            np.putmask(arrm, np.broadcast_to(mask, arrm.shape), np.nan)
+        if geospatial is not None:
+            arrm, _ = geospatial.warp(arrm, geospatial_mean)
+        return arrm
     dictout = {}
     year = scenario[:4]
     if apply_mask:
@@ -104,10 +106,14 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
                 save_object((em, kd), fntmp)
         else:
             em, kd = load_object(fntmp)
-        return em, kd        
-    from scripts.plotting import initialize_matplotlib, cmap_e, colslist, add_scalebar, prepare_figure
+        return em, kd
+    from scripts.plotting import cmap_e, colslist, add_scalebar, prepare_figure
+    from string import ascii_lowercase
     from matplotlib.colors import ListedColormap
-    from matplotlib.patches import Rectangle    
+    from matplotlib.patches import Rectangle
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    import matplotlib.patheffects as path_effects    
     import copy
     fig, axs = prepare_figure(
         nrows=3, ncols=len(configs), figsize=(1.8, 1.2), remove_spines=False, sharex='none', sharey='none',
@@ -117,7 +123,7 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     cmap = copy.copy(cmap_e)
     cmap.set_bad(color='#444444')
     e_lim = (0.00, 0.70)
-    
+
     em, kd = _prepare_data()
     for jconfig, config in enumerate(configs):
         axs[0, jconfig].imshow(em[jconfig]['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1])
@@ -129,7 +135,7 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
                 ax.set_xticks(e_ticks[metric])
                 ax.set_yticks(e_ticks[metric])
                 ax.plot(lim, lim, lw=0.5, c='#dddddd', alpha=0.3)
-    
+
     cols_iceo = ['#666666', colslist[0], colslist[1], colslist[2]]
     lcm = ListedColormap(cols_iceo)
     iceo = resample_iceoptical(fniceoptical, geospatial_subset)[0, ...]
@@ -146,8 +152,6 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     cax.set_xlim((0, 1))
     cax.axis('off')
     cax.text(0.00, vpos_label, 'independent map', ha='left', va='baseline', transform=cax.transAxes)
-    from matplotlib import cm
-    from matplotlib.colors import Normalize
     cax0 = axs[0, -1].inset_axes(cax_extent)
     cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax0)
     cbar.set_ticks([e_lim[0], e_lim[1] / 2, e_lim[1]])
@@ -159,7 +163,7 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     axs[-1, -1].text(
         1.03, 0.5, 'Sentinel-2 true-color', rotation=270, ha='left', va='center',
         transform=axs[-1, -1].transAxes)
-    
+
     fnS2 = '/home/simon/Work/Kivalina/optical/Sentinel2/20190711_rgb.vrt'
     S2, _ = geospatial_subset.warp_from_file(fnS2)
     S2 = S2[::-1,:,:]
@@ -170,14 +174,13 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
         return np.moveaxis(im, 0, -1)
     axs[2, -1].imshow(_normalize(S2))
 
-    
     # labels
     if config_labels is not None:
         for jax, ax in enumerate(axs[0,:]):
             ax.text(0.50, 1.11, config_labels[jax], ha='center', va='baseline', transform=ax.transAxes)
-    for ax in axs[-1, :-1]:
+    for ax in axs[-1,:-1]:
         ax.text(
-            0.50, -0.33, 'reference $\\mathrm{std}(\\bar{e})$ [$-$]', ha='center', va='baseline', 
+            0.50, -0.33, 'reference $\\mathrm{std}(\\bar{e})$ [$-$]', ha='center', va='baseline',
             transform=ax.transAxes)
     ylab = ('$\\bar{e}$ [$-$]', '$\\mathrm{std}(\\bar{e})$ [$-$]')
     for jax, ax in enumerate(axs[1:, 0]):
@@ -190,11 +193,19 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     for x_line in x_lines:
         line = mlines.Line2D(x_line, [y_line, y_line], transform=fig.transFigure, c='#666666', lw=0.5)
         fig.lines.extend([line])
-    for ax in np.concatenate((axs[0, :], axs[:, -1])):
+    # ticks   
+    for ax in np.concatenate((axs[0,:], axs[:, -1])):
         ax.tick_params(
             left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
     for ax in axs[1:, 1:-1].flatten():
         ax.tick_params(labelleft=False)
+    # panels
+    for jax, ax in enumerate(axs.flatten()):
+        lab = f'{ascii_lowercase[jax]})'
+        txt = ax.text(
+            0.98, 0.04, lab, c='w', transform=ax.transAxes, ha='right', va='baseline')
+        txt.set_path_effects(
+            [path_effects.Stroke(linewidth=1.0, foreground='#111111'), path_effects.Normal()])
     import matplotlib.pyplot as plt
     plt.show()
 
@@ -209,6 +220,8 @@ def rasterize_cores(fncores, geospatial):
 def violin_plot(config, fncores=None):
     from scripts.plotting import colslist, prepare_figure
     imap = resample_iceoptical(fniceoptical, geospatial_subset)[0, ...]
+    ft = load_object(os.path.join(path0, config[0], 'forcing_timing.p'))
+    indranges_names = ft['indranges_names']
     emean = _read_config(config, indranges_names, geospatial_subset, path0)['mean']
     labels = ['ice poor', 'ice rich', 'indeterminate']
     rs = np.random.RandomState(seed=1)
@@ -260,44 +273,68 @@ def violin_plot(config, fncores=None):
     import matplotlib.pyplot as plt
     plt.show()
 
-def plot_profile_time_series(path0, scenario='2019r'):
+def plot_profile_time_series(path0, scenario='2019r', steps=1024):
     from scripts.plotting import (
         initialize_matplotlib, cmap_e, colslist, _get_index, ProfileInterpolator,
-        contrast, add_arrow_line, plot_profile, add_scalebar)
+        contrast, add_arrow_line, plot_profile, add_scalebar, plot_profile_index)
     import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
     pathres = os.path.join(path0, scenario)
-    profiles = [((-164.3881, 67.8120), (-164.4469, 67.8272))]
+    profile = ((-164.3881, 67.8120), (-164.4469, 67.8272))
+    config = ('2019', 'TDD900_lastday')
 
     fig = plt.figure()
     initialize_matplotlib()
     fig.set_size_inches((7.08, 2.68), forward=True)
-    gs = gridspec.GridSpec(
-        8, 2, left=0.005, right=0.995, top=0.980, bottom=0.086, wspace=4.50, hspace=0.03)
-    axs = [[plt.subplot(gs[0:3, 0:1])]
-           [plt.subplot(gs[4:4, 0:1])],
-           [plt.subplot(gs[5:7, 0:0]), plt.subplot(gs[5:7, 1:1])]]
+    left, right = 0.12, 0.98
+    rects = [(left, 0.65, right-left, 0.20), (left, 0.55, right-left, 0.05)]
+    axs = [fig.add_axes(rect) for rect in rects]
+    
+    # ir = InversionResultsMmap.from_file(os.path.join(pathres, 'ir.p'))
+    # geospatial = ir.geospatial
+    # ygrid = ir.ygrid
+    # save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
+    # save_object(ygrid, os.path.join(pathres, 'ygrid.p'))
+    
+    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
 
-    ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
-    geospatial = ir.geospatial
-    ygrid = ir.ygrid
-    save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    save_object(ygrid, os.path.join(pathres, 'ygrid.p'))
+    ft = load_object(os.path.join(path0, config[0], 'forcing_timing.p'))
+    indranges = ft['indranges']
+    indrange = indranges[ft['indranges_names'].index(config[1])]
 
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
-    frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
     cmap = cmap_e
     elim = (0.0, 0.5)
-    xticks_im = (25, 65, 105, 145)
-    yticks_im = (10, 50, 90)
-    geospatial = geospatial_native
-    for jp, profile in enumerate(profiles):
-        pi = ProfileInterpolator(geospatial, profile[0], profile[1])
-        rc = pi._rowcol_endpoints
-
-    # read e_index
-
+    ymax = 0.70
+    xticks = np.arange(7) * 500
+    '''
+    yf = load_object(os.path.join(pathres, 'yf_mean.npy'))
+    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
+    plot_profile(
+        axs[0], e_mean, geospatial, profile, ymax=ymax, vlim=elim, ygrid=ygrid, cmap=cmap, 
+        yf=yf[..., indrange], y_xlabel=None, steps=steps, yticks=(0.0, 0.2, 0.4, 0.6), x_ylabel=-0.04, 
+        xticks=xticks)
+    axs[0].tick_params(labelbottom=False)
+    '''
+    em = _read_config(config, indranges_names, None, path0)
+    plot_profile_index(
+        axs[1], em['mean'], geospatial, profile, cmap=cmap, vlim=elim, y_xlabel=-2.3, steps=steps, 
+        xticks=xticks)
+    axs[1].tick_params(left=False, labelleft=False)
+    axs[1].text(-0.015, 0.500, '$\\bar{e}$', ha='right', va='center', transform=axs[1].transAxes)
     # load unw and show two time series
+    
+    # cbar
+    cax0 = fig.add_axes([0.005, rects[1][1], 0.010, rects[0][1] + rects[0][3] - rects[1][1]])
+    cbar = fig.colorbar(
+        cm.ScalarMappable(norm=Normalize(*elim, clip=True), cmap=cmap), cax=cax0, orientation='vertical')
+    cbar.set_ticks([elim[0], elim[1] / 2, elim[1]])
+    cax0.text(2.50, -0.26, '$e$ [$-$]', ha='center', va='baseline', transform=cax0.transAxes)
+
+    # labels on top?
+    
+    plt.show()
 
 if __name__ == '__main__':
     fnsubset = os.path.join(path0, 'subset.gpkg')
@@ -308,9 +345,9 @@ if __name__ == '__main__':
     configs = [
         ('2019', 'TDD900_lastday'), ('2019', 'TDD1000_lastday'), ('2018', 'TDD900_lastday'),
         ('2019r', 'TDD900_lastday')]
-    config_labels = ['later scene', 'later start', 'cooler summer', 'reference']
+    config_labels = ['later scene', 'deeper', 'cooler summer', 'reference']
 
     # violin_plot(configs[-1], fncores=fncores)
-    fntmp = os.path.join(pathfig, 'kde.p')
-    plot_subset(configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp)
-    # plot_profile_time_series(path0, scenario='2019r')
+    # fntmp = os.path.join(pathfig, 'kde.p')
+    # plot_subset(configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp)
+    plot_profile_time_series(path0, scenario='2019r')

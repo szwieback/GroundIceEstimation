@@ -80,7 +80,7 @@ def contrast(im, percentiles=(2, 98)):
 
 def plot_profile(
         ax, im, geospatial, xy_tup, im_frac=None, steps=512, vlim=None, cmap=None,
-        c_td=None, ymax=None, ygrid=None, yticks=None, xticks=None, labels=None,
+        c_td=None, ymax=None, ygrid=None, yticks=None, xticks=None, labels=None, yf=None,
         x_ylabel=-0.11, y_xlabel=-0.27, y_plabels=0.91):
     from analysis import thaw_depth
     xy_start, xy_end = xy_tup
@@ -95,11 +95,17 @@ def plot_profile(
         profile_frac = pi.interpolate(im_frac)
         alpha = 1.0  # profile_frac.T
         td = thaw_depth(profile_frac, ygrid, return_indices=True)
+    if yf is not None:
+        profile_yf = pi.interpolate(yf)
     ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto', alpha=alpha)
     if ymax is not None:
         ax.set_ylim((_get_index(ygrid, ymax), 0))
+    if c_td is None: c_td = '#ffffff'
+    if yf is not None:
+        for _yf in np.moveaxis(profile_yf, 1, 0):
+            _ind = _get_index(ygrid, _yf)
+            ax.plot(np.arange(pi.steps), _ind, c=c_td, lw=0.6, alpha=0.3)        
     if im_frac is not None:
-        if c_td is None: c_td = '#ffffff'
         ax.plot(np.arange(pi.steps), td, c=c_td, lw=0.6, alpha=0.3)
     if yticks is not None:
         ax.set_yticks(_get_index(ygrid, yticks))
@@ -112,11 +118,32 @@ def plot_profile(
             ax.text(
                 lx, y_plabels, lt, c='w', ha='center', va='baseline',
                 transform=ax.transAxes)
-    ax.text(
-        0.50, y_xlabel, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
+    if y_xlabel is not None:
+        ax.text(
+            0.50, y_xlabel, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
     ax.text(
         x_ylabel, 0.50, 'depth [cm]', ha='right', va='center', rotation=90,
         transform=ax.transAxes)
+
+def plot_profile_index(
+        ax, im, geospatial, xy_tup, steps=512, vlim=None, cmap=None, xticks=None, labels=None, 
+        y_xlabel=-0.27, y_plabels=0.91):
+    im = im[..., np.newaxis]
+    xy_start, xy_end = xy_tup
+    pi = ProfileInterpolator(geospatial, xy_start, xy_end, steps=steps)
+    profile = pi.interpolate(im)
+    vmin, vmax = (0.0, 1.0) if vlim is None else (vlim[0], vlim[1])
+    ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto')
+    if xticks is not None:
+        ax.set_xticks(_get_index(pi.distance_steps, xticks))
+        ax.set_xticklabels(xticks)
+    if labels is not None:
+        for lx, lt in labels:
+            ax.text(
+                lx, y_plabels, lt, c='w', ha='center', va='baseline',
+                transform=ax.transAxes)
+    ax.text(
+        0.50, y_xlabel, 'distance [m]', va='baseline', ha='center', transform=ax.transAxes)
 
 class ProfileInterpolator():
     def __init__(self, geospatial, xy_start, xy_end, steps=128):
