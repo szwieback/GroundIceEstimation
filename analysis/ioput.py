@@ -146,6 +146,13 @@ class Geospatial():
                self.xy(np.array([[0, self.shape[1]], self.shape]).T).T]
         return [self.distance(xy) for xy in xys]
         
+    def rasterize(self, gdf, field='id'):
+        from rasterio import features
+        geom = [(shps, vals) for shps, vals in zip(gdf.geometry, gdf[field])]
+        rasterized = features.rasterize(
+            geom, out_shape=self.shape, fill=-1, out=None,
+            transform=self.transform, default_value=-1, dtype=np.int64)[np.newaxis, ...]
+        return rasterized        
         
 
 def read_geotiff(fntif):
@@ -214,9 +221,12 @@ def read_referenced_motion(
     m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
     return m, geospatial
 
+def K_from_K_vec(K_vec):
+    return np.moveaxis(assemble_tril(np.moveaxis(K_vec, 0, -1)), (0, 1), (-2, -1))
+
 def read_K(fntif):
     K_vec, geospatial = read_geotiff_geospatial(fntif)
-    K = np.moveaxis(assemble_tril(np.moveaxis(K_vec, 0, -1)), (0, 1), (-2, -1))
+    K = K_from_K_vec(K_vec)
     return K, geospatial
 
 def enforce_directory(path):
