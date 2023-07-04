@@ -189,7 +189,6 @@ def add_scalebar(
     from matplotlib.lines import Line2D
     hextent = geospatial.extent[0]
     frac = length / hextent
-    if dx is None: dx = 0.05
     if color is None: color = '#666666'
     if lw is None: lw = 0.8
     if ylab is None: ylab = 1.6 * y

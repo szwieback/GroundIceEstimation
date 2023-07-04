@@ -18,10 +18,7 @@ nugget_speckle = (0.2)**2 # radians squared
 
 caldict = {'l': l, 'var_rad': var_rad, 'alpha': alpha, 'nugget_speckle': nugget_speckle}
 
-def prepare_references(path0, reftype='regular'):
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    geospatial = Geospatial.from_file(fnunw)
-    print(geospatial)
+def references(year=2019):
     refs = {}
     refs['regular'] = np.array([    [-164.25190,  67.83774],
                                     [-164.31991,  67.87082],
@@ -34,12 +31,20 @@ def prepare_references(path0, reftype='regular'):
                                     [-164.73931,  67.84514],
                                     [-164.84971,  67.93446],
                                     [-164.87671,  67.87946]])
+    if year == 2018:        
+        refs['regular'][6, :] = [-164.62411, 67.85179]
+        
     refs['short'] = np.array([  [-164.59051,  67.86127],
                                 [-164.72251,  67.84150],
                                 [-164.71651,  67.86195],
                                 [-164.83711,  67.93082],
                                 [-164.87731,  67.88332]])
     refs['all'] = np.concatenate((refs['regular'], refs['short']), axis=0)
+    return refs
+
+def prepare_references(path0, refs, reftype='regular'):
+    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
+    geospatial = Geospatial.from_file(fnunw)
     refs_latlon = {_reftype: refs[_reftype][::-1, ...].T for _reftype in refs}
     save_object(refs_latlon, os.path.join(path0, 'references_latlon.p'))
     np.savetxt(
@@ -64,8 +69,9 @@ def evaluate_calibration(path0, caldict, overwrite=False):
 
     var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
     covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
-
-    xy_ref = prepare_references(path0, reftype='all')
+    
+    refs = references()
+    xy_ref = prepare_references(path0, refs, reftype='all')
 
     fndist = os.path.join(path0, 'distance_cal.p')
     dist = distance_to_ref(geospatial_unw, xy_ref, fndist=fndist, overwrite=overwrite)
@@ -109,7 +115,12 @@ def plot_calibration(dist_c, svar_pred_c, svar_obs_c):
     plt.show()    
 
 if __name__ == '__main__':
-    path0 = f'/home/simon/Work/gie/processed/kivalina/2019'
+    pathb = '/home/simon/Work/gie/processed/kivalina/'
+    path0 = os.path.join(pathb, '2019_index')
+    # dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict, overwrite=False)
+    # plot_calibration(dist_c, svar_pred_c, svar_obs_c)
     
-    dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict, overwrite=False)
-    plot_calibration(dist_c, svar_pred_c, svar_obs_c)
+    year = 2018
+    path0 = os.path.join(pathb, f'{year}_index')
+    refs = references(year=year)
+    prepare_references(path0, refs)

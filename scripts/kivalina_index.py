@@ -12,8 +12,7 @@ from collections import namedtuple
 from forcing import load_forcing_merra_subset, parse_dates, ind_TDD_exceedance
 from analysis import (save_object, load_object, read_K, read_geotiff_geospatial, 
     RationalQuadraticSepDiagCovMV, add_nugget, length_conversion, spatial_referencing, InversionProcessor,
-    InversionResults, StefanPredictor, PredictionEnsemble, assemble_tril, vectorize_tril, 
-    InversionResultsMmap)
+    InversionResults, StefanPredictor, PredictionEnsemble, assemble_tril, InversionResultsMmap)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
@@ -71,7 +70,7 @@ def process_index_kivalina(
         'indranges': indranges}
     save_object(dict_forcing, os.path.join(pathout, 'forcing_timing.p'))
     
-    _fununw = 'unwrapped_corr.geo.tif' if year == 2019 else 'unwrapped.geo.tif'
+    _fununw = 'unwrapped_corr.geo.tif' if year in (2018, 2019) else 'unwrapped.geo.tif'
     fnunw = os.path.join(pathin, _fununw)
     fnK = os.path.join(pathin, 'K_vec.geo.tif')
     K, geospatial_K = read_K(fnK)
@@ -94,7 +93,6 @@ def process_index_kivalina(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     
-    # check whether 2018 needs different references
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
@@ -103,10 +101,10 @@ def process_index_kivalina(
     predens.predict_mean_period(indranges)
     
     data, geospatial_crop = {'s_obs': s_obs, 'K': K_s}, geospatial_unw
-    # # for testing only
-    # ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
-    # for dname in data:
-    #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
+        # for testing only
+        # ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
+        # for dname in data:
+        #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
@@ -114,13 +112,16 @@ def process_index_kivalina(
     
     ir.save(os.path.join(pathout, 'ir.p'))
     ip.delete_weight_files(pathout)
+    
     ir = InversionResultsMmap.from_file(os.path.join(pathout, 'ir.p'))
     expecs = [
-        ('yf', 'mean'),  ('e_mean_period', 'var'),
+        ('yf', 'mean'),  ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
+
     if extended_metrics:
         expecs = expecs + [('e', 'mean'), ('e', 'var'), ('s_los', 'mean'),
-                           ('s_los', 'var'), ('e_mean_period', 'mean'),]
+                           ('s_los', 'var'),]
+    
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
@@ -130,9 +131,11 @@ if __name__ == '__main__':
     scenarios = [
         Scenario(name='2019', year=2019, remove_last=False, reference=None, extended_metrics=True),
         Scenario(name='2019r', year=2019, remove_last=True, reference=None, extended_metrics=True),
+        Scenario(name='2019rs', year=2019, remove_last=True, reference=(5,), extended_metrics=False),
         Scenario(name='2018', year=2018, remove_last=False, reference=None, extended_metrics=False),
-        Scenario(name='2019rs', year=2019, remove_last=True, reference=(5,), extended_metrics=False)]
-    TDD = (850, 950)
+        ]
+    scenarios = scenarios[-1:]
+    TDD = (850, 900, 950, 1000, 1050)
     N, Nbatch = 10000, 1    
     geom = {'ia': 39.29 / 180 * np.pi}
     
@@ -141,7 +144,7 @@ if __name__ == '__main__':
     pathin0 = '/10TBstorage/Work/stacks/Kivalina/gie/'
     pathout0 = os.path.join(path0, 'processed', 'kivalina', 'index')
     
-    fnref= 'references_latlon.p' #adjust this with only 10th ref, rename out
+    fnref= 'references_latlon.p'
     
     overwrite = True
     # loop over scenarios
