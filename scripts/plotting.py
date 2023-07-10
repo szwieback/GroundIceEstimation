@@ -156,6 +156,14 @@ class ProfileInterpolator():
     def _rowcol_endpoints(self):
         return self.geospatial.rowcol(np.stack((self.xy_start, self.xy_end), axis=1))
 
+    @property
+    def _xy(self):
+        import warnings
+        warnings.warn("Profile Interpolator calculation not on ellipsoid")
+        xy = np.stack((np.linspace(self.xy_start[0], self.xy_end[0], num=self.steps),
+                       np.linspace(self.xy_start[1], self.xy_end[1], num=self.steps)))
+        return xy
+    
     def _interpolator(self, arr):
         from scipy.interpolate import RegularGridInterpolator
         rowcol_grids = self.geospatial.rowcol_grids

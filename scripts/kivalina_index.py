@@ -17,6 +17,7 @@ from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
 wavelength = 0.055   
+geom = {'ia': 39.29 / 180 * np.pi}
 
 Scenario = namedtuple('Scenario', ['name', 'year', 'remove_last', 'reference', 'extended_metrics'])
 
@@ -137,7 +138,6 @@ if __name__ == '__main__':
     scenarios = scenarios[-1:]
     TDD = (850, 900, 950, 1000, 1050)
     N, Nbatch = 10000, 1    
-    geom = {'ia': 39.29 / 180 * np.pi}
     
     path0 = '/10TBstorage/Work/gie'
     folder_forcing = os.path.join(path0, 'forcing', 'kivalina')
