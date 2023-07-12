@@ -201,22 +201,24 @@ def _get_index(ygrid, depth):
 
 def add_arrow_line(
         ax, rc, c='#000000', lw=0.7, alpha=1.0, label='', hwidth=70, hlength=90,
-        pos_frac=0.55, dlabel=None):
+        pos_frac=[0.55], dlabel=None, size_frac = 0.02):
     from matplotlib.patches import FancyArrow
     ax.plot(rc[1,:], rc[0,:], c=c, lw=lw, alpha=alpha)
-    size_frac = 0.02
+    
 
-    dx, dy = (rc[1, 0] - rc[1, 1]) * size_frac, (rc[0, 0] - rc[0, 1]) * size_frac
-    xm = pos_frac * rc[1, 0] + (1 - pos_frac) * rc[1, 1]
-    ym = pos_frac * rc[0, 0] + (1 - pos_frac) * rc[0, 1]
-    arrow = FancyArrow(
-        xm + dx, ym + dy, -2 * dx, -2 * dy, color=c, width=0, head_width=hwidth,
-        head_length=hlength, length_includes_head=False, overhang=0.3,
-        zorder=10, linewidth=lw, alpha=alpha)
+    for pf in pos_frac:
+        dx, dy = (rc[1, 0] - rc[1, 1]) * size_frac, (rc[0, 0] - rc[0, 1]) * size_frac
+        xm = pf * rc[1, 0] + (1 - pf) * rc[1, 1]
+        ym = pf * rc[0, 0] + (1 - pf) * rc[0, 1]
+        arrow = FancyArrow(
+            xm + dx, ym + dy, -2 * dx, -2 * dy, color=c, width=0, head_width=hwidth,
+            head_length=hlength, length_includes_head=False, overhang=0.3,
+            zorder=10, linewidth=lw, alpha=alpha)
+        ax.add_patch(arrow)
     if label is not None and label != '':
         if dlabel is None: dlabel = 10 * np.array((dx, dy))
         ax.text(xm + dlabel[0], ym + dlabel[1], label, ha='left', va='center', color=c)
-    ax.add_patch(arrow)
+    
 
 def add_scalebar(
         ax, geospatial, length=500, y=-0.10, dx=0.05, label=None, color=None, lw=None, 

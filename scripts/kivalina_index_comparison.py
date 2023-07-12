@@ -7,6 +7,7 @@ Created on Jun 28, 2023
 import os
 import numpy as np
 from rasterio.crs import CRS
+import copy
 from rasterio.transform import Affine
 from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
@@ -40,6 +41,11 @@ geospatial_proc = Geospatial(transform_proc, crs_large, shape=shape_proc)
 pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
 _fnK = os.path.join(pathm1, f'2019_index', 'K_vec.geo.tif')
 geospatial_native = Geospatial.from_file(os.path.join(path0, _fnK))
+
+from scripts.plotting import cmap_e
+c_bad = '#444444'
+cmap = copy.copy(cmap_e)
+cmap.set_bad(color=c_bad)
 
 def _normalize(im):
     anc = np.nanpercentile(im, (2, 99), axis=(1, 2))
@@ -131,17 +137,15 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     from string import ascii_lowercase
     from matplotlib.colors import ListedColormap
     from matplotlib.patches import Rectangle
+    import matplotlib.lines as mlines    
     from matplotlib import cm
     from matplotlib.colors import Normalize
     import matplotlib.patheffects as path_effects
-    import copy
     fig, axs = prepare_figure(
         nrows=3, ncols=len(configs), figsize=(1.8, 1.2), remove_spines=False, sharex='none', sharey='none',
         top=0.970, bottom=0.070, left=0.080, right=0.845, wspace=0.250, hspace=0.050)
     lims = {'mean': (0.0, 0.7), 'var': (0.00, 0.20)}
     e_ticks = {'mean': (0.0, 0.3, 0.6), 'var': (0.00, 0.10, 0.20)}
-    cmap = copy.copy(cmap_e)
-    cmap.set_bad(color='#444444')
     e_lim = (0.00, 0.70)
 
     em, kd = _prepare_data()
@@ -201,7 +205,6 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     for jax, ax in enumerate(axs[1:, 0]):
         ax.text(-0.33, 0.50, ylab[jax], rotation=90, ha='right', va='center', transform=ax.transAxes)
     # lines
-    import matplotlib.lines as mlines
     y_line = 0.96
     x_lines = [(axs[0, 0].get_position().x0, axs[0, -2].get_position().x1),
                (axs[0, -1].get_position().x0, axs[0, -1].get_position().x1)]
@@ -276,10 +279,10 @@ def violin_plot(config, fncores=None):
         bp['bodies'][0].set_alpha(alphas[jcode])
         bp['bodies'][0].set_edgecolor('none')
 
-        ax.xaxis.tick_top()
-        ax.text(
-            0.5, 1.18, '$\\bar{e}$ [$-$]', transform=ax.transAxes,
-            ha='center')
+    ax.xaxis.tick_top()
+    ax.text(
+        0.5, 1.18, '$\\bar{e}$ [$-$]', transform=ax.transAxes,
+        ha='center')
 
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
@@ -331,7 +334,7 @@ def _read_timeseries_kivalina(year=2019, remove_last=False, overwrite=False):
 
 def plot_profile_time_series(path0, config, scenario='2019r'):
     from scripts.plotting import (
-        initialize_matplotlib, cmap_e, colslist, ProfileInterpolator, plot_profile, plot_profile_index)
+        initialize_matplotlib, colslist, ProfileInterpolator, plot_profile, plot_profile_index)
     import matplotlib.pyplot as plt
     from matplotlib import cm
     from matplotlib.colors import Normalize
@@ -370,7 +373,6 @@ def plot_profile_time_series(path0, config, scenario='2019r'):
     indranges = ft['indranges']
     indrange = indranges[ft['indranges_names'].index(config[1])]
 
-    cmap = cmap_e
     elim = (0.0, 0.5)
     ymax = 0.70
     xticks = np.arange(7) * 1000
@@ -454,13 +456,10 @@ def plot_profile_time_series(path0, config, scenario='2019r'):
     plt.show()
 
 def plot_regional():
-    from scripts.plotting import (
-        add_scalebar, colslist, prepare_figure, initialize_matplotlib)
+    from scripts.plotting import add_scalebar, colslist, initialize_matplotlib
     import colorcet as cc
-    import copy
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
-    from matplotlib.lines import Line2D
     from datetime import datetime as dt
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -603,33 +602,30 @@ def TDD_kivalina(fnforcing):
     return TDDdict, cumTDDdict
 
 def rc_references(path0, config, geospatial):
-    import geopandas as gpd
-    from shapely.geometry import Point
+    # import geopandas as gpd
+    # from shapely.geometry import Point
     pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
     path1 = os.path.join(pathm1, f'{config[0]}_index')
     fnref = os.path.join(path1, 'references_latlon.p')
     xy_ref = load_object(fnref)['regular']
-    geometry = [Point((lon, lat)) for lon, lat in xy_ref.T]
-    gdf = gpd.GeoDataFrame(geometry=geometry, crs='EPSG:4326').to_crs(geospatial.crs)
-    pts = np.array([(x.x, x.y) for x in gdf['geometry']]).T
-    rc_ref = geospatial.rowcol(pts)
+    rc_ref = geospatial.rowcol(xy_ref, crs='EPSG:4326')
+    # geometry = [Point((lon, lat)) for lon, lat in xy_ref.T]
+    # gdf = gpd.GeoDataFrame(geometry=geometry, crs='EPSG:4326').to_crs(geospatial.crs)
+    # pts = np.array([(x.x, x.y) for x in gdf['geometry']]).T
+    # rc_ref = geospatial.rowcol(pts)
     return rc_ref
 
 def plot_atmosphere(config_ref, config_r, path0, indranges_names):
-    from scripts.plotting import prepare_figure, cmap_e, add_scalebar
+    from scripts.plotting import prepare_figure, add_scalebar
     from matplotlib import cm
-    from matplotlib.colors import Normalize    
+    from matplotlib.colors import Normalize
     from string import ascii_lowercase
-    import copy
-    c_bad = '#444444'
-    cmap = copy.copy(cmap_e)
-    cmap.set_bad(color=c_bad)
 
     e_lim = (0.00, 0.70)
     std_lim = (0.00, 0.20)
     rc_ref = rc_references(path0, config_ref, geospatial_proc)
     fig, axs = prepare_figure(
-        nrows=2, ncols=2, figsize=(1.00, 0.47), top=0.920, bottom=0.020, right=0.88, left=0.010, 
+        nrows=2, ncols=2, figsize=(1.00, 0.47), top=0.920, bottom=0.020, right=0.88, left=0.010,
         hspace=0.10, wspace=0.06, remove_spines=False)
 
     e_ref = _read_config(config_ref, indranges_names, geospatial_proc, path0)
@@ -637,7 +633,7 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names):
     for jres, res in enumerate((e_ref, e_r)):
         axs[0, jres].imshow(res['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1])
         axs[1, jres].imshow(np.sqrt(res['var']), cmap=cmap, vmin=std_lim[0], vmax=std_lim[1])
-    
+
     ylab = 0.16
     for jax, ax in enumerate(axs.flatten()):
         ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
@@ -648,7 +644,7 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names):
     cax_extent = [1.04, 0.06, 0.06, 0.60]
     cbarlabels = ('$\\bar{e}$ [$-$]', '$\\mathrm{std}(\\bar{e})$')
     c, lw, ec, s = 'none', 0.5, 'w', 3
-    axs[0, 0].scatter(rc_ref[1, :], rc_ref[0, :], c=c, s=s, linewidths=lw, edgecolors=ec)
+    axs[0, 0].scatter(rc_ref[1,:], rc_ref[0,:], c=c, s=s, linewidths=lw, edgecolors=ec)
     axs[0, 1].scatter(rc_ref[1, 5], rc_ref[0, 5], c=c, s=s, linewidths=lw, edgecolors=ec)
     for jrow, lim in enumerate((e_lim, std_lim)):
         cax = axs[jrow, -1].inset_axes(cax_extent)
@@ -659,7 +655,86 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names):
     collabels = ('multiple references', 'single reference')
     for jcol, collabel in enumerate(collabels):
         axs[0, jcol].text(
-            0.50, 1.05, collabel, ha='center', va='baseline', transform=axs[0, jcol].transAxes) 
+            0.50, 1.05, collabel, ha='center', va='baseline', transform=axs[0, jcol].transAxes)
+    import matplotlib.pyplot as plt
+    plt.show()
+
+def plot_index(config, path0):
+    from scripts.plotting import prepare_figure, add_scalebar, colslist
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    import matplotlib.patheffects as path_effects
+    from string import ascii_lowercase
+
+    e_lim = (0.00, 0.70)
+    rc_ref = rc_references(path0, config, geospatial_proc)
+    fig, axs = prepare_figure(
+        nrows=1, ncols=2, figsize=(2.05, 0.55), top=0.990, bottom=0.160, right=0.985, left=0.015,
+        hspace=0.10, wspace=0.06, remove_spines=False)
+
+    e_res = _read_config(config, indranges_names, geospatial_proc, path0)
+    axs[0].imshow(e_res['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1])
+
+    ls, _ = geospatial_proc.warp_from_file(fnls)
+    ls = ls[::-1,:,:]
+    axs[1].imshow(_normalize(ls))
+    # show cores
+    import geopandas as gpd
+    gdf = gpd.read_file(fncores).to_crs(geospatial_proc.crs)
+    gdf = gdf[gdf['include'] == 1]
+    rc_cores = geospatial_proc.rowcol(gdf)
+    s_core, c_core = 2, '#ffdf1d'
+    axs[1].scatter(
+        rc_cores[1,:], rc_cores[0,:], c=c_core, s=2, edgecolors='none')
+    # show focus region
+    gss = geospatial_subset.shape
+    rc_subset = np.array([[0, 0], [gss[0], 0], [gss[0], gss[1]], [0, gss[1]]]).T
+    xy_subset = geospatial_subset.xy(rc_subset)
+    rcp = geospatial_proc.rowcol(xy_subset, crs=geospatial_subset.crs)
+    c_subset = colslist[2]
+    for js in range(rcp.shape[1]):
+        je = (js + 1) % (rcp.shape[1])
+        axs[1].plot(
+            (rcp[1, js], rcp[1, je]), (rcp[0, js], rcp[0, je]), c=c_subset, lw=0.8)
+    txt = axs[1].text(0.86, 0.43, 'subset', c=c_subset, transform=axs[1].transAxes)
+    txt.set_path_effects(
+        [path_effects.Stroke(linewidth=1.5, foreground='#333333'), path_effects.Normal()])
+
+    # show profile
+    from scripts.plotting import add_arrow_line
+    rc_profile = geospatial_proc.rowcol(np.array(profile).T, crs='EPSG:4326')
+    add_arrow_line(
+        axs[1], rc_profile, c='#f35092', hwidth=12, hlength=18, pos_frac=[0.75, 0.30], label='T', 
+        dlabel=(-10, 30))
+
+
+    for jax, ax in enumerate(axs.flatten()):
+        ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
+        label = f'{ascii_lowercase[jax]})'
+        txt = ax.text(0.01, 0.02, label, ha='left', va='baseline', c='#dddddd', transform=ax.transAxes)
+
+    c, lw, ec, s = 'none', 0.5, 'w', 3
+    axs[0].scatter(rc_ref[1,:], rc_ref[0,:], c=c, s=s, linewidths=lw, edgecolors=ec)
+    cax_left, cax_height, cax_top = 0.04, 0.06, -0.04
+    cax = axs[0].inset_axes((cax_left, cax_top - cax_height, 0.40, cax_height))
+    cbar = fig.colorbar(
+        cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax, orientation='horizontal')
+    cbar.set_ticks([e_lim[0], e_lim[1] / 2, e_lim[1]])
+    cbar.solids.set_rasterized(True)
+    cax.text(1.07, 0.30, '$\\bar{e}$ [$-$]', ha='left', va='center', transform=cax.transAxes)
+    add_scalebar(
+        axs[0], geospatial_proc, length=5e3, label='5 km', y=cax_top, dx=cax_left,
+        ylab=cax_top - cax_height)
+
+    # legend: cores
+    lax = axs[1].inset_axes((0, cax_top - cax_height, 1.00, cax_height))
+    lax.scatter(
+        cax_left, 0.50, s=s_core * 2, c=c_core, transform=lax.transAxes, linewidths=0.3, 
+        edgecolors=colslist[0])
+    ax.text(0.08, 0.40, 'cores', ha='left', va='center', transform=lax.transAxes)
+    lax.axis('off')
+
+
     import matplotlib.pyplot as plt
     plt.show()
 
@@ -680,7 +755,9 @@ if __name__ == '__main__':
     # plot_profile_time_series(path0, configs[0], scenario='2019')
     # plot_regional()
 
-    plot_atmosphere(configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names)
+    # plot_atmosphere(configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names)
+    plot_index(configs[0], path0)
 
-    # results: index, Landsat with reference points and cores
-    # atmosphere: index, index_unc. with/without multiple reference points
+
+    # gdf.to_crs(geospatial_proc.crs)
+
