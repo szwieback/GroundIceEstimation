@@ -5,32 +5,50 @@ Created on Jun 28, 2023
 '''
 
 import os
-import shapely
-import geopandas as gpd
 import numpy as np
 from rasterio.crs import CRS
 from rasterio.transform import Affine
-
 from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
     InversionResultsMmap, assemble_tril)
-from pip._vendor.webencodings import ascii_lower
 
 path0 = '/home/simon/Work/gie/processed/kivalina/index/'
 pathfig = '/home/simon/Work/gie/figures/index/'
+pathls, lsscene = '/home/simon/Work/gie/optical/Landsat/', 'LC08_L2SP_083012_20190707_20200827_02_T1'
+fnls = os.path.join(pathls, f'{lsscene}.vrt')
+fnswir = os.path.join(pathls, lsscene, f'{lsscene}_SR_B7.TIF')
+fndem = '/home/simon/Work/Kivalina/TDM90/Kivalina/DEM.tif'
+fnforcing = '/home/simon/Work/Kivalina/forcing/T2MMEAN.csv'
 
-# add geospatial with custom AEA (QGIS)
+profile = ((-164.4236, 67.8357), (-164.3395, 67.7895))
+
 crs = CRS.from_epsg(3572)
 posting = 50
 transform = Affine(posting, 0.0, -615854, 0.0, -posting, -2381365)
 shape = (124, 124)
 geospatial_subset = Geospatial(transform, crs, shape=shape)
 
+proj4_large = "+proj=laea +lat_0=90 +lon_0=-176.5 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+crs_large = CRS.from_proj4(proj4_large)
+transform_large = Affine(posting, 0.0, 478800, 0.0, -posting, -2384000)
+shape_large = (700, 1200)
+geospatial_large = Geospatial(transform_large, crs_large, shape=shape_large)
+transform_proc = Affine(posting, 0.0, 489274, 0.0, -posting, -2397437)
+shape_proc = (310, 690)
+geospatial_proc = Geospatial(transform_proc, crs_large, shape=shape_proc)
+
 pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
 _fnK = os.path.join(pathm1, f'2019_index', 'K_vec.geo.tif')
 geospatial_native = Geospatial.from_file(os.path.join(path0, _fnK))
 
+def _normalize(im):
+    anc = np.nanpercentile(im, (2, 99), axis=(1, 2))
+    im -= anc[0,:, np.newaxis, np.newaxis]
+    im /= (anc[1,:] - anc[0,:])[:, np.newaxis, np.newaxis]
+    return np.moveaxis(im, 0, -1)
+
 def resample_iceoptical(fniceoptical, geospatial):
+    import geopandas as gpd
     iceoptical = gpd.read_file(fniceoptical).to_crs(geospatial.crs)
     iceoptical = iceoptical[iceoptical['include'] == 1]
     return geospatial.rasterize(iceoptical, field='code')
@@ -158,23 +176,18 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
     cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax0)
     cbar.set_ticks([e_lim[0], e_lim[1] / 2, e_lim[1]])
     cbarlabel = '$\\bar{e}$ [$-$]'
+    cbar.solids.set_rasterized(True)
     cax0.text(1.50, vpos_label, cbarlabel, ha='center', va='baseline', transform=cax0.transAxes)
 
     # scale bar
     add_scalebar(axs[-1, -1], geospatial_subset, length=2e3, y=0.25, dx=-0.68, label='2 km', ylab=0.18)
     axs[-1, -1].text(
-        1.03, 0.5, 'Sentinel-2 true-color', rotation=270, ha='left', va='center',
+        1.03, 0.5, 'Landsat-8 true-color', rotation=270, ha='left', va='center',
         transform=axs[-1, -1].transAxes)
 
-    fnS2 = '/home/simon/Work/Kivalina/optical/Sentinel2/20190711_rgb.vrt'
-    S2, _ = geospatial_subset.warp_from_file(fnS2)
-    S2 = S2[::-1,:,:]
-    def _normalize(im):
-        anc = np.nanpercentile(im, (2, 99), axis=(1, 2))
-        im -= anc[0,:, np.newaxis, np.newaxis]
-        im /= (anc[1,:] - anc[0,:])[:, np.newaxis, np.newaxis]
-        return np.moveaxis(im, 0, -1)
-    axs[2, -1].imshow(_normalize(S2))
+    ls, _ = geospatial_subset.warp_from_file(fnls)
+    ls = ls[::-1,:,:]
+    axs[2, -1].imshow(_normalize(ls))
 
     # labels
     if config_labels is not None:
@@ -213,6 +226,7 @@ def plot_subset(configs, indranges_names, path0, config_labels=None, fntmp=None,
 
 def rasterize_cores(fncores, geospatial):
     # breaks down when multiple coords map to the same pixel
+    import geopandas as gpd
     cores = gpd.read_file(fncores).to_crs(geospatial.crs)
     imap_ = geospatial.rasterize(cores, field='code')
     mask_ = geospatial.rasterize(cores, field='include')
@@ -315,10 +329,9 @@ def _read_timeseries_kivalina(year=2019, remove_last=False, overwrite=False):
         res = load_object(fntmp)
     return res
 
-def plot_profile_time_series(path0, scenario='2019r'):
+def plot_profile_time_series(path0, config, scenario='2019r'):
     from scripts.plotting import (
-        initialize_matplotlib, cmap_e, colslist, _get_index, ProfileInterpolator,
-        contrast, add_arrow_line, plot_profile, add_scalebar, plot_profile_index)
+        initialize_matplotlib, cmap_e, colslist, ProfileInterpolator, plot_profile, plot_profile_index)
     import matplotlib.pyplot as plt
     from matplotlib import cm
     from matplotlib.colors import Normalize
@@ -329,9 +342,6 @@ def plot_profile_time_series(path0, scenario='2019r'):
     from datetime import timedelta, date
     from string import ascii_lowercase
     pathres = os.path.join(path0, scenario)
-    # profile = ((-164.3881, 67.8120), (-164.4469, 67.8272))
-    profile = ((-164.4236, 67.8357), (-164.3395, 67.7895))
-    config = ('2019', 'TDD900_lastday')
     year = int(config[0])
     steps = 1024
     step_ts = (268, 940)  # (245, 980)
@@ -369,7 +379,6 @@ def plot_profile_time_series(path0, scenario='2019r'):
     annots = [(40, 'floodplain'), (260, 'colluvial--alluvial'), (470, 'rocky outcrop'),
               (750, 'colluvial--alluvial'), (980, 'floodplain')]
 
-    
     # profile
     yf = load_object(os.path.join(pathres, 'yf_mean.npy'))
     e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
@@ -379,7 +388,7 @@ def plot_profile_time_series(path0, scenario='2019r'):
         xticks=xticks)
     axs[0].tick_params(labelbottom=False)
     axs[0].text(0.008, 0.02, 'a)', ha='left', va='baseline', transform=axs[0].transAxes, c='w')
-    
+
     # index bar
     em = _read_config(config, indranges_names, None, path0)
     plot_profile_index(
@@ -442,9 +451,216 @@ def plot_profile_time_series(path0, scenario='2019r'):
         cm.ScalarMappable(norm=Normalize(*elim, clip=True), cmap=cmap), cax=cax0, orientation='vertical')
     cbar.set_ticks([elim[0], elim[1] / 2, elim[1]])
     cax0.text(2.50, -0.26, '$e$ [$-$]', ha='center', va='baseline', transform=cax0.transAxes)
+    plt.show()
 
-    # labels on top?
+def plot_regional():
+    from scripts.plotting import (
+        add_scalebar, colslist, prepare_figure, initialize_matplotlib)
+    import colorcet as cc
+    import copy
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+    from matplotlib.lines import Line2D
+    from datetime import datetime as dt
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    from string import ascii_lowercase
+    thresh_swir = 7.41e3
+    # fig, axs = prepare_figure(
+    #     nrows=1, ncols=3, figsize=(2.0, 0.7), sharex=False, sharey=False, bottom=0.2, right=0.96, left=0.02,
+    #     top=0.93, wspace=0.3, remove_spines=False)
+    col_water = '#e6e6f1'
+    initialize_matplotlib()
+    fig = plt.figure()
+    fig.set_size_inches((7.08, 2.20), forward=True)
+    left, top = 0.01, 0.93
+    width, height_s, height_f = 0.29, 0.55, 0.78
+    hspace_l, hspace_r = 0.025, 0.065
+    rects = [(left, top - height_s, width, height_s),
+             (left + (width + hspace_l), top - height_s, width, height_s),
+             (left + 2 * width + hspace_l + hspace_r, top - height_f, width, height_f)]
 
+    axs = [fig.add_axes(rect) for rect in rects]
+    labels = ['Landsat true color', 'elevation', 'thawing degree days (TDD) [$^{\\circ}$C]']
+
+    ax = axs[0]
+    ls, _ = geospatial_large.warp_from_file(fnls)
+    ls = ls[::-1,:,:]
+    ax.imshow(_normalize(ls))
+    ax.tick_params(bottom=False, left=False, labelbottom=False, labelleft=False)
+
+    ccrsproj = ccrs.LambertAzimuthalEqualArea(
+        central_longitude=-148, central_latitude=70)
+    iax = fig.add_axes((left, 0.02, width, 0.34), projection=ccrsproj)
+    crs_pc = ccrs.PlateCarree()
+    iax.set_extent([-165, -135, 58, 71], crs=crs_pc)
+
+    iax.add_feature(cfeature.OCEAN, color=col_water)
+    iax.add_feature(cfeature.BORDERS, linestyle='-', lw=0.5, color='#cccccc')
+    iax.plot(
+        -164.54, 67.81, linestyle='none', marker='o', mfc=colslist[0], mec='none', ms=2,
+        transform=crs_pc)
+    iax.spines['geo'].set_linewidth(0.5)
+    iax.spines['geo'].set_edgecolor('#666666')
+
+    ax = axs[1]
+    cmap_topo = copy.copy(cc.cm['CET_L10'])
+    cmap_topo.set_bad(col_water)
+    dem, _ = geospatial_large.warp_from_file(fndem)
+    if thresh_swir is not None:
+        from scipy.ndimage import binary_closing, binary_opening
+        ls_swir, _ = geospatial_large.warp_from_file(fnswir)
+        mask = (ls_swir < thresh_swir)[0, ...]
+        mask = binary_opening((binary_closing(mask, iterations=1)), iterations=5)
+        dem[mask[np.newaxis, ...]] = np.nan
+        mask = mask.astype(np.uint8)
+    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0, vmax=300)
+    rc = geospatial_large.rowcol(
+        np.array([geospatial_proc.transform.xoff, geospatial_proc.transform.yoff])[:, np.newaxis])
+    rect = Rectangle(
+        rc[:, 0], geospatial_proc.shape[1], geospatial_proc.shape[0], facecolor='none',
+        edgecolor=colslist[0])
+    ax.add_patch(rect)
+    ax.text(rc[0, 0] + 50, rc[1, 0] - 30, 'study area', c=colslist[0])
+    ax.tick_params(bottom=False, left=False, labelbottom=False, labelleft=False)
+    add_scalebar(ax, geospatial_proc, length=5000, label='5 km')
+    cax = ax.inset_axes((0.00, -0.15, 0.50, 0.10))
+    cbar = fig.colorbar(im, cax=cax, orientation='horizontal')
+    cbar.set_ticks((0, 100, 200, 300))
+    cax.text(1.10, 0.20, '[m]', ha='left', va='center', transform=cax.transAxes)
+    cbar.solids.set_rasterized(True)
+
+    ax = axs[2]
+    TDDs = (900,)
+    TDDdict, cumdict = TDD_kivalina(fnforcing)
+    for year in cumdict:
+        T_y = cumdict[year][1]
+        if year in (2018, 2019):
+            alpha, lw = 1.0, 0.8
+            c = {2018: colslist[1], 2019: colslist[0]}[year]
+            ax.text(len(T_y) + 3, T_y[-1], str(year), ha='left', va='center', c=c)
+        else:
+            alpha, lw, c = 0.4, 0.3, '#666666'
+        ax.plot(np.arange(len(T_y)), T_y, alpha=alpha, lw=lw, c=c)
+    period = cumdict[year][0]
+    months = [5, 6, 7, 8, 9]
+    ax.set_xticks([(dt(year, m, 1) - period[0]).days for m in months])
+    ax.set_xticklabels([f'{m:02}-01' for m in months])
+    ax.set_yticks((0, 300, 600, 900, 1200))
+    for TDD in TDDs:
+        ax.axhline(TDD, lw=0.2, c='#666666')
+        ax.text(1, TDD + 25, f'{TDD}' + '\\,$^{\\circ}$C\\,d threshold')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.text(0.50, -0.18, 'date [mm-dd]', ha='center', va='baseline', transform=ax.transAxes)
+
+    for jlabel, label in enumerate(labels):
+        ax = axs[jlabel]
+        lab = f"{ascii_lowercase[jlabel]}) {label}"
+        ax.text(0.00, 1.02, lab, ha='left', va='baseline', transform=ax.transAxes)
+    plt.show()
+
+def read_timeseries(fn, first_line=9, dtformat='%Y-%m-%d', offset=0.0):
+    from datetime import datetime
+    with open (fn, 'r') as f:
+        raw = f.readlines()[first_line:]
+    dt, val = [], []
+    for l in raw:
+        try:
+            val_ = l.strip().split(',')
+            dt.append(datetime.strptime(val_[0], dtformat))
+            val.append(float(val_[1]) + offset)
+        except:
+            pass
+    return dt, np.array(val)
+
+def _TDD(dt, TC, days_snow=14):
+    from datetime import datetime
+    period = lambda year: (datetime(year, 4, 25), datetime(year, 9, 21))
+    def _filter_T(year):
+        _period = period(year)
+        ind = np.array([(dt_.year == year and T_ > 0.0 and dt_ >= _period[0] and dt_ <= _period[1])
+                        for dt_, T_ in zip(dt, TC)])
+        if days_snow is not None:
+            melt_onset = np.nonzero(ind)[0][0]
+            ind[melt_onset:melt_onset + days_snow] = False
+        return ind
+    TDDdict = {}
+    cumTDDdict = {}
+    years = set([dt_.year for dt_ in dt])
+    for y in years:
+        _period, ind_y = period(y), _filter_T(y)
+        TDDdict[y] = sum(TC[ind_y])
+        _T, _dt = TC.copy(), np.array(dt)
+        _T[np.logical_not(ind_y)] = 0
+        T_period = _T[np.logical_and(_dt >= _period[0], _dt <= _period[1])]
+        cumTDDdict[y] = (_period, np.cumsum(T_period))
+    return TDDdict, cumTDDdict
+
+def TDD_kivalina(fnforcing):
+    dt, TC = read_timeseries(fnforcing, offset=-273.15)
+    TDDdict, cumTDDdict = _TDD(dt, TC)
+    return TDDdict, cumTDDdict
+
+def rc_references(path0, config, geospatial):
+    import geopandas as gpd
+    from shapely.geometry import Point
+    pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
+    path1 = os.path.join(pathm1, f'{config[0]}_index')
+    fnref = os.path.join(path1, 'references_latlon.p')
+    xy_ref = load_object(fnref)['regular']
+    geometry = [Point((lon, lat)) for lon, lat in xy_ref.T]
+    gdf = gpd.GeoDataFrame(geometry=geometry, crs='EPSG:4326').to_crs(geospatial.crs)
+    pts = np.array([(x.x, x.y) for x in gdf['geometry']]).T
+    rc_ref = geospatial.rowcol(pts)
+    return rc_ref
+
+def plot_atmosphere(config_ref, config_r, path0, indranges_names):
+    from scripts.plotting import prepare_figure, cmap_e, add_scalebar
+    from matplotlib import cm
+    from matplotlib.colors import Normalize    
+    from string import ascii_lowercase
+    import copy
+    c_bad = '#444444'
+    cmap = copy.copy(cmap_e)
+    cmap.set_bad(color=c_bad)
+
+    e_lim = (0.00, 0.70)
+    std_lim = (0.00, 0.20)
+    rc_ref = rc_references(path0, config_ref, geospatial_proc)
+    fig, axs = prepare_figure(
+        nrows=2, ncols=2, figsize=(1.00, 0.47), top=0.920, bottom=0.020, right=0.88, left=0.010, 
+        hspace=0.10, wspace=0.06, remove_spines=False)
+
+    e_ref = _read_config(config_ref, indranges_names, geospatial_proc, path0)
+    e_r = _read_config(config_r, indranges_names, geospatial_proc, path0)
+    for jres, res in enumerate((e_ref, e_r)):
+        axs[0, jres].imshow(res['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1])
+        axs[1, jres].imshow(np.sqrt(res['var']), cmap=cmap, vmin=std_lim[0], vmax=std_lim[1])
+    
+    ylab = 0.16
+    for jax, ax in enumerate(axs.flatten()):
+        ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
+        ax.text(
+            0.02, ylab, f'{ascii_lowercase[jax]})', ha='left', va='top', c='#dddddd', transform=ax.transAxes)
+    add_scalebar(
+        axs[0, 0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.23, dx=0.70, ylab=ylab)
+    cax_extent = [1.04, 0.06, 0.06, 0.60]
+    cbarlabels = ('$\\bar{e}$ [$-$]', '$\\mathrm{std}(\\bar{e})$')
+    c, lw, ec, s = 'none', 0.5, 'w', 3
+    axs[0, 0].scatter(rc_ref[1, :], rc_ref[0, :], c=c, s=s, linewidths=lw, edgecolors=ec)
+    axs[0, 1].scatter(rc_ref[1, 5], rc_ref[0, 5], c=c, s=s, linewidths=lw, edgecolors=ec)
+    for jrow, lim in enumerate((e_lim, std_lim)):
+        cax = axs[jrow, -1].inset_axes(cax_extent)
+        cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*lim, clip=True), cmap=cmap), cax=cax)
+        cbar.set_ticks([lim[0], lim[1]])
+        cbar.solids.set_rasterized(True)
+        cax.text(0.00, 1.31, cbarlabels[jrow], ha='left', va='baseline', transform=cax.transAxes)
+    collabels = ('multiple references', 'single reference')
+    for jcol, collabel in enumerate(collabels):
+        axs[0, jcol].text(
+            0.50, 1.05, collabel, ha='center', va='baseline', transform=axs[0, jcol].transAxes) 
+    import matplotlib.pyplot as plt
     plt.show()
 
 if __name__ == '__main__':
@@ -461,5 +677,10 @@ if __name__ == '__main__':
     # violin_plot(configs[-1], fncores=fncores)
     # fntmp = os.path.join(pathfig, 'kde.p')
     # plot_subset(configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp)
-    plot_profile_time_series(path0, scenario='2019')
+    # plot_profile_time_series(path0, configs[0], scenario='2019')
+    # plot_regional()
 
+    plot_atmosphere(configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names)
+
+    # results: index, Landsat with reference points and cores
+    # atmosphere: index, index_unc. with/without multiple reference points

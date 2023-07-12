@@ -152,7 +152,10 @@ class Geospatial():
         rasterized = features.rasterize(
             geom, out_shape=self.shape, fill=-1, out=None,
             transform=self.transform, default_value=-1, dtype=np.int64)[np.newaxis, ...]
-        return rasterized        
+        return rasterized
+    
+    def save_geotiff(self, arr, fnout, nodata=None):
+        save_geotiff(arr, self, fnout, nodata=nodata)     
         
 
 def read_geotiff(fntif):
