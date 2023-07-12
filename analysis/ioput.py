@@ -42,10 +42,26 @@ class Geospatial():
     def rowcol_grids(self):
         return (np.arange(self.shape[0]), np.arange(self.shape[1]))
 
-    def rowcol(self, xy):
+    def rowcol(self, xy, crs=None):
         # xy: lonlat for WGS84
-        r, c = rasterio.transform.rowcol(self.transform, xy[0,:], xy[1,:])
-        return np.stack((r, c), axis=0)
+        # an use different crs
+        if isinstance(xy, np.ndarray):
+            if crs is None:
+                r, c = rasterio.transform.rowcol(self.transform, xy[0,:], xy[1,:])
+                return np.stack((r, c), axis=0)
+            else:
+                from shapely.geometry import Point
+                import geopandas as gpd
+                pts = [Point(x, y) for x, y in xy.T]
+                gdf = gpd.GeoDataFrame(geometry=pts, crs=crs).to_crs(self.crs)
+                return self.rowcol(gdf)
+        else:
+            try:
+                # treat it as a GeoDataFrame?
+                _xy = np.array([(x.x, x.y) for x in xy['geometry']]).T
+                return self.rowcol(_xy)
+            except:
+                raise ValueError(f"xy data type not recognized")
     
     def xy(self, rc):
         r, c = rc[0, :], rc[1, :]
