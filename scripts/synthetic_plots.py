@@ -274,7 +274,7 @@ def plot_scatter_indrange(suffix='', subsample=100):
     cmap = cc.cm['CET_CBL1']
     fig, ax = prepare_figure(
         ncols=1, sharey=True, sharex=False, figsize=(1.62, 0.90), figsizeunit='in',
-        top=0.955, left=0.150, right=0.710, bottom=0.215, wspace=0.38, hspace=0.46, remove_spines=False)
+        top=0.955, left=0.170, right=0.730, bottom=0.215, wspace=0.38, hspace=0.46, remove_spines=False)
     simname = f'spline_stdacc{suffix}'
     pathsim = os.path.join(paths['simulation'], simname)
     metrics = load_object(os.path.join(pathsim, 'metrics_e_indranges.p'))
@@ -297,11 +297,11 @@ def plot_scatter_indrange(suffix='', subsample=100):
     ax.set_xticks(ticks)
     ax.set_yticks(ticks)
     ax.text(
-        -0.395, 0.500, 'estim. $\\bar{e}$ [$-$]', rotation=90, transform=ax.transAxes, ha='right', 
+        -0.395, 0.500, '$\\hat{\\bar{e}}$ [$-$]', rotation=90, transform=ax.transAxes, ha='right', 
         va='center')
     ypos = -0.235
     ax.text(
-        1.160, ypos, '$\\bar{e}_{\\mathrm{true}}$ [$-$]', transform=ax.transAxes, ha='left', va='baseline')
+        1.270, ypos, '$\\bar{e}$ [$-$]', transform=ax.transAxes, ha='left', va='baseline')
     ax.text(
         -0.520, ypos, 'a)', transform=ax.transAxes, ha='left', va='baseline')
     cax = fig.add_axes((0.80, 0.25, 0.05, 0.52))
@@ -332,9 +332,11 @@ def plot_metrics_indrange(suffix=''):
     yticks = (0, 1, 2)
     yticklabels = ('low', 'standard', 'high')
     def _sharpness(m):
-        return np.nanmean(
-            m['quantile'][..., 1] - m['quantile'][..., 0], axis=0) / 2
-    axs[2].axvline(0.8, lw=0.5, c='#eeeeee')
+        # s = np.nanmean(
+        #     m['quantile'][..., 1] - m['quantile'][..., 0], axis=0) / 2
+        s = np.nanmean(np.sqrt(m['variance']), axis=0)
+        return s
+    axs[2].axvline(80, lw=0.5, c='#eeeeee')
     for jsimname, sim in enumerate(simnames):
         simname = sim + suffix
         metrics = load_object(
@@ -356,7 +358,7 @@ def plot_metrics_indrange(suffix=''):
             _sharpness(metrics_p), jsimname, linestyle='none', mec=colp, alpha=alphap, marker=marker,
             mew=mewp, ms=msp, mfc='none')        
         axs[2].plot(
-            np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
+            100 * np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
             ms=ms, mec='none')
     axs[0].text(
@@ -365,11 +367,11 @@ def plot_metrics_indrange(suffix=''):
     axs[0].set_xticks((0.00, 0.10, 0.20))
     axs[1].set_xlim(0.00, 0.35)
     axs[1].set_xticks((0.00, 0.20))
-    axs[2].set_xlim(0.55, 0.95)
-    axs[2].set_xticks((0.6, 0.8))
+    axs[2].set_xlim(55, 95)
+    axs[2].set_xticks((60, 80))
     axs[0].set_ylim(ylim)
-#
-    xlabels = ['MAD [$-$]', 'uncertainty [$-$]', 'coverage [\%]']
+
+    xlabels = ['MAD [$-$]', '$\\sigma_{\\mathrm{p}}$ [$-$]', 'coverage [\%]']
     ypos = 1.08
     xpos = -0.07
     for jax, ax in enumerate(axs):
@@ -380,7 +382,7 @@ def plot_metrics_indrange(suffix=''):
         #     0.54, ypos, titles[jax], ha='center', va='baseline', c='k',
         #     transform=ax.transAxes)
         ax.text(
-            0.54, -0.58, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
+            0.540, -0.575, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
         ax.text(
             0.03, 0.07, ascii_lowercase[jax + 1] + ')', ha='left', va='baseline',
             transform=ax.transAxes)

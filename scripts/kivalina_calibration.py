@@ -117,10 +117,10 @@ def plot_calibration(dist_c, svar_pred_c, svar_obs_c):
 if __name__ == '__main__':
     pathb = '/home/simon/Work/gie/processed/kivalina/'
     path0 = os.path.join(pathb, '2019_index')
-    # dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict, overwrite=False)
-    # plot_calibration(dist_c, svar_pred_c, svar_obs_c)
+    dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path0, caldict, overwrite=False)
+    plot_calibration(dist_c, svar_pred_c, svar_obs_c)
     
-    year = 2018
-    path0 = os.path.join(pathb, f'{year}_index')
-    refs = references(year=year)
-    prepare_references(path0, refs)
+    # year = 2018
+    # path0 = os.path.join(pathb, f'{year}_index')
+    # refs = references(year=year)
+    # prepare_references(path0, refs)
