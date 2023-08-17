@@ -271,9 +271,4 @@ def load_object(filename):
         obj = pickle.loads(zlib.decompress(f.read()))
     return obj
 
-if __name__ == '__main__':
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/inversion/'
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    
-    print(geospatial.extent)
     

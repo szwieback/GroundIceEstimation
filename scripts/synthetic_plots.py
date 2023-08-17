@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from scripts.pathnames import paths
-from scripts.plotting import prepare_figure, colslist
+from scripts.plotting import prepare_figure, colslist, cmap_e
 from analysis import load_object
 from analysis import InversionSimulator
 
@@ -270,8 +270,8 @@ def plot_scatter_indrange(suffix='', subsample=100):
     from matplotlib import cm
     from matplotlib.colors import Normalize
     import statsmodels.api as sm
-    
-    cmap = cc.cm['CET_CBL1']
+    cmap = cmap_e
+    # cmap = cc.cm['CET_CBL1']
     fig, ax = prepare_figure(
         ncols=1, sharey=True, sharex=False, figsize=(1.62, 0.90), figsizeunit='in',
         top=0.955, left=0.170, right=0.730, bottom=0.215, wspace=0.38, hspace=0.46, remove_spines=False)
@@ -322,7 +322,9 @@ def plot_metrics_indrange(suffix=''):
     simnames = ['spline_lowacc', 'spline_stdacc', 'spline_highacc']
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
-    alphascen = {'spline_highacc':0.5, 'spline_lowacc':0.5, 'spline_stdacc':0.8}
+    colscen = {
+        'spline_highacc':colslist[2], 'spline_lowacc':colslist[1], 'spline_stdacc': colslist[0]}    
+    alphascen = {'spline_highacc':1.0, 'spline_lowacc':1.0, 'spline_stdacc':1.0}
 
     jindrange = 0
     marker = 'o'
@@ -398,8 +400,8 @@ def plot_metrics_indrange(suffix=''):
 if __name__ == '__main__':
     # plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
-    plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
-    # plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
+    # plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
+    plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
     # for Nbatch in (1, 10,):
         # plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
