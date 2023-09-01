@@ -20,6 +20,7 @@ fnls = os.path.join(pathls, f'{lsscene}.vrt')
 fnswir = os.path.join(pathls, lsscene, f'{lsscene}_SR_B7.TIF')
 fndem = '/home/simon/Work/Kivalina/TDM90/Kivalina/DEM.tif'
 fnforcing = '/home/simon/Work/Kivalina/forcing/T2MMEAN.csv'
+fnpred = '/home/simon/Work/gie/ancillary/GEE/e_pred.tif'
 
 profile = ((-164.4236, 67.8357), (-164.3395, 67.7895))
 
@@ -699,7 +700,7 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
     else:
         fig.savefig(fnout, dpi=450)
 
-def   plot_index(config, path0, fnout=None):
+def plot_index(config, path0, fnls, fnout=None):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
     from matplotlib import cm
     from matplotlib.colors import Normalize
@@ -778,6 +779,58 @@ def   plot_index(config, path0, fnout=None):
     else:
         fig.savefig(fnout)
 
+def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
+    from scripts.plotting import prepare_figure, add_scalebar
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    from string import ascii_lowercase
+
+    e_lim = (0.00, 0.70)
+    fig, axs = prepare_figure(
+        nrows=1, ncols=3, figsize=(2.03, 0.32), top=0.930, bottom=0.000, right=0.93, left=0.0100,
+        hspace=0.10, wspace=0.12, remove_spines=False)
+
+    e_ref = _read_config(config_ref, indranges_names, geospatial_proc, path0)['mean']
+    e_pred, _ = geospatial_proc.warp_from_file(fnpred)
+    e_pred = e_pred[0, ...]
+    e_pred[np.isnan(e_ref)] = np.nan
+    for jres, res in enumerate((e_pred, e_ref)):
+        axs[jres].imshow(
+            res, cmap=cmap, vmin=e_lim[0], vmax=e_lim[1], interpolation='nearest')
+
+    ls, _ = geospatial_proc.warp_from_file(fnls)
+    ls = ls[::-1,:,:]
+    axs[2].imshow(_normalize(ls))
+
+    ylab = 0.13
+    for jax, ax in enumerate(axs.flatten()):
+        ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
+        ax.text(
+            0.02, ylab, f'{ascii_lowercase[jax+5]})', ha='left', va='top', c='#dddddd', 
+            transform=ax.transAxes)
+    add_scalebar(
+        axs[0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.19, dx=0.75, ylab=ylab)
+    
+    cax_extent = [1.04, 0.10, 0.06, 0.60]
+    cbarlabel = '$\\bar{e}$ [$-$]'
+    cax = axs[-1].inset_axes(cax_extent)
+    cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax)
+    cbar.set_ticks([e_lim[0], e_lim[1]])
+    cbar.solids.set_rasterized(True)
+    cax.text(0.00, 1.20, cbarlabel, ha='left', va='baseline', transform=cax.transAxes)
+    
+    
+    collabels = ('random forest', 'InSAR', 'Landsat')
+    for jcol, collabel in enumerate(collabels):
+        axs[jcol].text(
+            0.50, 1.05, collabel, ha='center', va='baseline', transform=axs[jcol].transAxes)
+    if fnout is None:
+        import matplotlib.pyplot as plt
+        plt.show()
+    else:
+        fig.savefig(fnout, dpi=450)
+
+
 if __name__ == '__main__':
     fnsubset = os.path.join(path0, 'subset.gpkg')
     fniceoptical = os.path.join(path0, 'iceoptical.gpkg')
@@ -795,10 +848,11 @@ if __name__ == '__main__':
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=os.path.join(pathfig, 'subset.pdf'), overwrite=False)
     # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=os.path.join(pathfig, 'profile.pdf'))
-    plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
+    # plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=os.path.join(pathfig, 'atmos.pdf'))
-    # plot_index(configs[0], path0, fnout=os.path.join(pathfig, 'index.pdf'))
-
+    # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
+    
+    plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))

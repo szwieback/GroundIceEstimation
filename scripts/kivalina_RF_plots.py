@@ -7,10 +7,14 @@ import numpy as np
 import joblib
 import os
 import matplotlib.pyplot as plt
+from matplotlib import colors
 import pandas as pd
 
 from scripts.kivalina_RF import xy_split, predict_grid, path0, df
 from scripts.plotting import prepare_figure, colslist, cmap_e
+from scripts.pathnames import paths
+
+cmap_e_clipped = colors.LinearSegmentedColormap.from_list('clipped', cmap_e(np.linspace(0.0, 0.7, 256)))
 
 def plot_fit(df, rfr, impres):
     import matplotlib.pyplot as plt
@@ -68,32 +72,41 @@ def conditional_expectation(
     if subsample is not None and len(_X) > subsample:
         _X = _X.iloc[rng.permutation(len(_X))[0:subsample]]
     y = []
+    cyp= []
     for ind in range(len(_X)):
         df = pd.DataFrame(_X.iloc[ind:ind + 1])
-        df = df.loc[np.repeat(df.index.values, covariate_steps)]
-        df[covariate] = covariate_grid
-        y_ind = rfr.predict(df)
+        dfr = df.loc[np.repeat(df.index.values, covariate_steps)]
+        dfr[covariate] = covariate_grid
+        y_ind = rfr.predict(dfr)
+        yp_ind = rfr.predict(df)
+        cyp.append([df[covariate].iloc[0], yp_ind[0]])
         y.append(y_ind)
-    dict_res = {'X': _X, 'y_pred_cov': np.array(y).T, 'grid': covariate_grid,
+    dict_res = {'X': _X, 'y_pred_cov': np.array(y).T, 'cov_y_pred': np.array(cyp), 'grid': covariate_grid,
                 'covariate': covariate, 'ranges_dict': ranges_dict}
     return dict_res
 
-def plot_conditional_expectation(ce_res, ax, cmap=None, clim=(0, 1), ccov=None, alpha=0.5):
+def plot_conditional_expectation(
+        ce_res, ax, cmap=None, clim=(0, 1), ccov=None, alpha=0.5, markersize=2.5, mew=0.5, lw=1.0, marker='o'):
     if cmap is None:
         import matplotlib
         cmap = matplotlib.colormaps['viridis']
     grid = ce_res['grid']
-    print(ce_res['X'][ccov])
     if ccov is not None:
         cvals = (np.array(ce_res['X'][ccov]) - clim[0]) / (clim[1] - clim[0])
         c = cmap(cvals)
     else:
         c = cmap(np.ones_like(ce_res['y_pred_cov']))
-    for _y, _c in zip(ce_res['y_pred_cov'].T, c):
-        ax.plot(grid, _y, alpha=alpha, c=_c)
-    print(cvals)
+    for _y, _cy, _c in zip(ce_res['y_pred_cov'].T, ce_res['cov_y_pred'], c):
+        ax.plot(grid, _y, alpha=alpha, c=_c, lw=lw, zorder=3)
+        if markersize > 0:
+            ax.plot(
+                _cy[0], _cy[1], c=_c, alpha=1.0, markersize=markersize, marker=marker, 
+                markeredgecolor='none', linestyle='none', mew=mew, zorder=4)
+            ax.plot(
+                _cy[0], _cy[1], markersize=markersize, alpha=0.8, marker=marker, markeredgecolor='#ffffff', 
+                markerfacecolor='none', linestyle='none', mew=mew, zorder=5)            
 
-def plot_rf(df, rfr, impres):
+def plot_rf(df, rfr, impres, fnout=None):
     from sklearn.metrics import mean_squared_error
     from matplotlib.transforms import Bbox
     from matplotlib.colors import Normalize
@@ -104,7 +117,7 @@ def plot_rf(df, rfr, impres):
         right=0.990, left=0.100)
     dx = -0.03
     cbarl = 0.94
-    _, X, _, y = xy_split(df, train_test=True)
+    X_train, X, y_train, y = xy_split(df, train_test=True)
     axs[1].plot((0, 1), (0, 1), lw=0.5, alpha=0.3, c=colslist[1])
     pred = rfr.predict(X)
     axs[1].plot(
@@ -114,7 +127,7 @@ def plot_rf(df, rfr, impres):
     lims = (0.00, 0.65)
     ticks = (0.0, 0.3, 0.6)
     pos_xl = (0.50, -0.41)
-    pos_yl = (-0.37, 0.45)
+    pos_yl = (-0.36, 0.45)
     axs[1].set_xlim(lims)
     axs[1].set_ylim(lims)
     axs[1].set_yticks(ticks)
@@ -145,18 +158,22 @@ def plot_rf(df, rfr, impres):
     #     rfr, X, ['slope', 'NDWI', 'ndvi'], ax=axs[2], subsample=100)
     # print(np.count_nonzero(X['ndvi'] > 0.73))
     ccov, clim = 'NDWI', (-0.05, 0.65)
-    cmap, alpha = cmap_e, 0.5
+    alpha = 0.5
+    cmap = cmap_e_clipped
+    
     ndvi_ranges = [(None, 0.30), (0.30, 0.75), (0.75, None)]
-    subsample = 20
+    subsample = 12
+    cov, lims_cov = 'slope', (0.02, 10)
     for jndvir, ndvir in enumerate(ndvi_ranges):
         ce_res = conditional_expectation(
-            rfr, X, 'slope', covariate_range=(0.5, 20), ranges_dict={'ndvi': ndvir}, subsample=subsample)
+            rfr, X_train, cov, covariate_range=(0.5, 20), ranges_dict={'ndvi': ndvir}, subsample=subsample)
         ax =  axs[2 + jndvir]
         plot_conditional_expectation(
             ce_res, ax, cmap=cmap, clim=clim, ccov=ccov, alpha=alpha)
         if jndvir > 0:
             ax.set_yticklabels([])
         ax.set_ylim(lims)
+        ax.set_xlim(lims_cov)
     axs[2].text(
         *pos_yl, 'RF $\\bar{e}$ [$-$]', ha='right', va='center', transform=axs[2].transAxes, rotation=90)
     
@@ -171,14 +188,17 @@ def plot_rf(df, rfr, impres):
             ax.set_yticks(ticks)
             ax.set_position(Bbox.from_bounds(apos.x0 + n_shift * dx, apos.y0, apos.width, apos.height))
             ax.text(
-                *pos_xl, 'slope [$^{\\circ}]$', ha='center', va='baseline', transform=ax.transAxes)
+                *pos_xl, 'slope [$^{\\circ}$]', ha='center', va='baseline', transform=ax.transAxes)
             n_shift = n_shift + 1
     dh = 0.08
     cax = fig.add_axes((cbarl, apos.y0 + dh, 0.01, apos.height-2*dh))
     cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*clim, clip=True), cmap=cmap), cax=cax)
     cbarlabel = 'NDWI [-]'
     cax.text(2.40, 1.07, cbarlabel, ha='center', va='baseline', transform=cax.transAxes)            
-    plt.show()
+    if fnout is not None:
+        fig.savefig(fnout)
+    else:
+        plt.show()
 
 if __name__ == '__main__':
     fnrf = os.path.join(path0, 'rfr.joblib')
@@ -186,7 +206,8 @@ if __name__ == '__main__':
     rfr = joblib.load(fnrf)
     impres = joblib.load(fnimp)
 
-    plot_rf(df, rfr, impres)
+    fnplot = os.path.join(paths['figures'], 'index/rf.pdf')
+    plot_rf(df, rfr, impres, fnout=fnplot)
 
     # plot_fit(df, rfr, impres)
 
