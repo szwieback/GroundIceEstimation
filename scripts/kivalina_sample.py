@@ -33,7 +33,6 @@ if __name__ == '__main__':
     fncovariates = '/home/simon/Work/gie/ancillary/GEE/covariates.tif'
     fnout = '/home/simon/Work/gie/ancillary/GEE/sample.csv'
     
-    
     ft = load_object(os.path.join(path0, '2019r', 'forcing_timing.p'))
     indranges_names = ft['indranges_names']
     config = ('2019r', 'TDD900_lastday')
@@ -45,10 +44,10 @@ if __name__ == '__main__':
     names = ('ebar',) + src.descriptions            
 
     rng = np.random.default_rng(123697)
-    N = 10000
-    max_distance = 3.5
+    N = 15000
+    max_distance = 2.5
     shape = img.shape[1:]
-    samples = sample_points((310, 690), N, rng=rng, max_distance=max_distance)
+    samples = sample_points(shape, N, rng=rng, max_distance=max_distance)
     import pandas as pd
     df = pd.DataFrame([img[:, r, c] for r, c in samples], columns=names)
     df.to_csv(fnout)

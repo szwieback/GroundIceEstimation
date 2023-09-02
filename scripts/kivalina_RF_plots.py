@@ -53,7 +53,7 @@ def plot_pred(df, rfr):
 
 def conditional_expectation(
         rfr, X, covariate, ranges_dict=None, covariate_range=None, covariate_steps=64, subsample=10, 
-        rng=999):
+        rng=111*9):
     # single covariate
     try:
         rng.random()
@@ -86,7 +86,8 @@ def conditional_expectation(
     return dict_res
 
 def plot_conditional_expectation(
-        ce_res, ax, cmap=None, clim=(0, 1), ccov=None, alpha=0.5, markersize=2.5, mew=0.5, lw=1.0, marker='o'):
+        ce_res, ax, cmap=None, clim=(0, 1), ccov=None, alpha=0.5, markersize=2.5, mew=0.5, lw=1.0, 
+        marker='o'):
     if cmap is None:
         import matplotlib
         cmap = matplotlib.colormaps['viridis']
@@ -117,8 +118,9 @@ def plot_rf(df, rfr, impres, fnout=None):
         right=0.990, left=0.100)
     dx = -0.03
     cbarl = 0.94
-    X_train, X, y_train, y = xy_split(df, train_test=True)
+    X_train, X_test, y_train, y_test = xy_split(df, train_test=True)
     axs[1].plot((0, 1), (0, 1), lw=0.5, alpha=0.3, c=colslist[1])
+    X, y = X_test, y_test#X_train, y_train
     pred = rfr.predict(X)
     axs[1].plot(
         y, pred, linestyle='none', mec='none', mfc=colslist[0], ms=1, marker='o', alpha=0.1)
@@ -163,10 +165,10 @@ def plot_rf(df, rfr, impres, fnout=None):
     
     ndvi_ranges = [(None, 0.30), (0.30, 0.75), (0.75, None)]
     subsample = 12
-    cov, lims_cov = 'slope', (0.02, 10)
+    cov, lims_cov, ticks_cov = 'slope', (0.3, 10.0), (0, 5, 10)
     for jndvir, ndvir in enumerate(ndvi_ranges):
         ce_res = conditional_expectation(
-            rfr, X_train, cov, covariate_range=(0.5, 20), ranges_dict={'ndvi': ndvir}, subsample=subsample)
+            rfr, X_train, cov, covariate_range=lims_cov, ranges_dict={'ndvi': ndvir}, subsample=subsample)
         ax =  axs[2 + jndvir]
         plot_conditional_expectation(
             ce_res, ax, cmap=cmap, clim=clim, ccov=ccov, alpha=alpha)
@@ -174,6 +176,7 @@ def plot_rf(df, rfr, impres, fnout=None):
             ax.set_yticklabels([])
         ax.set_ylim(lims)
         ax.set_xlim(lims_cov)
+        ax.set_xticks(ticks_cov)
     axs[2].text(
         *pos_yl, 'RF $\\bar{e}$ [$-$]', ha='right', va='center', transform=axs[2].transAxes, rotation=90)
     
@@ -193,8 +196,8 @@ def plot_rf(df, rfr, impres, fnout=None):
     dh = 0.08
     cax = fig.add_axes((cbarl, apos.y0 + dh, 0.01, apos.height-2*dh))
     cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*clim, clip=True), cmap=cmap), cax=cax)
-    cbarlabel = 'NDWI [-]'
-    cax.text(2.40, 1.07, cbarlabel, ha='center', va='baseline', transform=cax.transAxes)            
+    cbarlabel = 'NDWI [$-$]'
+    cax.text(2.10, 1.09, cbarlabel, ha='center', va='baseline', transform=cax.transAxes)            
     if fnout is not None:
         fig.savefig(fnout)
     else:

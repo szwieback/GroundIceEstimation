@@ -783,11 +783,10 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     from scripts.plotting import prepare_figure, add_scalebar
     from matplotlib import cm
     from matplotlib.colors import Normalize
-    from string import ascii_lowercase
 
     e_lim = (0.00, 0.70)
     fig, axs = prepare_figure(
-        nrows=1, ncols=3, figsize=(2.03, 0.32), top=0.930, bottom=0.000, right=0.93, left=0.0100,
+        nrows=1, ncols=3, figsize=(2.03, 0.32), top=0.930, bottom=0.000, right=0.925, left=0.0100,
         hspace=0.10, wspace=0.12, remove_spines=False)
 
     e_ref = _read_config(config_ref, indranges_names, geospatial_proc, path0)['mean']
@@ -803,27 +802,24 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     axs[2].imshow(_normalize(ls))
 
     ylab = 0.13
-    for jax, ax in enumerate(axs.flatten()):
+    for ax in axs.flatten():
         ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
-        ax.text(
-            0.02, ylab, f'{ascii_lowercase[jax+5]})', ha='left', va='top', c='#dddddd', 
-            transform=ax.transAxes)
+
     add_scalebar(
-        axs[0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.19, dx=0.75, ylab=ylab)
+        axs[0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.19, dx=0.80, ylab=ylab)
     
-    cax_extent = [1.04, 0.10, 0.06, 0.60]
+    cax_extent = [1.053, 0.120, 0.033, 0.600]
     cbarlabel = '$\\bar{e}$ [$-$]'
     cax = axs[-1].inset_axes(cax_extent)
     cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax)
-    cbar.set_ticks([e_lim[0], e_lim[1]])
+    cbar.set_ticks((0.0, 0.3, 0.6))
     cbar.solids.set_rasterized(True)
     cax.text(0.00, 1.20, cbarlabel, ha='left', va='baseline', transform=cax.transAxes)
     
-    
-    collabels = ('random forest', 'InSAR', 'Landsat')
+    collabels = ('f) random forest', 'g) InSAR', 'h) Landsat')
     for jcol, collabel in enumerate(collabels):
         axs[jcol].text(
-            0.50, 1.05, collabel, ha='center', va='baseline', transform=axs[jcol].transAxes)
+            0.005, 1.050, collabel, ha='left', va='baseline', transform=axs[jcol].transAxes)
     if fnout is None:
         import matplotlib.pyplot as plt
         plt.show()
