@@ -85,7 +85,8 @@ def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), appl
     return dictout
 
 # 1.5
-def mask_year(path0, year, thresh=1.6, opening=1, closing=1, geospatial_out=None):
+def mask_year(path0, year, thresh=1.25, opening=3, closing=20, geospatial_out=None):
+    print(f'masking year {year}')
     pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
     fn = os.path.join(pathm1, f'{year}_index', 'K_vec.geo.tif')
     if geospatial_out is None:
@@ -444,7 +445,6 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
             step + steps / 120, ruler[0], ascii_lowercase[jstep + 2] + ')', ha='left', va='baseline',
             transform=trans)
         xy_step = xy_profile[:, step]
-        print(xy_step)
         stde = np.sqrt(np.diag(assemble_tril(K_profile[step,:])))
         s_step = np.concatenate(([0], s_profile[step,:]))
         rect = (dt_indrange[0], s_lim[0]), dt_indrange[1] - dt_indrange[0], s_lim[1] - s_lim[0]
@@ -559,7 +559,7 @@ def plot_regional(fnout=None):
     TDDdict, cumdict = TDD_kivalina(fnforcing)
     for year in cumdict:
         T_y = cumdict[year][1]
-        print(year, T_y[-1] > 900, T_y[-1] > 1000, np.nonzero(T_y > 900)[0])
+        # print(year, T_y[-1] > 900, T_y[-1] > 1000, np.nonzero(T_y > 900)[0])
         from datetime import timedelta
         if year in (2018,):
             try:
@@ -678,7 +678,7 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
         ax.text(
             0.02, ylab, f'{ascii_lowercase[jax]})', ha='left', va='top', c='#dddddd', transform=ax.transAxes)
     add_scalebar(
-        axs[0, 0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.23, dx=0.70, ylab=ylab)
+        axs[0, 0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.21, dx=0.72, ylab=ylab)
     cax_extent = [1.04, 0.06, 0.06, 0.60]
     cbarlabels = ('$\\hat{\\bar{e}}$ [$-$]', '$\\mathrm{std}_{\\mathrm{p}}\\hat{\\bar{e}}$')
     c, lw, ec, s = 'none', 0.5, 'w', 3
@@ -816,7 +816,7 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     cbar.solids.set_rasterized(True)
     cax.text(0.00, 1.20, cbarlabel, ha='left', va='baseline', transform=cax.transAxes)
     
-    collabels = ('f) random forest', 'g) InSAR', 'h) Landsat')
+    collabels = ('f) random forest $\\bar{e}$', 'g) InSAR $\\hat{\\bar{e}}$', 'h) Landsat-8 true-color ')
     for jcol, collabel in enumerate(collabels):
         axs[jcol].text(
             0.005, 1.050, collabel, ha='left', va='baseline', transform=axs[jcol].transAxes)
@@ -850,5 +850,4 @@ if __name__ == '__main__':
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=os.path.join(pathfig, 'atmos.pdf'))
     # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
-    
     plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))

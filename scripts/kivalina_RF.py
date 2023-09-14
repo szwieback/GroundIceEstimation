@@ -62,11 +62,11 @@ def run_RF(df, search=False, fnout=None):
                       'max_samples': max_samples,
                       'max_depth': max_depth}
         rfr = RandomForestRegressor(oob_score=True)
-        scorer = make_scorer(mean_squared_error, greater_is_better=False, squared=False)
+        scorer = make_scorer(mean_squared_error, greater_is_better=False, squared=False) # with rmse
         grid = GridSearchCV(rfr, param_grid, scoring=scorer, n_jobs=6, refit=True)
         grid.fit(X_train, y_train)
         report(grid.cv_results_)
-        rfr = grid.best_estimator_
+        rfr = grid.best_estimator_ # take best estimator, refitted without cross validation
     else:
         # rfr = RandomForestRegressor(n_estimators=300, max_features=5, bootstrap=True, oob_score=True)
         rfr = RandomForestRegressor(
@@ -79,6 +79,7 @@ def run_RF(df, search=False, fnout=None):
     from sklearn.metrics import mean_squared_error
     RMSE = mean_squared_error(y_test, predictions, squared=False)
     RMSE_train = mean_squared_error(y_train, predictions_train, squared=False)
+    print(f"Test/train size: {y_test.shape}, {y_train.shape}")
     print(f'RMSE = {np.round(RMSE,3)}')
     print(f'RMSE (train) = {np.round(RMSE_train,3)}')
     # # Retrain on entire sample
@@ -140,10 +141,10 @@ if __name__ == '__main__':
     fnrf = os.path.join(path0, 'rfr.joblib')
     fnimp = os.path.join(path0, 'importance.joblib')
 
-    run_RF(df, search=True, fnout=fnrf)
-    variable_importance(df, fnrf, fnimp)
-
-    fnim = os.path.join(path0, 'covariates.tif')
-    fnout = os.path.join(path0, 'e_pred.tif')
-    rfr = joblib.load(fnrf)
-    predict_image(fnim, rfr, fnout)
+    run_RF(df, search=True, fnout=None)
+    # variable_importance(df, fnrf, fnimp) # compute default and permutation importance
+    #
+    # fnim = os.path.join(path0, 'covariates.tif')
+    # fnout = os.path.join(path0, 'e_pred.tif')
+    # rfr = joblib.load(fnrf)
+    # predict_image(fnim, rfr, fnout)

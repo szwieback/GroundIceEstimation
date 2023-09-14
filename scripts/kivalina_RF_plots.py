@@ -53,7 +53,7 @@ def plot_pred(df, rfr):
 
 def conditional_expectation(
         rfr, X, covariate, ranges_dict=None, covariate_range=None, covariate_steps=64, subsample=10, 
-        rng=111*9):
+        rng=1111*8):
     # single covariate
     try:
         rng.random()
@@ -108,7 +108,7 @@ def plot_conditional_expectation(
                 markerfacecolor='none', linestyle='none', mew=mew, zorder=5)            
 
 def plot_rf(df, rfr, impres, fnout=None):
-    from sklearn.metrics import mean_squared_error
+    from sklearn.metrics import mean_squared_error, r2_score
     from matplotlib.transforms import Bbox
     from matplotlib.colors import Normalize
     from matplotlib import cm
@@ -125,7 +125,9 @@ def plot_rf(df, rfr, impres, fnout=None):
     axs[1].plot(
         y, pred, linestyle='none', mec='none', mfc=colslist[0], ms=1, marker='o', alpha=0.1)
     RMSE = mean_squared_error(y, pred, squared=False)
+    R2 = r2_score(y, pred)
     axs[1].text(0.04, 0.90, f'RMSE {RMSE:1.2f}', transform=axs[1].transAxes, ha='left')
+    axs[1].text(0.04, 0.74, '$\\mathrm{R}^2$'+ f' {R2:1.2f}', transform=axs[1].transAxes, ha='left')    
     lims = (0.00, 0.65)
     ticks = (0.0, 0.3, 0.6)
     pos_xl = (0.50, -0.41)
