@@ -485,7 +485,6 @@ def plot_regional(fnout=None):
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
     from string import ascii_lowercase
-    thresh_swir = 7.41e3
     # fig, axs = prepare_figure(
     #     nrows=1, ncols=3, figsize=(2.0, 0.7), sharex=False, sharey=False, bottom=0.2, right=0.96, left=0.02,
     #     top=0.93, wspace=0.3, remove_spines=False)
@@ -500,11 +499,13 @@ def plot_regional(fnout=None):
              (left + (width + hspace_l), top - height_s, width, height_s),
              (left + 2 * width + hspace_l + hspace_r, top - height_f, width, height_f)]
 
+    geospatial = geospatial_large
+
     axs = [fig.add_axes(rect) for rect in rects]
     labels = ['Landsat true color', 'elevation', 'thawing degree days (TDD) [$^{\\circ}$C]']
     
     ax = axs[0]
-    ls, _ = geospatial_large.warp_from_file(fnls)
+    ls, _ = geospatial.warp_from_file(fnls)
     ls = ls[::-1,:,:]
     ax.imshow(_normalize(ls))
     ax.tick_params(bottom=False, left=False, labelbottom=False, labelleft=False)
@@ -525,20 +526,19 @@ def plot_regional(fnout=None):
     
     ax = axs[1]
     cmap_topo = copy.copy(cc.cm['CET_L10'])
-    cmap_topo.set_bad(col_water)
     # dem, _ = geospatial_large.warp_from_file(fndem)
     thresh_swir = None
-    dem, _ = geospatial_large.warp_from_file('/home/simon/Work/gie/ancillary/USGS_DEM/3DEP_DEM_Kivalina.tif')
-    dem[dem<=0.1]=np.nan
+    dem, _ = geospatial.warp_from_file('/home/simon/Work/gie/ancillary/USGS_DEM/3DEP_DEM_Kivalina.tif')
+    dem[dem<=0.2] = -0.1 #np.nan
+    cmap_topo.set_under(col_water)
     if thresh_swir is not None:
         from scipy.ndimage import binary_closing, binary_opening
-        ls_swir, _ = geospatial_large.warp_from_file(fnswir)
+        ls_swir, _ = geospatial.warp_from_file(fnswir)
         mask = (ls_swir < thresh_swir)[0, ...]
         mask = binary_opening((binary_closing(mask, iterations=1)), iterations=5)
         dem[mask[np.newaxis, ...]] = np.nan
-        mask = mask.astype(np.uint8)
-    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0, vmax=300)
-    rc = geospatial_large.rowcol(
+    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0.0, vmax=300, interpolation_stage='rgba')#, interpolation='nearest')
+    rc = geospatial.rowcol(
         np.array([geospatial_proc.transform.xoff, geospatial_proc.transform.yoff])[:, np.newaxis])
     rect = Rectangle(
         rc[:, 0], geospatial_proc.shape[1], geospatial_proc.shape[0], facecolor='none',
@@ -552,7 +552,6 @@ def plot_regional(fnout=None):
     cbar.set_ticks((0, 100, 200, 300))
     cax.text(1.10, 0.20, '[m]', ha='left', va='center', transform=cax.transAxes)
     cbar.solids.set_rasterized(True)
-
     
     ax = axs[2]
     TDDs = (900,)
@@ -585,10 +584,12 @@ def plot_regional(fnout=None):
     ax.spines['top'].set_visible(False)
     ax.text(0.50, -0.18, 'date [mm-dd]', ha='center', va='baseline', transform=ax.transAxes)
 
+    import matplotlib.transforms as transforms
     for jlabel, label in enumerate(labels):
         ax = axs[jlabel]
         lab = f"{ascii_lowercase[jlabel]}) {label}"
-        ax.text(0.00, 1.02, lab, ha='left', va='baseline', transform=ax.transAxes)
+        trans_b = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
+        ax.text(0.00, 0.95, lab, ha='left', va='baseline', transform=trans_b)
     
     if fnout is None:
         plt.show()
@@ -839,15 +840,15 @@ if __name__ == '__main__':
     config_labels = ['extra scene', 'later $\\bar{e}$', '2018', 'baseline']
 
     # violin_plot(configs[-1], fncores=fncores, fnout=os.path.join(pathfig, 'violin.pdf'))
-    fntmp = os.path.join(pathfig, 'kde.p')
+    # fntmp = os.path.join(pathfig, 'kde.p')
     # plot_subset(
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=os.path.join(pathfig, 'subset.pdf'), overwrite=False)
     # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=os.path.join(pathfig, 'profile.pdf'))
-    # plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
+    plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=os.path.join(pathfig, 'atmos.pdf'))
     # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
-    plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))
+    # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))
