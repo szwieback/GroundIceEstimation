@@ -11,8 +11,17 @@ rho_water = 999.8
 
 sitenames = {'HV': 'Happy Valley', 'IC': 'Ice Cut'}
 
-fns = {
-    'IC': 'FSA_Dalton_IC_2022_20230202.xlsx', 'HV': 'FSA_Dalton_HV_2022_20230202.xlsx'}
+
+def fns(site, year):
+    if year == 2022:
+        fns = {
+            'IC': 'FSA_Dalton_IC_2022_20230202.xlsx', 'HV': 'FSA_Dalton_HV_2022_20230202.xlsx'}
+    elif year == 2023:
+        fns = {
+            'IC': 'FSA_Dalton_IC_2023_20231019.xlsx', 'HV': 'FSA_Dalton_HV_2023_20231018.xlsx'}
+    else:
+        raise ValueError
+    return fns[site]
 
 def extract_core(df, method=None):
     data = []
@@ -24,7 +33,7 @@ def extract_core(df, method=None):
             assert depth > 0
             drange = (entry['Start'], entry['End'])
             facies = entry['Facies'].lower()
-            if facies == 'ice':
+            if facies in ('ice', 'ICE'):
                 e = 1.0
             elif facies == 'missing':
                 e = None
@@ -34,15 +43,22 @@ def extract_core(df, method=None):
                 V_ew = m_ew / rho_water
                 V_ei = (rho_water / rho_ice) * V_ew
                 V_thawed = entry['Container only soil'] * 1e-6 # m3
-                V_thawedtotal = entry['Container w/water'] * 1e-6 #me              
+                V_thawedtotal = entry['Container w/water'] * 1e-6 #m3
+                V_water = entry['Container only water'] * 1e-6 #m3             
                 if method is None or method == 'supernatant':
                     e = V_ei / V_frozen
                 elif method == 'thawed':   # Morse                 
                     e = V_ei / (V_ei + V_thawedtotal) if V_thawed > 0 else 0.0
                 elif method == 'difference':
                     e = (V_frozen - V_thawed) / V_frozen if V_thawed > 0 else 0.0
+                elif method == 'watervolume':
+                    e = (rho_water / rho_ice) * V_water / V_frozen
                 else:
                     raise ValueError(f"Excess ice method {method} not recognized")
+                if not np.isfinite(e):
+                    e = None
+                if e is not None and e < 0.0:
+                    e = 0.0
             data.append(ESeg(drange, e))
             row = row + 1
         except:
@@ -65,9 +81,9 @@ def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
     d_mean_bs = np.nanmean(d_bs, axis=1)
     return np.nanpercentile(d_mean_bs, percentiles, axis=0)
 
-def read_site(fn):
+def read_site(fn, method=None):
     df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl')
-    data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
+    data_dict = {core: extract_core(df_dict[core], method=method) for core in df_dict}
     e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
     return e_grid
 
@@ -101,14 +117,14 @@ def plot_sites(fns_abs, fnout=None):
     else:
         fig.savefig(fnout)
 
-def plot_site(fn_abs, fnout=None):
+def plot_site(fn_abs, fnout=None, ylim=(60, 0), method=None):
     from scripts.plotting import prepare_figure, colslist
     import matplotlib.pyplot as plt
     fig, ax = prepare_figure(
         figsize=(1.8, 1.3), figsizeunit='in', bottom=0.23, left=0.19, top=0.96, right=0.96)
     y_grid = np.arange(150)  # hard-coded for now
 
-    e_grid = read_site(fn_abs)
+    e_grid = read_site(fn_abs, method=method)
     e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
     e_mean = np.nanmean(e_grid, axis=0)
     ax.fill_betweenx(
@@ -116,7 +132,7 @@ def plot_site(fn_abs, fnout=None):
         alpha=0.20)
     ax.plot(e_grid.T, y_grid, c=colslist[4], alpha=0.15, lw=0.6)
     ax.plot(e_mean, y_grid, c=colslist[0], lw=1.2)
-    ax.set_ylim((60, 0))
+    ax.set_ylim(ylim)
     ax.set_xlim((-0.01, 1.00))
     ax.text(
         -0.175, 0.500, '$y$ [cm]', ha='right', va='center', transform=ax.transAxes,
@@ -151,13 +167,16 @@ def plot_inset(fnout):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    fns_abs = {site: os.path.join(paths['cores'], fns[site]) for site in fns}
-    # plot_sites(fns_abs, fnout=os.path.join(paths['figures'], 'cores.pdf'))
-    for site in fns:
-        plot_site(fns_abs[site], fnout=os.path.join(paths['figures'], f'cores_{site}.pdf'))
+    year = 2023
+    fns_abs = {site: os.path.join(paths['cores'], fns(site, year)) for site in sitenames}
+    
+    # for site in sitenames:
+    #     plot_site(
+    #         fns_abs[site], ylim=(75, 0), method='watervolume', 
+    #         fnout=os.path.join(paths['figures'], f'cores_{site}_{year}.pdf'))
 
-    df_dict = pd.read_excel(fns_abs['IC'], sheet_name=None, engine='openpyxl')
-    data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
-    print(data_dict['IC-F'])
-#     e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
-#     print(np.nanmean(e_grid, axis=0))
+    df_dict = pd.read_excel(fns_abs['HV'], sheet_name=None, engine='openpyxl')
+    data_dict = {core: extract_core(df_dict[core], method='watervolume') for core in df_dict}
+    print(data_dict['HV_H'])
+    # e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
+    # print(np.nanmean(e_grid, axis=0))

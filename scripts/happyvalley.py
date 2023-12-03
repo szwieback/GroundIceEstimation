@@ -25,12 +25,14 @@ ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
 
 def happyvalley_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0 = {2022: '2022-06-06', 2019: '2019-05-18'}[year]
-    d1 = {2022: '2022-09-16', 2019: '2019-09-17'}[year]
+    d0 = {2023: '2023-05-31', 2022: '2022-06-06', 2019: '2019-05-18'}[year]
+    d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-    datesstr = {2022: ('20220610', '20220622', '20220704', '20220716', '20220728',
+    datesstr = {2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
+                       '20230816', '20230828', '20230909'),
+                2022: ('20220610', '20220622', '20220704', '20220716', '20220728',
                        '20220809', '20220821', '20220902', '20220914'),
                 2019: ('20190602', '20190614', '20190626', '20190708', '20190720',
                        '20190801', '20190813', '20190825', '20190906')}
@@ -44,7 +46,8 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     pathout = f'/10TBstorage/Work/gie/processed/happyvalley/{year}/{rmethod}'
 
     fns_unw_offset = {2019: [(7, os.path.join('/10TBstorage/Work/stacks/Dalton_131_363/2019_unw_offset.gpkg'))],
-                      2022: []}[year]
+                      2022: [],
+                      2023: []}[year]
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
@@ -97,7 +100,8 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    process_happyvalley(year=2019)
-    process_happyvalley(year=2022)
+    # process_happyvalley(year=2019)
+    # process_happyvalley(year=2022)
+    process_happyvalley(year=2023)
 
 

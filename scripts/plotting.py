@@ -14,8 +14,9 @@ globfigparams = {
     'ticklength': 2.50, 'minorticklength': 1.1}
 
 cols = {'true': '#000000', 'est': '#aa9966', 'unc': '#9999ee'}
-colslist = ['#2b2d47', '#8a698c', '#b29274', '#aaaaaa', '#6f5a48']
+colslist = ['#2b2d47', '#7c3c80', '#b29274', '#aaaaaa', '#6f5a48']
 cmap_e = cc.cm['bmy']
+cmap_s = cc.cm['bjy']
 
 def initialize_matplotlib():
     plt.rc('font', **{'size':globfigparams['fontsize'], 'family':globfigparams['family']})

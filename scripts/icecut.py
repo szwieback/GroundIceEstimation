@@ -26,12 +26,14 @@ ll, ur = (-148.8415, 69.0360), (-148.7216, 69.0493)
 
 def icecut_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0 = {2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
-    d1 = {2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
+    d0 = {2023: '2023-05-25', 2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
+    d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesstr = {
+        2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
+               '20230816', '20230828', '20230909'),
         2022: ('20220529', '20220610', '20220622', '20220704', '20220716', '20220728',
                '20220809', '20220821', '20220902', '20220914'),
         2021: ('20210603', '20210615', '20210627', '20210709', '20210721', '20210802',
@@ -93,6 +95,6 @@ def process_icecut(year=2019, rmethod='hadamard'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    process_icecut(year=2022)
-    process_icecut(year=2019)
-
+    # process_icecut(year=2022)
+    # process_icecut(year=2019)
+    process_icecut(year=2023)

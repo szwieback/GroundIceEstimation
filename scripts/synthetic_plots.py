@@ -34,11 +34,9 @@ def _plot_example(
     d0 = sie.invsim.ind_scenes[0]
     axs[0].axhline(0.0, lw=0.4, c='#dddddd')
     axs[0].plot(
-        days, conv * (s_pred[jsim, ...] - s_pred[jsim, d0]),
-        c=cols['est'], lw=1.0)
+        days, conv * (s_pred[jsim, ...] - s_pred[jsim, d0]), c=cols['est'], lw=1.0, alpha=0.9)
     axs[0].plot(
-        days, conv * (s_sim[jsim, ...] - s_sim[jsim, d0]),
-        lw=1.0, c=cols['true'])
+        days, conv * (s_sim[jsim, ...] - s_sim[jsim, d0]), lw=1.0, c=cols['true'], alpha=0.9)
     ms, mew = 3, 0.5
     axs[0].plot(
         days[sie.invsim.ind_scenes[1:]], conv * s_obs[jsim, ...], lw=0.0, c=cols['est'],
@@ -58,7 +56,7 @@ def _plot_example(
     alpha = sie.frac_thawed(replicate=replicate, jsim=jsim) ** 3
     for jdepth in np.arange(ygrid.shape[0] - 1):
         axs[1].plot(
-            e_inv[jsim, jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=1.0,
+            e_inv[jsim, jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=0.6,
             c=cols['est'], alpha=alpha[jdepth])
         lw = 0.1
         if show_quantile:
@@ -110,11 +108,13 @@ def plot_examples(show_quantile=False):
     from forcing import parse_dates
     import matplotlib.lines as mlines
     import datetime
+    from string import ascii_lowercase
     simname = 'spline_plot_sagwon'
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     instances = (Instance(0, 54), Instance(1, 52), Instance(0, 95))
-
+    labels = ('near-surface ice', 'ice poor', 'deep ice')
+    
     ymax = 60
     slim = (10.1, -1.2)
     sticks = [0, 3, 6, 9]
@@ -124,11 +124,14 @@ def plot_examples(show_quantile=False):
     _days = np.arange((d1_ - d0_).days)
     days = np.array([d0_ + datetime.timedelta(days=int(d)) for d in _days])
     fig, axs = prepare_figure(
-        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.10, 0.7),
-        top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.10, 0.72),
+        top=0.96, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.35)
     invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
     for jinstance, instance in enumerate(instances):
+        axs[0, jinstance].text(
+            0.500, 1.015, labels[jinstance], ha='center', va='baseline', 
+            transform=axs[0, jinstance].transAxes)
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,
@@ -136,10 +139,12 @@ def plot_examples(show_quantile=False):
             slim=slim, sticks=sticks)
     handles = [
         mlines.Line2D([], [], color=col, lw=1) for col in (cols['true'], cols['est'])]
+    for jax, ax in enumerate(axs.flatten()):
+        ax.text(0.98, 0.04, f'{ascii_lowercase[jax]})', ha='right', va='baseline', transform=ax.transAxes)
     axs[0, 0].legend(
-        handles, ('truth', 'estimate'), loc=3, frameon=False, ncol=1,
-        borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6,
-        labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
+        handles, ('synthetic truth', 'estimate'), loc=3, frameon=False, ncol=1,
+        borderpad=0.00, handlelength=0.8, borderaxespad=0.3, handletextpad=0.5,
+        labelspacing=0.0, bbox_to_anchor=(0.05, 0.02, 0.5, 0.2))
 
     plt.savefig(os.path.join(paths['figures'], 'synthetic_examples_sagwon.pdf'))
 
@@ -152,11 +157,11 @@ def plot_examples_exploratory(show_quantile=False):
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     k = 90
-    # instances = (Instance(0, k), Instance(0, k+1) , Instance(0, k+2), 
-    #              Instance(0, k+3), Instance(0, k+4), Instance(0, k+5))  
-    instances = (Instance(0, 3), Instance(0, 34) , Instance(0, 51), 
-                 Instance(0, 52), Instance(0, 54), Instance(0, 95))  
-#0, 3; #0, 34, 51, 52; 54
+    # instances = (Instance(0, k), Instance(0, k+1) , Instance(0, k+2),
+    #              Instance(0, k+3), Instance(0, k+4), Instance(0, k+5))
+    instances = (Instance(0, 3), Instance(0, 34) , Instance(0, 51),
+                 Instance(0, 52), Instance(0, 54), Instance(0, 95))
+# 0, 3; #0, 34, 51, 52; 54
     ymax = 65
     slim = (11, -1)
     sticks = [0, 3, 6, 9]
@@ -179,7 +184,7 @@ def plot_examples_exploratory(show_quantile=False):
     handles = [
         mlines.Line2D([], [], color=col, lw=1) for col in (cols['true'], cols['est'])]
     axs[0, 0].legend(
-        handles, ('truth', 'estimate'), loc=3, frameon=False, ncol=1,
+        handles, ('synth. truth', 'estimate'), loc=3, frameon=False, ncol=1,
         borderpad=0.00, handlelength=1.0, borderaxespad=0.3, handletextpad=0.6,
         labelspacing=0.0, bbox_to_anchor=(0.06, 0.0, 0.5, 0.2))
 
@@ -280,24 +285,24 @@ def plot_scatter_indrange(suffix='', subsample=100):
     metrics = load_object(os.path.join(pathsim, 'metrics_e_indranges.p'))
     post_mean = metrics['mean']
     presc = np.ones_like(post_mean)
-    presc[:,...] = metrics['sim'][np.newaxis, ...]
+    presc[:, ...] = metrics['sim'][np.newaxis, ...]
     values = np.vstack((presc.ravel(), post_mean.ravel()))
-    values = values[:, ::subsample]
+    values = values[:,::subsample]
     gridparms = (0, 0.9, 100)
-    xx, yy = np.mgrid[gridparms[0]:gridparms[1]:gridparms[2]*1j, gridparms[0]:gridparms[1]:gridparms[2]*1j]
+    xx, yy = np.mgrid[gridparms[0]:gridparms[1]:gridparms[2] * 1j, gridparms[0]:gridparms[1]:gridparms[2] * 1j]
     positions = np.vstack((xx.ravel(), yy.ravel()))
     dens_c = sm.nonparametric.KDEMultivariateConditional(
-        endog=[values[1, :]], exog=[values[0, :]], dep_type='c', indep_type='c', bw=(0.05,)*2)
+        endog=[values[1,:]], exog=[values[0,:]], dep_type='c', indep_type='c', bw=(0.05,) * 2)
     vlim = (0.00, 5.00)
-    f = dens_c.pdf(positions[1, :], positions[0, :]).reshape(xx.shape)
+    f = dens_c.pdf(positions[1,:], positions[0,:]).reshape(xx.shape)
     ax.imshow(
-        f, extent=(gridparms[0], gridparms[1])*2, cmap=cmap, origin='lower', vmin=vlim[0], vmax=vlim[1])
+        f, extent=(gridparms[0], gridparms[1]) * 2, cmap=cmap, origin='lower', vmin=vlim[0], vmax=vlim[1])
     ax.set_aspect('equal')
     ticks = (0.0, 0.3, 0.6, 0.9)
     ax.set_xticks(ticks)
     ax.set_yticks(ticks)
     ax.text(
-        -0.395, 0.500, '$\\hat{\\bar{e}}$ [$-$]', rotation=90, transform=ax.transAxes, ha='right', 
+        -0.395, 0.500, '$\\hat{\\bar{e}}$ [$-$]', rotation=90, transform=ax.transAxes, ha='right',
         va='center')
     ypos = -0.235
     ax.text(
@@ -323,13 +328,13 @@ def plot_metrics_indrange(suffix=''):
     colscen = {
         'spline_highacc':'#ad9e71', 'spline_lowacc':'#7171ae', 'spline_stdacc':'#4c4632'}
     colscen = {
-        'spline_highacc':colslist[2], 'spline_lowacc':colslist[1], 'spline_stdacc': colslist[0]}    
+        'spline_highacc':colslist[2], 'spline_lowacc':colslist[1], 'spline_stdacc': colslist[0]}
     alphascen = {'spline_highacc':1.0, 'spline_lowacc':1.0, 'spline_stdacc':1.0}
 
     jindrange = 0
     marker = 'o'
     ms = 4
-    colp, msp, mewp, alphap = '#999999', 3, 0.5, 0.4    
+    colp, msp, mewp, alphap = '#999999', 3, 0.5, 0.4
     ylim = (-0.3, 2.5)
     yticks = (0, 1, 2)
     yticklabels = ('low', 'standard', 'high')
@@ -344,7 +349,7 @@ def plot_metrics_indrange(suffix=''):
         metrics = load_object(
             os.path.join(paths['simulation'], simname, 'metrics_e_indranges.p'))
         metrics_p = load_object(
-            os.path.join(paths['simulation'], simname, 'metrics_e_indranges_prior.p'))        
+            os.path.join(paths['simulation'], simname, 'metrics_e_indranges_prior.p'))
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
@@ -354,11 +359,11 @@ def plot_metrics_indrange(suffix=''):
             linestyle='none', mec=colp, alpha=alphap, marker=marker,
             mew=mewp, ms=msp, mfc='none')
         axs[1].plot(
-            _sharpness(metrics), jsimname, linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], 
+            _sharpness(metrics), jsimname, linestyle='none', mfc=colscen[sim], alpha=alphascen[sim],
             marker=marker, ms=ms, mec='none')
         axs[1].plot(
             _sharpness(metrics_p), jsimname, linestyle='none', mec=colp, alpha=alphap, marker=marker,
-            mew=mewp, ms=msp, mfc='none')        
+            mew=mewp, ms=msp, mfc='none')
         axs[2].plot(
             100 * np.nanmean(metrics['coverage'][..., 1], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
@@ -401,8 +406,8 @@ if __name__ == '__main__':
     # plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
     # plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
-    plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
-    # for Nbatch in (1, 10,):
-        # plot_metrics(suffix=f'_{Nbatch}_sagwon')
+    # plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
+    for Nbatch in (1, 10,):
+        plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
 
