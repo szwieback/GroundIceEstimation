@@ -241,7 +241,7 @@ def icecut_map_subsidence(fnout=None, overwrite=True):
     if fnout is None:
         plt.show()
     else:
-        plt.savefig(fnout)
+        plt.savefig(fnout, dpi=450)
         
 def icecut_2023(fnout=None, overwrite=False):
     import matplotlib.pyplot as plt

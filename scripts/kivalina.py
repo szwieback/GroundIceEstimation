@@ -14,6 +14,8 @@ from simulation import (
     StefanStratigraphyConstantE)
 from forcing import load_forcing_merra_subset, parse_dates
 
+geom = {'ia': 39.29 / 180 * np.pi}
+
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
     'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
@@ -22,18 +24,22 @@ params_distribution = {
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
 
-def kivalina_forcing(folder_forcing, year=2019):
-    df = load_forcing_merra_subset(folder_forcing)
-    d0 = {2019: '2019-05-10', 2017: '2017-05-10', 2018: '2018-05-10'}[year]
-    d1 = {2019: '2019-09-15', 2017: '2017-09-20', 2018: '2018-09-15'}[year]
-    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=d0, end=d1)]
-    dailytemp[dailytemp < 0] = 0
+def kivalina_dates(year=2019):
     datesstr = {2019:
              ('20190606', '20190618', '20190630', '20190712', '20190724', '20190805',
               '20190817', '20190829', '20190910')}
+    d0 = {2019: '2019-05-10', 2017: '2017-05-10', 2018: '2018-05-10'}[year]
+    d1 = {2019: '2019-09-15', 2017: '2017-09-20', 2018: '2018-09-15'}[year]
+    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
+    return (d0, d1), datesdisp, ind_scenes
+
+def kivalina_forcing(folder_forcing, year=2019):
+    df = load_forcing_merra_subset(folder_forcing)
+    dd, datesdisp, ind_scenes = kivalina_dates(year)
+    dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=dd[0], end=dd[1])]
+    dailytemp[dailytemp < 0] = 0
     return dailytemp, ind_scenes
 
 def process_kivalina(year=2019, rmethod='hadamard'):
@@ -43,7 +49,6 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     # path0 = f'/home/simon/Work/gie/processed/kivalina/{year}/{rmethod}'
     # folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
     # pathout = os.path.join(path0, 'temp')
-    geom = {'ia': 39.29 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]

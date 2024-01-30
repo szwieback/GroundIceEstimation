@@ -53,41 +53,64 @@ def plot_inversion(meta, pathout, N_ens=20, fnout=None):
         top=0.89, left=0.105, right=0.990, bottom=0.145, wspace=0.30,
         hspace=0.35)
     ygrid = meta['predens_sim'][0].ygrid * 100  # cm
-    alpha_ens, lw_ens= 0.3, 0.3
+    dygrid = ygrid[1]
+    alpha_ens, lw_ens = 0.3, 0.3
     alpha_pm, lw_pm = 1.0, 1.5
     scennames = ['baseline profile', 'enriched: shallow', 'enriched: deep']
+    sl = [2.5, 5.5]
+    alpham = 0.6
+    cl = ['#777777', '#eeeeee']
     for jscen in range(Nscen):
         pathsim = os.path.join(pathout, str(jscen))
         invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
         invres = invsim.results(pathsim)
         lw = invres.lw[0, 0,:]
         ind_ens = np.argsort(lw)[-N_ens:]
-        e_ens = invres.predictions('e')[ind_ens, :]
+        e_ens = invres.predictions('e')[ind_ens,:]
+        yff = invres.predictions('yf')[..., invres.ind_scenes[0]][ind_ens] * 100
+        yfl = invres.predictions('yf')[..., invres.ind_scenes[-1]][ind_ens] * 100
         metrics = load_object(os.path.join(pathsim, 'metrics_e.p'))
         e_sim = meta['predens_sim'][jscen].results['e'][0,:]
         axs[jscen].fill_betweenx(ygrid, 0 * e_sim, e_sim, ec='none', fc=colslist[jscen], alpha=0.2)
         axs[jscen].fill_betweenx(ygrid, 0 * e_sim, e_sim, fc='none', ec=colslist[jscen], lw=0.3)
         axs[jscen].plot(metrics['mean'][:, 0,:].T, ygrid, c='k', alpha=alpha_pm, lw=lw_pm)
         axs[jscen].plot(e_ens.T, ygrid, c='k', lw=lw_ens, alpha=alpha_ens)
+        for n in range(N_ens):
+            indf, indl = int(yff[n] / dygrid), int(yfl[n] / dygrid)
+            axs[jscen].scatter(
+                e_ens[n, indf], yff[n], marker='o', s=sl[1], c=cl[1], edgecolors='none', zorder=5, alpha=alpham)
+            axs[jscen].scatter(
+                e_ens[n, indf], yff[n], marker='o', s=sl[0], c=cl[0], edgecolors='none', zorder=5)
+            axs[jscen].scatter(
+                e_ens[n, indl], yfl[n], marker='o', s=sl[1], c=cl[0], edgecolors='none', zorder=5, alpha=alpham)
+            axs[jscen].scatter(
+                e_ens[n, indl], yfl[n], marker='o', s=sl[0], c=cl[1], edgecolors='none', zorder=5)
         axs[jscen].text(
             0.50, -0.18, '$e$ [$-$]', va='baseline', ha='center', transform=axs[jscen].transAxes)
         axs[jscen].text(
             0.01, 1.02, f"{ascii_lowercase[jscen + 3]}) {scennames[jscen]}", ha='left', va='baseline',
             transform=axs[jscen].transAxes)
-        #break
-    
-    lax = axs[0].inset_axes([0.35, 0.03, 0.65, 0.14])
+
+    lax = axs[0].inset_axes([0.35, 0.03, 0.65, 0.27])
     lax.set_axis_off()
-    y_l = [0.8, 0.2]
+    y_l = [0.85, 0.60]
     kw = [{'lw': lw_pm, 'alpha': alpha_pm}, {'lw': lw_ens, 'alpha': alpha_ens}]
     labels_l = ['post. mean', 'ensemble']
-    for _y, _l, _kw in zip(y_l, labels_l, kw):# 
-        lax.plot((0.0, 0.2), (_y,)*2, c='k',**_kw, transform=lax.transAxes)
+    for _y, _l, _kw in zip(y_l, labels_l, kw):  #
+        lax.plot((0.0, 0.2), (_y,) * 2, c='k', **_kw, transform=lax.transAxes)
         lax.text(0.4, _y, _l, va='center', ha='left', transform=lax.transAxes)
-    
+    y_l = [0.35, 0.10]
+    _y = y_l[0]
+    lax.scatter(0.1, _y, marker='o', s=sl[1], c=cl[1], edgecolors='none', zorder=5, transform=lax.transAxes)
+    lax.scatter(0.1, _y, marker='o', s=sl[0], c=cl[0], edgecolors='none', zorder=5, transform=lax.transAxes, alpha=alpham)
+    _y = y_l[1]
+    lax.scatter(0.1, _y, marker='o', s=sl[1], c=cl[0], edgecolors='none', zorder=5, transform=lax.transAxes)
+    lax.scatter(0.1, _y, marker='o', s=sl[0], c=cl[1], edgecolors='none', zorder=5, transform=lax.transAxes)
+    for _y, label in zip(y_l, ['$y_{\\mathrm{f}}$ first', '$y_{\\mathrm{f}}$ last']):
+        lax.text(0.4, _y, label, va='center', ha='left', transform=lax.transAxes)
     axs[0].set_ylim((ymax, ygrid[0]))
-    axs[0].text(-0.27, 0.50, '$y$ [m]', rotation=90, va='center', ha='right', transform=axs[0].transAxes)
-    fig.text(0.5, 0.96, 'inversion', c='k', ha='center', va='baseline', transform=fig.transFigure)
+    axs[0].text(-0.27, 0.50, '$y$ [cm]', rotation=90, va='center', ha='right', transform=axs[0].transAxes)
+    fig.text(0.5, 0.96, 'resolution analysis', c='k', ha='center', va='baseline', transform=fig.transFigure)
     if fnout is not None:
         fig.savefig(fnout)
     else:
@@ -115,4 +138,4 @@ def resolution_inversion(
 
 if __name__ == '__main__':
     resolution_scenario(fnout=os.path.join(paths['figures'], 'resolution.pdf'))
-    
+

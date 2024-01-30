@@ -186,7 +186,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
     if fnout is None:
         plt.show()
     else:
-        plt.savefig(fnout)
+        plt.savefig(fnout, dpi=450)
 
 def happyvalley_map_subsidence(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt

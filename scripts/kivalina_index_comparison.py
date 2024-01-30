@@ -701,13 +701,14 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
     else:
         fig.savefig(fnout, dpi=450)
 
-def plot_index(config, path0, fnls, fnout=None):
+def plot_index(config, path0, fnls, fnout=None, _cmap=None):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
     from matplotlib import cm
     from matplotlib.colors import Normalize
     import matplotlib.patheffects as path_effects
     from string import ascii_lowercase
-
+    if _cmap is None: _cmap = cmap
+    
     e_lim = (0.00, 0.70)
     rc_ref = rc_references(path0, config, geospatial_proc)
     fig, axs = prepare_figure(
@@ -715,7 +716,7 @@ def plot_index(config, path0, fnls, fnout=None):
         hspace=0.10, wspace=0.06, remove_spines=False)
 
     e_res = _read_config(config, indranges_names, geospatial_proc, path0)
-    axs[0].imshow(e_res['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1], interpolation='nearest')
+    axs[0].imshow(e_res['mean'], cmap=_cmap, vmin=e_lim[0], vmax=e_lim[1], interpolation='nearest')
 
     ls, _ = geospatial_proc.warp_from_file(fnls)
     ls = ls[::-1,:,:]
@@ -759,7 +760,7 @@ def plot_index(config, path0, fnls, fnout=None):
     cax_left, cax_height, cax_top = 0.04, 0.06, -0.04
     cax = axs[0].inset_axes((cax_left, cax_top - cax_height, 0.40, cax_height))
     cbar = fig.colorbar(
-        cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=cmap), cax=cax, orientation='horizontal')
+        cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=_cmap), cax=cax, orientation='horizontal')
     cbar.set_ticks([e_lim[0], e_lim[1] / 2, e_lim[1]])
     cbar.solids.set_rasterized(True)
     cax.text(1.07, 0.30, '$\\hat{\\bar{e}}$ [$-$]', ha='left', va='center', transform=cax.transAxes)
@@ -778,7 +779,7 @@ def plot_index(config, path0, fnls, fnout=None):
         import matplotlib.pyplot as plt
         plt.show()
     else:
-        fig.savefig(fnout)
+        fig.savefig(fnout, dpi=450)
 
 def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     from scripts.plotting import prepare_figure, add_scalebar
@@ -827,6 +828,13 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     else:
         fig.savefig(fnout, dpi=450)
 
+def plot_index_cbars(config, path0, fnls):
+    import colorcet as cc
+    cmapnames = ['bgy', 'bmw', 'bmy', 'CET_CBL1', 'CET_L4', 'kgy', 'CET_L16', 'CET_CBL2']
+    for cmapname in cmapnames:
+        _cmap = copy.copy(cc.cm[cmapname])
+        _cmap.set_bad(color=c_bad)
+        plot_index(config, path0, fnls, fnout=os.path.join(pathfig, f'index_{cmapname}.pdf'), _cmap=_cmap)
 
 if __name__ == '__main__':
     fnsubset = os.path.join(path0, 'subset.gpkg')
@@ -845,10 +853,11 @@ if __name__ == '__main__':
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=os.path.join(pathfig, 'subset.pdf'), overwrite=False)
     # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=os.path.join(pathfig, 'profile.pdf'))
-    plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
+    # plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=os.path.join(pathfig, 'atmos.pdf'))
-    # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
+    plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))
+    # plot_index_cbars(configs[0], path0, fnls)

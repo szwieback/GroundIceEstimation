@@ -167,7 +167,7 @@ def plot_inset(fnout):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    year = 2023
+    year = 2022
     fns_abs = {site: os.path.join(paths['cores'], fns(site, year)) for site in sitenames}
     
     # for site in sitenames:
@@ -176,7 +176,9 @@ if __name__ == '__main__':
     #         fnout=os.path.join(paths['figures'], f'cores_{site}_{year}.pdf'))
 
     df_dict = pd.read_excel(fns_abs['HV'], sheet_name=None, engine='openpyxl')
-    data_dict = {core: extract_core(df_dict[core], method='watervolume') for core in df_dict}
-    print(data_dict['HV_H'])
-    # e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
-    # print(np.nanmean(e_grid, axis=0))
+    data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
+    # print(data_dict)
+    e_grid = read_site(fns_abs['HV'])
+    print(np.nanstd(e_grid, axis=0))
+    
+    

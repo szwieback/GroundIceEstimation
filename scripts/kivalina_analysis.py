@@ -139,7 +139,6 @@ def plot_kivalina(fnout=None, overwrite=False):
         rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
         mec=colslist[0], mfc=colslist[0], zorder=9)
 
-    
     for jp, profile in enumerate(profiles):
         pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
         rc = pi._rowcol_endpoints
@@ -208,7 +207,7 @@ def plot_kivalina(fnout=None, overwrite=False):
     else:
         plt.show()
 
-def plot_kivalina_slide(fnout=None, overwrite=False):
+def plot_kivalina_ICOP(fnout=None, overwrite=False):
     from analysis import read_K
     import matplotlib.gridspec as gridspec
     from scripts.plotting import (
@@ -216,6 +215,254 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
         contrast, add_arrow_line, plot_profile, add_scalebar)
     import matplotlib.pyplot as plt
 
+    pathres = '/home/simon/Work/gie/processed/kivalina/2019/'
+    fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
+    fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
+    fndemres = os.path.join(pathres, 'DEM.tif')
+    fnimraw = '/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif'
+    fnimres = os.path.join(pathres, 'optical.tif')
+    fngpkg = '/home/simon/Work/Kivalina/geology/cores2005.gpkg'
+    upscale = 16
+    wavelength, thresh = 0.055, 4.8e-3
+
+    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
+
+    K, geospatial_K = read_K(fnK)
+    invalid = invalid_mask(
+        K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
+    profiles = [((-164.7440, 67.8420), (-164.7350, 67.8480))]
+    plabels = [[(0.17, 'polygons'), (0.5, 'rocky'), (0.82, 'no polygons')]]
+    
+    xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
+    dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
+    optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
+    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
+    frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+
+    cores = read_core_data(fngpkg, geospatial)
+
+    cmap = cmap_e
+    elim = (0.0, 0.5)
+    xticks_im = (25, 65, 105, 145)
+    yticks_im = (10, 50, 90)
+    ys = [(0.55, 0.65)]
+    labels = [
+        'a) transect T', 'b) excess ice at 55--65 cm depth', 'c) false-color image']
+
+    fig = plt.figure()
+    initialize_matplotlib()
+    fig.set_size_inches((7.08, 1.45), forward=True)
+    gs = gridspec.GridSpec(
+        1, 14, left=0.05, right=0.990, top=0.980, bottom=0.125, wspace=1.00, hspace=0.015)
+
+    axs = [plt.subplot(gs[0, 0:4]), plt.subplot(gs[0, 4:8]), plt.subplot(gs[0, 8:12])]
+
+    xticks = [0, 200, 400, 600]
+    yticks = (0.0, 0.2, 0.4, 0.6)
+
+    ax = axs[2]
+    optical = optical[::-1, ...][0:3]    
+    ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
+    ax.contour(dem[0, ...], colors=['#333333'], linewidths=0.4, alpha=0.4, levels=10)
+    
+    rc_ref = np.array(geospatial.upscaled(upscale).rowcol(xy_ref))[:, 0]
+    ax.plot(
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x', 
+        mec=colslist[0], mfc=colslist[0], zorder=9)
+
+    for jp, profile in enumerate(profiles):
+        pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
+        rc = pi._rowcol_endpoints
+        label = f'T'
+        add_arrow_line(
+            ax, rc, label=label, c=colslist[0], lw=0.7, alpha=0.9, dlabel=(95, -15))
+    ax.set_xticks(np.array(xticks_im) * upscale)
+    ax.set_yticks(np.array(yticks_im) * upscale)
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.grid(color='#aaaaaa', linewidth=0.4)
+    add_scalebar(
+        ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.11)
+    ax.text(0.01, -0.06, 'Planet Labs', ha='left', va='top', transform=ax.transAxes)
+
+
+    for jy, y in enumerate(ys):
+        _e_mean = np.mean(
+            e_mean[..., _get_index(ygrid, y[0]):_get_index(ygrid, y[1])], axis=-1)
+        _e_mean[invalid] = np.nan
+        ax = axs[jy + 1]
+        im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
+        ax.set_facecolor('#aaaaaa')
+        ax.set_xticks(xticks_im)
+        ax.set_yticks(yticks_im)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.grid(color='#dddddd', linewidth=0.4, alpha=0.5)
+        xlim, ylim = ax.get_xlim(), ax.get_ylim()
+    cols_scatter = [('#ffffff', '#cccccc'), ('#000000', '#333333')]
+    marker_size, marker_lw, marker, alpha = 3.5, 0.8, 'o', 0.35
+    c = [cols_scatter[int(x)] for x in cores.code]
+    for _xy, _c in zip(cores.rowcol, c):
+        ax.plot(
+            _xy[1], _xy[0], linestyle='none', ms=marker_size,
+            mec=_c[0], mew=marker_lw, mfc='none', marker=marker, zorder=10)
+        ax.plot(
+            _xy[1], _xy[0], linestyle='none', ms=marker_size,
+            mec='none', mew=0.0, mfc=_c[1], marker=marker, zorder=9, alpha=alpha)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+
+    ymax = 0.65  # 0.5
+    ax = axs[0]
+    plot_profile(
+        ax, e_mean, geospatial, profiles[0], im_frac=None, ymax=ymax,
+        vlim=elim, ygrid=ygrid, cmap=cmap, xticks=xticks, yticks=yticks, labels=plabels[0],
+        x_ylabel=-0.14, y_xlabel=-0.25)
+    # ax.text(
+    #     0.48, 0.08, '$y_\\mathrm{f}$', c='#ffffff', transform=ax.transAxes, alpha=0.6)
+
+    bbox_r = axs[2].get_position()
+    bbox_c = ax.get_position()
+    ax.set_position(
+        (bbox_c.x0, bbox_r.y0, bbox_c.x1 - bbox_c.x0, bbox_r.y1 - bbox_r.y0))
+
+    lax = axs[-1].inset_axes([1.10, 0.58, 0.45, 0.40])
+    lax.set_axis_off()
+    x_scatter, y_scatter = [0.2, 0.8], 0.38
+    labels_scatter = ['ice poor', 'ice rich']
+    for _x, _c in zip(x_scatter, cols_scatter):
+        lax.plot(
+            _x, y_scatter, linestyle='none', ms=marker_size, transform=lax.transAxes,
+            mec=_c[0], mew=marker_lw, mfc='none', marker=marker, zorder=10,)
+        lax.plot(
+            _x, y_scatter, linestyle='none', ms=marker_size, transform=lax.transAxes,
+            mec='none', mew=0.0, mfc=_c[1], marker=marker, zorder=9, alpha=alpha)
+    for _x, _l in zip(x_scatter, labels_scatter):
+        lax.text(_x, 0.0, _l, va='baseline', ha='center', transform=lax.transAxes)
+    lax.text(0.5, 0.9, 'upper permafrost', va='top', ha='center', transform=lax.transAxes)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size - 1, mew=0,
+        transform=lax.transAxes, mfc='#666666', marker=marker, zorder=11)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size - 1.5, mew=0,
+        transform=lax.transAxes, mfc='#ffffff', marker=marker, zorder=11)
+    lax.plot(
+        x_scatter[0], y_scatter, linestyle='none', ms=marker_size, mew=1.5,
+        transform=lax.transAxes, mec='#666666', mfc='none', marker=marker, zorder=8)
+    cax = axs[-1].inset_axes([1.10, 0.23, 0.45, 0.10])
+    cax.text(0.5, 1.5, '$e$ [-]', ha='center', va='baseline', transform=cax.transAxes)
+    cbar = plt.colorbar(im_e, cax, shrink=0.5, orientation='horizontal')
+    cbar.solids.set_rasterized(True)
+    for ax, lab in zip(axs, labels):
+        ax.text(0.01, 1.04, lab, ha='left', va='baseline', transform=ax.transAxes)
+    if fnout is not None:
+        plt.savefig(fnout, dpi=450)
+    else:
+        plt.show()
+
+def plot_kivalina_subsidence(fnout=None, overwrite=False):
+    import matplotlib.pyplot as plt
+    from analysis import read_K, read_referenced_motion
+    from scripts.kivalina import kivalina_dates, geom    
+    from scripts.plotting import (
+        prepare_figure, cmap_e, cmap_s, _get_index, add_scalebar)
+    site = 'kivalina'
+    pathres = '/home/simon/Work/gie/processed/kivalina/2019/'
+    fnK = os.path.join(pathres, 'K_vec.geo.tif')
+    fnunw = os.path.join(pathres, 'unwrapped.geo.tif')
+
+    upscale = 16
+    wavelength, thresh = 0.055, 4.8e-3    
+    year = 2019
+    wavelength, thresh = 0.055, 4.8e-3
+
+    dd, dates, ind_scenes = kivalina_dates(year)
+
+    cmap = cmap_e
+    elim = (0.0, 0.5)
+    slim = (-0.10, 0.10)
+    xticks_im = (35, 70, 105, 140, 175)
+    yticks_im = (31,)
+    ys = (0.55, 0.65)
+
+    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
+    K, geospatial_K = read_K(fnK)
+    invalid = invalid_mask(
+        K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
+    
+    xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
+    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
+
+    s_obs, geospatial_s = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength,)
+    
+    fig, axs = prepare_figure(
+        ncols=3, nrows=1, figsize=(1.70, 0.48), sharex=True, sharey=True, left=0.03, right=0.98, 
+        bottom=0.18, top=0.98, hspace=0.10, wspace=0.10, remove_spines=False)
+    inds = [(5, -1), (0, -1)]
+    labels = [
+        'a) excess ice 55--65 cm', 'b) $s$ Aug 05 -- Sep 10, 2019',
+        'c) $s$ Jun 06 -- Sep 10, 2019', ]
+    
+    
+    jy0, jy1 = _get_index(ygrid, ys[0]), _get_index(ygrid, ys[1])
+    _e_mean = np.mean(e_mean[..., jy0:jy1], axis=-1)
+    _e_mean[invalid] = np.nan
+    ax = axs[0]
+    im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
+    s_obs_v = s_obs / np.cos(geom['ia'])
+    print(np.count_nonzero(np.isfinite(s_obs_v[-1, ...])))
+    s_obs_v = np.concatenate((np.zeros((1,) + s_obs_v.shape[1:]), s_obs_v), axis=0)
+    for jind, ind in enumerate(inds):
+        s_obs_diff = s_obs_v[ind[1], ...] - s_obs_v[ind[0], ...]
+        print(dates[ind[0]], dates[ind[1]])
+        s_obs_diff_crop, _ = geospatial.warp(s_obs_diff, geospatial_s)
+        s_obs_diff_crop[invalid] = np.nan
+        ax = axs[jind + 1]
+        im_s = ax.imshow(s_obs_diff_crop, cmap=cmap_s, vmin=slim[0], vmax=slim[1])
+    
+    for ax in axs.flatten():
+        ax.set_facecolor('#aaaaaa')
+        ax.set_xticks(xticks_im)
+        ax.set_yticks(yticks_im)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.grid(color='#dddddd', linewidth=0.4, alpha=0.5)
+    
+    rc_ref = np.array(geospatial.rowcol(xy_ref))[:, 0]
+    ax.plot(
+        rc_ref[1], rc_ref[0], linestyle='none', ms=2.5, marker='x',
+        mec='#333333', zorder=9)
+    add_scalebar(ax, geospatial, length=1000, label='1 km', y=-0.14)
+    
+    cparms = {'e': ('$e$ [-]',  (0.0, 0.25, 0.50), None), 
+              's': ('$s$ [cm]',  (-0.10, 0.0, 0.10), (-10, 0, 10))}
+    ims = (im_e, im_s)
+    for jvar, _var in enumerate(['e', 's']):
+        _cp = cparms[_var]
+        cax = axs[jvar].inset_axes([0.1, -0.23, 0.60, 0.13])
+        cax.text(1.08, 0.10, _cp[0], ha='left', va='baseline', transform=cax.transAxes)
+        cbar = plt.colorbar(ims[jvar], cax, shrink=0.5, orientation='horizontal', ticks=_cp[1])
+        if _cp[2] is not None:
+            cbar.set_ticks(_cp[1], labels=_cp[2])
+        cbar.solids.set_rasterized(True)
+    
+    for ax, lab in zip(axs, labels):
+        ax.text(0.010, 1.050, lab, ha='left', va='baseline', transform=ax.transAxes)
+    if fnout is None:
+        plt.show()
+    else:
+        plt.savefig(fnout, dpi=450)    
+
+def plot_kivalina_slide(fnout=None, overwrite=False):
+    from analysis import read_K
+    import matplotlib.gridspec as gridspec
+    from scripts.plotting import (
+        initialize_matplotlib, cmap_e, colslist, _get_index, ProfileInterpolator,
+        contrast, add_arrow_line, plot_profile, add_scalebar)
+    import matplotlib.pyplot as plt
     pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/'
     fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
     fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
@@ -360,7 +607,7 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
     for ax, lab in zip([ax for axr in axs for ax in axr], labels):
         ax.text(0.01, 1.04, lab, ha='left', va='baseline', transform=ax.transAxes)
     if fnout is not None:
-        plt.savefig(fnout)
+        plt.savefig(fnout, dpi=450)
     else:
         plt.show()
 
@@ -368,8 +615,9 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = os.path.join(paths['figures'], 'kivalina.pdf')
     # plot_kivalina(fnplot, overwrite=False)
-    plot_kivalina_slide(os.path.join(paths['figures'], 'kivalina_slide.pdf'), overwrite=False)
-    
+    # plot_kivalina_slide(os.path.join(paths['figures'], 'kivalina_slide.pdf'), overwrite=False)
+    plot_kivalina_ICOP(os.path.join(paths['figures'], 'kivalina_ICOP.pdf'), overwrite=False)
+    # plot_kivalina_subsidence(fnout=os.path.join(paths['figures'], 'kivalina_subs.pdf'))
     # e_mean_ = np.mean(e_mean[..., _get_index(ygrid, 0.40):_get_index(ygrid, 0.50)], axis=-1)  # 0.5
     # e_mean_[invalid] = nodata
     # print(np.nanpercentile(e_mean_, (10, 25, 50, 75, 90)))

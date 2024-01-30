@@ -16,7 +16,7 @@ cols = {'est': colslist[2], 'true': colslist[0], 'unc': colslist[2]}
 
 def _plot_example(
         axs, sie, days=None, jsim=0, replicate=0, show_quantile=True, smooth_quantile=2,
-        ymax=None, slim=None, sticks=None, show_ylabels=False):
+        ymax=None, slim=None, sticks=None, show_ylabels=False, ylabxpos=-0.31):
     import matplotlib.dates as mdates
     ygrid = sie.ygrid * 100  # cm
     conv = 100.0
@@ -32,72 +32,73 @@ def _plot_example(
     s_pred = sie.moment('s_los', replicate=replicate)
     if days is None: days = np.arange(s_sim.shape[1])
     d0 = sie.invsim.ind_scenes[0]
-    axs[0].axhline(0.0, lw=0.4, c='#dddddd')
-    axs[0].plot(
+    ax = axs[1]
+    ax.axhline(0.0, lw=0.4, c='#dddddd')
+    ax.plot(
         days, conv * (s_pred[jsim, ...] - s_pred[jsim, d0]), c=cols['est'], lw=1.0, alpha=0.9)
-    axs[0].plot(
+    ax.plot(
         days, conv * (s_sim[jsim, ...] - s_sim[jsim, d0]), lw=1.0, c=cols['true'], alpha=0.9)
     ms, mew = 3, 0.5
-    axs[0].plot(
+    ax.plot(
         days[sie.invsim.ind_scenes[1:]], conv * s_obs[jsim, ...], lw=0.0, c=cols['est'],
         alpha=0.5, marker='o', mfc='w', mec='none', ms=ms, mew=mew)
-    axs[0].plot(
+    ax.plot(
         days[sie.invsim.ind_scenes[1:]], conv * s_obs[jsim, ...], lw=0.0, c=cols['est'],
         alpha=1.0, marker='o', mfc='none', mec=cols['est'], ms=ms, mew=mew)
     if slim is not None:
-        axs[0].set_ylim(slim)
+        ax.set_ylim(slim)
     else:
-        axs[0].set_ylim(list(axs[0].get_ylim())[::-1])
+        ax.set_ylim(list(axs[0].get_ylim())[::-1])
     if sticks is not None:
-        axs[0].set_yticks(sticks)
-    axs[0].xaxis.set_major_locator(mdates.MonthLocator(interval=1))
-    axs[0].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
-    axs[0].set_xlim((days[0], days[-1]))
+        ax.set_yticks(sticks)
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+    ax.set_xlim((days[0], days[-1]))
     alpha = sie.frac_thawed(replicate=replicate, jsim=jsim) ** 3
+    ax = axs[0]
     for jdepth in np.arange(ygrid.shape[0] - 1):
-        axs[1].plot(
+        ax.plot(
             e_inv[jsim, jdepth:jdepth + 2], ygrid[jdepth:jdepth + 2], lw=0.6,
             c=cols['est'], alpha=alpha[jdepth])
         lw = 0.1
         if show_quantile:
-            axs[1].plot(
+            ax.plot(
                 e_inv_q[jdepth:jdepth + 2, 0], ygrid[jdepth:jdepth + 2], lw=lw,
                 c=cols['unc'], alpha=alpha[jdepth])
-            axs[1].plot(
+            ax.plot(
                 e_inv_q[jdepth:jdepth + 2, 1], ygrid[jdepth:jdepth + 2], lw=lw,
                 c=cols['unc'], alpha=alpha[jdepth])
         else:
-            axs[1].plot(
+            ax.plot(
                 e_inv[jsim, jdepth:jdepth + 2] + e_inv_std[jsim, jdepth:jdepth + 2],
                  ygrid[jdepth:jdepth + 2], lw=lw, c=cols['unc'], alpha=alpha[jdepth])
-            axs[1].plot(
+            ax.plot(
                 e_inv[jsim, jdepth:jdepth + 2] - e_inv_std[jsim, jdepth:jdepth + 2],
                 ygrid[jdepth:jdepth + 2], lw=lw, c=cols['unc'], alpha=alpha[jdepth])
     if show_quantile:
-        axs[1].fill_betweenx(
+        ax.fill_betweenx(
             ygrid,
             e_inv_q[:, 0], e_inv_q[:, 1],
             edgecolor='none', facecolor=cols['unc'], alpha=0.07)
     else:
-        axs[1].fill_betweenx(
+        ax.fill_betweenx(
             ygrid,
             (e_inv - e_inv_std)[jsim,:], (e_inv + e_inv_std)[jsim,:],
             edgecolor='none', facecolor=cols['unc'], alpha=0.07)
-    axs[1].plot(e_sim[jsim,:], ygrid, lw=1.0, c=cols['true'])
+    ax.plot(e_sim[jsim,:], ygrid, lw=1.0, c=cols['true'])
     if ymax is None: ymax = ygrid[-1]
-    ylabxpos = -0.31
     if show_ylabels:
-        axs[0].text(
+        axs[1].text(
             ylabxpos, 0.5, 'subsidence [cm]', transform=axs[0].transAxes, va='center',
             ha='right', rotation=90)
-        axs[1].text(
+        axs[0].text(
             ylabxpos, 0.5, 'depth [cm]', transform=axs[1].transAxes, va='center',
             ha='right', rotation=90)
     else:
         axs[0].set_yticklabels([])
         axs[1].set_yticklabels([])
-    axs[1].set_ylim((ymax, ygrid[0]))
-    axs[1].text(
+    axs[0].set_ylim((ymax, ygrid[0]))
+    axs[0].text(
         0.5, -0.36, '$e$ [-]', transform=axs[1].transAxes, ha='center', va='baseline')
     for ax in axs:
         ax.spines['right'].set_visible(False)
@@ -112,36 +113,39 @@ def plot_examples(show_quantile=False):
     simname = 'spline_plot_sagwon'
     pathsim = os.path.join(paths['simulation'], simname)
     Instance = namedtuple('instance', ['replicate', 'jsim'])
-    instances = (Instance(0, 54), Instance(1, 52), Instance(0, 95))
-    labels = ('near-surface ice', 'ice poor', 'deep ice')
-    
+    # instances = (Instance(0, 54), Instance(1, 52), Instance(0, 95))
+    # labels = ('near-surface ice', 'ice poor', 'deep ice')
+
+    instances = (Instance(0, 54), Instance(0, 95))
+    labels = ('enriched: shallow', 'enriched: deep')
+
     ymax = 60
     slim = (10.1, -1.2)
     sticks = [0, 3, 6, 9]
-
+    ylabxpos = -0.23
     d0, d1 = '2019-05-11', '2019-09-18'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     _days = np.arange((d1_ - d0_).days)
     days = np.array([d0_ + datetime.timedelta(days=int(d)) for d in _days])
     fig, axs = prepare_figure(
-        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.10, 0.72),
-        top=0.96, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
-        hspace=0.35)
+        ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.00, 0.72),
+        top=0.94, left=0.125, right=0.990, bottom=0.140, wspace=0.30,
+        hspace=0.31)
     invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
     for jinstance, instance in enumerate(instances):
         axs[0, jinstance].text(
-            0.500, 1.015, labels[jinstance], ha='center', va='baseline', 
+            0.500, 1.040, labels[jinstance], ha='center', va='baseline',
             transform=axs[0, jinstance].transAxes)
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,
             show_quantile=show_quantile, ymax=ymax, show_ylabels=(jinstance == 0),
-            slim=slim, sticks=sticks)
+            slim=slim, sticks=sticks, ylabxpos=ylabxpos)
     handles = [
         mlines.Line2D([], [], color=col, lw=1) for col in (cols['true'], cols['est'])]
     for jax, ax in enumerate(axs.flatten()):
         ax.text(0.98, 0.04, f'{ascii_lowercase[jax]})', ha='right', va='baseline', transform=ax.transAxes)
-    axs[0, 0].legend(
+    axs[1, 0].legend(
         handles, ('synthetic truth', 'estimate'), loc=3, frameon=False, ncol=1,
         borderpad=0.00, handlelength=0.8, borderaxespad=0.3, handletextpad=0.5,
         labelspacing=0.0, bbox_to_anchor=(0.05, 0.02, 0.5, 0.2))
@@ -403,11 +407,11 @@ def plot_metrics_indrange(suffix=''):
     plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
 
 if __name__ == '__main__':
-    # plot_examples(show_quantile=True)
+    plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
     # plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
     # plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
-    for Nbatch in (1, 10,):
-        plot_metrics(suffix=f'_{Nbatch}_sagwon')
+    # for Nbatch in (1, 10,):
+    #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
 
