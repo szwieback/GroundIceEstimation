@@ -186,9 +186,9 @@ def read_geotiff_geospatial(fntif):
     geospatial = Geospatial.from_file(fntif)
     return arr, geospatial
 
-def save_geotiff(arr, geospatial, fnout, nodata=None):
+def save_geotiff(arr, geospatial, fnout, nodata=None, dtypename='float32'):
     meta = {
-        'driver': 'GTiff', 'dtype': 'float32', 'nodata': nodata,
+        'driver': 'GTiff', 'dtype': dtypename, 'nodata': nodata,
         'width': geospatial.shape[1], 'height': geospatial.shape[0],
         'count': arr.shape[0], 'crs': geospatial.crs, 'transform': geospatial.transform}
     enforce_directory(fnout)

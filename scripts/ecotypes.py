@@ -13,19 +13,19 @@ def check_lut(classes):
             if sum([v in cl for cl in classes.values()]) > 1:
                 raise ValueError(f'Ambiguous assignment of original class {v}')
 
-def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False, dtype=None, nodata=-1):
+def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False,nodata=-1):
     if overwrite or fnout is None or not os.path.exists(fnout):
-        if dtype is None: dtype = np.int16
+        dtype, dtypename = np.int16, 'int16'
         check_lut(eclasses)
         lc_rs, _ = geospatial.warp_from_file(fnlc, dtype=np.int16, method='mode')
         ec = np.full((1,) + geospatial.shape, nodata, dtype=dtype)
         for cn, clist in eclasses.items():
             np.putmask(ec, np.isin(lc_rs, clist), cn)
         if fnout is not None:
-            save_geotiff(ec, geospatial, fnout)
+            save_geotiff(ec, geospatial, fnout, dtypename=dtypename)
     else:
         ec, geospatial_ec = read_geotiff_geospatial(fnout)
-        if not  geospatial == geospatial_ec: raise ValueError(f'Geospatial of {fnout} inconsistent')
+        if not geospatial == geospatial_ec: raise ValueError(f'Geospatial of {fnout} inconsistent')
     return ec 
 
 if __name__ == '__main__':
