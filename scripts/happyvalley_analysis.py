@@ -55,18 +55,6 @@ def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True
             geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     return res
 
-def site_analysis():
-    pass
-    # rc_site = geospatial.rowcol(site)
-    # e_mean_site = e_mean[rc_site[0, 0], rc_site[1, 0],:]
-    # e_quantile_site = e_quantile[rc_site[0, 0], rc_site[1, 0], ...]
-    # frac_site = frac_thawed[rc_site[0, 0], rc_site[1, 0]]
-    # print(ygrid[np.nonzero(frac_site < 1 / 2)[0][0]])
-    # fig, ax = prepare_figure(nrows=1, ncols=1)
-    # ax.fill_betweenx(ygrid, e_quantile_site[:, 0], e_quantile_site[:, 1], edgecolor='none', facecolor=colslist[0], alpha=0.07)
-    # ax.plot(e_mean_site, ygrid, c=colslist[0])
-    # ax.set_ylim((0.55, 0))
-    # plt.show()
 
 def happyvalley_map_profiles(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt
