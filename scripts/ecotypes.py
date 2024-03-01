@@ -13,10 +13,10 @@ def check_lut(classes):
             if sum([v in cl for cl in classes.values()]) > 1:
                 raise ValueError(f'Ambiguous assignment of original class {v}')
 
-def reclassify(fnlc, classes, geospatial, fnout=None, overwrite=False, dtype=None, nodata=-1):
+def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False, dtype=None, nodata=-1):
     if overwrite or fnout is None or not os.path.exists(fnout):
         if dtype is None: dtype = np.int16
-        check_lut(classes)
+        check_lut(eclasses)
         lc_rs, _ = geospatial.warp_from_file(fnlc, dtype=np.int16, method='mode')
         ec = np.full((1,) + geospatial.shape, nodata, dtype=dtype)
         for cn, clist in eclasses.items():
