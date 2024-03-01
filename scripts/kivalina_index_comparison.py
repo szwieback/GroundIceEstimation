@@ -830,10 +830,17 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
 
 def plot_index_cbars(config, path0, fnls):
     import colorcet as cc
-    cmapnames = ['bgy', 'bmw', 'bmy', 'CET_CBL1', 'CET_L4', 'kgy', 'CET_L16', 'CET_CBL2']
+    from matplotlib.colors import LinearSegmentedColormap
+    cmapnames = ['CET_CBC1'] 
+    #cmapnames = ['bgy', 'bmw', 'bmy', 'CET_CBL1', 'CET_L4', 'kgy', 'CET_L16', 'CET_CBL2', 'CET_CBC1']
     for cmapname in cmapnames:
-        _cmap = copy.copy(cc.cm[cmapname])
-        _cmap.set_bad(color=c_bad)
+        if cmapname != 'CET_CBC1':
+            _cmap = copy.copy(cc.cm[cmapname])
+            _cmap.set_bad(color=c_bad)
+        else:
+            cmap = cc.cm[cmapname]
+            _cmap = LinearSegmentedColormap.from_list('clipped', cmap(np.linspace(0.8, 0.2, 256)))
+            _cmap.set_bad(color='#666666')
         plot_index(config, path0, fnls, fnout=os.path.join(pathfig, f'index_{cmapname}.pdf'), _cmap=_cmap)
 
 if __name__ == '__main__':
@@ -858,6 +865,7 @@ if __name__ == '__main__':
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=os.path.join(pathfig, 'atmos.pdf'))
-    plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
+    # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))
-    # plot_index_cbars(configs[0], path0, fnls)
+    plot_index_cbars(configs[0], path0, fnls)
+    
