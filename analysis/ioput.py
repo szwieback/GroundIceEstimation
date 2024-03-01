@@ -132,7 +132,8 @@ class Geospatial():
     def warp(
             self, arr_in, geospatial_in, method='bilinear', dtype=np.float32, upscale=None):
         from rasterio.warp import reproject, Resampling
-        r = {'bilinear': Resampling.bilinear}[method]  # implement others
+        rmethods = {'bilinear': Resampling.bilinear, 'nearest': Resampling.nearest, 'mode': Resampling.mode}
+        r = rmethods[method] 
         _gs = self.upscaled(upscale=upscale)
         arr_out = np.zeros(arr_in.shape[:-2] + _gs.shape, dtype=dtype)
         reproject(
