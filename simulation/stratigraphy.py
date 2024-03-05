@@ -22,7 +22,7 @@ params_default_distribution = {
     'n_factor': {'high': 0.95, 'low': 0.8, 'alphabeta': 2.0}}
 params_default_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
              'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
@@ -32,7 +32,8 @@ class Stratigraphy():
     def __init__(
             self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
             constants=None):
-        pass
+        self.depth = depth
+        self.dy = dy
 
     def _update_rs(self, rs):
         self.rs = rs
@@ -46,6 +47,14 @@ class StratigraphyMultiple():
         self.strat = strat
         self.Nbatch = Nbatch
         self.seed0 = seed0
+        
+    @property
+    def depth(self):
+        return self.strat.depth
+
+    @property
+    def dy(self):
+        return self.strat.dy
 
     def params(self, fields=None, batch=None):
         params0 = {**self.strat.constants, 'depth': self.strat.depth, 'dy': self.strat.dy}
@@ -147,7 +156,7 @@ class StefanStratigraphy(Stratigraphy):
         return od
 
     def _draw_mow(self, od, e):
-        ind_above = self._ygrid[np.newaxis, :] < od[:, np.newaxis]
+        ind_above = self._ygrid[np.newaxis,:] < od[:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)
         o = np.zeros_like(ind_above, dtype=np.float64)
@@ -220,7 +229,7 @@ class StefanStratigraphy(Stratigraphy):
             0.20 * np.ones_like(self.stratigraphy['od']))
         self.stratigraphy['n_factor'] = (
             0.88 * np.ones_like(self.stratigraphy['n_factor']))
-        ind_above = self._ygrid[np.newaxis, :] < self.stratigraphy['od'][:, np.newaxis]
+        ind_above = self._ygrid[np.newaxis,:] < self.stratigraphy['od'][:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)
         o = np.zeros_like(ind_above, dtype=np.float64)
@@ -232,7 +241,7 @@ class StefanStratigraphy(Stratigraphy):
         np.putmask(o, ind_below, (1 - e) * self.soil_params['organic_below'])
         np.putmask(sat, ind_above, 0.6 * np.ones_like(sat))
         np.putmask(sat, ind_below, 0.9 * np.ones_like(sat))
-        w = (1 - e - m - o) * sat        
+        w = (1 - e - m - o) * sat
         w = (1 - e - m - o) * sat
         self.stratigraphy.update({'m': m.astype(self.dtype), 'o': o.astype(self.dtype),
             'w': w.astype(self.dtype)})
@@ -259,14 +268,14 @@ class StefanStratigraphySmoothingSpline(StefanStratigraphy):
         e = (1 + np.exp(-elogit)) ** (-1) * (ehigh - elow) + elow
         e[:, 0] = e[:, 1]
         return e
-    
+
 class StefanStratigraphyConstantE(StefanStratigraphy):
     def _draw_e(self):
         ehigh, elow = self.e_params['high'], self.e_params['low']
         coeffmean, coeffstd = self.e_params['coeff_mean'], self.e_params['coeff_std']
         coeff = coeffmean + self.rs.normal(size=(self.N, 1)) * coeffstd
         og = np.ones_like(self._ygrid)
-        e = (1 + np.exp(-coeff * og[np.newaxis, :])) ** (-1) * (ehigh - elow) + elow
+        e = (1 + np.exp(-coeff * og[np.newaxis,:])) ** (-1) * (ehigh - elow) + elow
         return e
 
 class StefanStratigraphyPrescribedSmoothingSpline(StefanStratigraphySmoothingSpline):
@@ -280,13 +289,13 @@ class StefanStratigraphyPrescribedConstantE(StefanStratigraphyConstantE):
         super()._override_stratigraphy()
 
 if __name__ == '__main__':
-    strat = StefanStratigraphySmoothingSpline(seed=2,N=100000)
+    strat = StefanStratigraphySmoothingSpline(seed=2, N=100000)
     print(strat._cpoints())
 #     print(np.sum(strat._spline_basis(), axis=1))
     e = strat._draw_e()
     import matplotlib.pyplot as plt
     ygrid = strat._ygrid
-    plt.plot(ygrid, e[0:50, :].T, alpha=0.5)
+    plt.plot(ygrid, e[0:50,:].T, alpha=0.5)
     print(np.std(e[:, 3]), np.std(e[:, 500]))
 #     plt.show()
 

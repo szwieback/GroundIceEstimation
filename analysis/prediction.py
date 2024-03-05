@@ -7,8 +7,6 @@ from simulation import stefan_integral_balance
 
 import numpy as np
 
-
-
 class Predictor():
     def __init__(self):
         pass
@@ -49,49 +47,55 @@ class StefanPredictor(Predictor):
         return stefandict
 
 class PredictionEnsemble():
-    def __init__(self, strat, predictor, geom=None):
+    def __init__(self, strat, predictor, geom=None, results=None):
         self.strat = strat
         self.predictor = predictor
         self.geom = geom
-        self.results = None
+        self.results = results
 
     def predict(self, forcing, n_jobs=-8, **kwargs):
-        self.results = {}
-        if self.strat.Nbatch == 0:
+        strat = self.strat
+        self.results = self._predict(strat, forcing, n_jobs=n_jobs, **kwargs)
+
+    def _predict(self, strat, forcing, n_jobs=-8, **kwargs):
+        results = {}
+        if strat.Nbatch == 0:
             self.results = self.predictor.predict(
-                forcing, self.strat.params(), geom=self.geom, **kwargs)
+                forcing, strat.params(), geom=self.geom, **kwargs)
         else:
             from joblib import Parallel, delayed
             def _res(batch):
                 res = self.predictor.predict(
-                    forcing, self.strat.params(batch=batch), geom=self.geom, **kwargs)
+                    forcing, strat.params(batch=batch), geom=self.geom, **kwargs)
                 return res
-            rl = Parallel(n_jobs=n_jobs)(delayed(_res)(b) for b in range(self.strat.Nbatch))
+            rl = Parallel(n_jobs=n_jobs)(delayed(_res)(b) for b in range(strat.Nbatch))
             for res_batch in rl:
                 for k in res_batch:
-                    if k in self.results:
+                    if k in results:
                         if not np.isscalar(self.results[k]):
-                            self.results[k] = np.concatenate(
-                                (self.results[k], res_batch[k]), axis=0)
+                            results[k] = np.concatenate((results[k], res_batch[k]), axis=0)
                     else:
-                        self.results[k] = res_batch[k]
-    
+                        results[k] = res_batch[k]
+        return results
+
     def predict_mean_period(self, indranges, param='e'):
         if isinstance(param, str):
-            self.results[f'{param}_mean_period'] = self.mean_period(indranges, param=param)
+            results = self.results
+            self.results[f'{param}_mean_period'] = self._mean_period(results, indranges, param=param)
         else:
-            for _p in param: self.predict_mean_period(indranges, _p) 
-    
-    def mean_period(self, indranges, param='e'):
-        ygrid = self.ygrid
-        yf = self.results['yf']
-        p = self.results[param]
+            for _p in param: self.predict_mean_period(indranges, _p)
+
+    @classmethod
+    def _mean_period(cls, results, indranges, param='e'):
+        ygrid = results.ygrid
+        yf = results['yf']
+        p = results[param]
         p_mean = []
         for indrange in indranges:
             yfrange = yf[:, indrange]
             invalid = np.logical_or(
-                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis, :],
-                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis, :])
+                yfrange[:, 0][:, np.newaxis] > ygrid[np.newaxis,:],
+                yfrange[:, 1][:, np.newaxis] < ygrid[np.newaxis,:])
             p_ = p.copy()
             np.putmask(p_, invalid, np.nan)
             p_mean.append(np.nanmean(p_, axis=1))
@@ -111,15 +115,23 @@ class PredictionEnsemble():
         return np.arange(0, self.depth, step=self.dy)
 
     def extract_predictions(
-            self, indices, field='s_los', C_obs=None, rng=None, reference_only=False):
+            self, indices, field='s_los', C_obs=None, rng=None, reference_only=False, **kwargs):
+        # need kwargs for downstream compatibility
+        pred = self._extract_predictions(
+            self.results, indices, field=field, C_obs=C_obs, rng=rng, reference_only=reference_only)
+        return pred
+
+    @classmethod
+    def _extract_predictions(
+            cls, results, indices, field='s_los', C_obs=None, rng=None, reference_only=False):
         # nn interpolation from time steps to observation epochs
         # indices: ind of time steps
         # C not None: add measurement noise
         if not reference_only:
-            s = self.results[field][:, indices[1:]]
+            s = results[field][:, indices[1:]]
         else:
-            s = self.results[field]
-        s -= self.results[field][:, indices[0]][:, np.newaxis]
+            s = results[field]
+        s -= results[field][:, indices[0]][:, np.newaxis]
         if C_obs is not None:
             if rng is None:
                 rng = np.random.default_rng(seed=1)
@@ -131,3 +143,64 @@ class PredictionEnsemble():
             except:
                 s += np.nan
         return s
+
+class MulticlassPredictionEnsemble(PredictionEnsemble):
+    def __init__(self, strats, predictor, geom=None, results=None):
+        # strats is dictionary of stratigraphies
+        self._check_strats(strats)
+        self.strats = strats
+        self.predictor = predictor
+        self.geom = geom
+        self.results = results
+
+    @property
+    def classnames(self):
+        return tuple(self.strats.keys())
+    
+    def __getitem__(self, cn):
+        if cn not in self.classnames: raise ValueError(f'Class name {cn} not found')
+        results = None if self.results is None else self.results[cn]
+        pe = PredictionEnsemble(self.strats[cn], self.predictor, self.geom, results=results)
+        return pe
+
+    @classmethod
+    def _check_strats(cls, strats):
+        s0 = strats[tuple(strats.keys())[0]]
+        for s in strats.values():
+            assert s0.depth == s.depth
+            assert s0.dy == s.dy
+            
+    @property
+    def depth(self):
+        s0 = self.strats[self.classnames[0]]
+        return s0.depth
+
+    @property
+    def dy(self):
+        s0 = self.strats[self.classnames[0]]
+        return s0.dy
+
+    def predict_mean_period(self, indranges, param='e'):
+        if isinstance(param, str):
+            for sc in self.strats:
+                results = self.results[sc]
+                self.results[f'{param}_mean_period'] = self._mean_period(results, indranges, param=param)
+        else:
+            for _p in param: self.predict_mean_period(indranges, _p)
+
+    def predict(self, forcing, n_jobs=-8, **kwargs):
+        self.results = {}
+        for sc in self.strats:
+            self.results[sc] = self._predict(self.strats[sc], forcing, n_jobs=n_jobs, **kwargs)
+
+    def extract_predictions(
+            self, indices, field='s_los', C_obs=None, rng=None, reference_only=False, **kwargs):
+        try:
+            ec = kwargs['ec']
+        except:
+            raise ValueError('ec needs to be provided for MulticlassPredictionEnsemble')
+        results = self.results[ec]
+        pred = self._extract_predictions(
+            results, indices, field=field, C_obs=C_obs, rng=rng, reference_only=reference_only)
+        return pred
+
