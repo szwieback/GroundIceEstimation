@@ -99,7 +99,6 @@ class InversionProcessor():
         s_obs_flat = np.reshape(s_obs, (s_obs.shape[0], -1))
         C_obs_flat = np.reshape(C_obs, (C_obs.shape[0], C_obs.shape[1], -1))
         ec_flat = ec.flatten() if ec is not None else None
-        print(C_obs_flat.shape, ec_flat.shape, ec.shape)
         N = s_obs_flat.shape[-1]
         assert C_obs_flat.shape[-1] == N
         Nbatch = np.int64(np.ceil(N / self.batch_size))
@@ -278,15 +277,18 @@ class InversionResults():
         res = self.expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = os.path.join(pathout, fn)
-        print(fnout, res.shape)
         np.save(fnout, res)
-
-    def save(self, fnout):
-        from analysis import save_object
+    
+    @property
+    def _dict(self):
         dictout = {
             'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
             'blocksize': self.blocksize}
-        save_object(dictout, fnout)
+        return dictout        
+
+    def save(self, fnout):
+        from analysis import save_object
+        save_object(self._dict, fnout)
 
     @classmethod
     def from_file(cls, fn):
@@ -303,13 +305,13 @@ class MulticlassInversionResults(InversionResults):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
         self.ec = ec
 
-    def save(self, fnout):
-        from analysis import save_object
+    @property
+    def _to_dict(self):
         dictout = {
             'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
-        save_object(dictout, fnout)
-
+        return dictout
+    
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         _lw = self.lw[ind]
@@ -325,7 +327,7 @@ class MulticlassInversionResults(InversionResults):
             res[ind, ...] = res_cn
         res = np.reshape(res, self.lw.shape[:-1] + res.shape[1:])
         return res
-            
+
 class InversionResultsMmap(InversionResults):
 
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None):
@@ -334,18 +336,43 @@ class InversionResultsMmap(InversionResults):
             self.lwmmap = lwmmap
             self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
 
-    def save(self, fnout):
-        from analysis import save_object
+    @property
+    def _dict(self):
         dictout = {
             'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
             'blocksize': self.blocksize}
-        save_object(dictout, fnout)
+        return dictout
 
-    @classmethod
-    def from_file(cls, fn):
+    @staticmethod
+    def _dict_from_file(fn):
         from analysis import load_object
         dictin = load_object(fn)
         if not os.path.exists(dictin['lwmmap'].filename):
             dictin['lwmmap'] = None
-        ir = InversionResultsMmap(**dictin)
-        return ir
+        return dictin        
+    
+    @classmethod
+    def from_file(cls, fn):
+        return cls(**InversionResultsMmap._dict_from_file(fn))
+
+class MulticlassInversionResultsMmap(MulticlassInversionResults):
+
+    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None):
+        MulticlassInversionResults.__init__(
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
+        if lwmmap is not None:
+            self.lwmmap = lwmmap
+            self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+
+    @property
+    def _dict(self):
+        dictout = {
+            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
+            'blocksize': self.blocksize, 'ec': self.ec}
+        return dictout
+    
+    @classmethod
+    def from_file(cls, fn):
+        return cls(**InversionResultsMmap._dict_from_file(fn))
+
+

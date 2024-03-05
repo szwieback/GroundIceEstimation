@@ -32,8 +32,8 @@ params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'org
 multiclass_dist = {0: params_distribution_0, 1: params_distribution}
 
 #ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
-ll, ur = (-148.80430, 69.14980), (-148.79521, 69.15000)
-# ll, ur = (-148.80430, 69.14960), (-148.79521, 69.15000)
+# ll, ur = (-148.80430, 69.14980), (-148.79521, 69.15000)
+ll, ur = (-148.80430, 69.14960), (-148.79521, 69.15000)
 
 
 def happyvalley_forcing(fnforcing, year=2022):
@@ -98,7 +98,7 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
 
-    
+    '''
     predictor = StefanPredictor()
     strats = {sc: StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch) 
@@ -115,9 +115,8 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     ir.save(os.path.join(pathout, 'ir.p'))
     ip.delete_weight_files(pathout)
     
+    '''
     
-    
-    # child class for MulticlassInversionResults with refined results access
     ir = MulticlassInversionResults.from_file(os.path.join(pathout, 'ir.p'))
 
     expecs = [
@@ -132,7 +131,5 @@ if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(year=2022)
     process_happyvalley(year=2023)
-    # prediction multiensemble
-    # adapt inversionprocessor
-    # inversionresults multiensemble and memmap
+
 
