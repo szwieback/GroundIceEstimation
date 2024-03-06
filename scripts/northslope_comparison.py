@@ -4,14 +4,14 @@ Created on Oct 12, 2022
 @author: simon
 '''
 import numpy as np
-import os
+from pathlib import Path
 import datetime
 
 from scripts.happyvalley_analysis import read_results
 from analysis import (read_K, add_atmospheric_K, read_referenced_motion)
 from ioput import save_object, load_object
 
-fngpkg = '/home/simon/Work/gie/processed/Dalton_131_363/2019_unw_offset.gpkg'
+fngpkg = Path('/home/simon/Work/gie/processed/Dalton_131_363/2019_unw_offset.gpkg')
 
 site_labels = {'icecut': 'Ice Cut', 'happyvalley': 'Happy Valley'}
 xy_site = {'icecut': np.array((-148.8317, 69.0414))[:, np.newaxis],
@@ -48,9 +48,9 @@ def adjust_covariance(C_obs, ind=-3):
     return np.linalg.multi_dot((A, C_obs_b, A.T))
 
 def read_InSAR(site, year):
-    path0 = f'/home/simon/Work/gie/processed/Dalton_131_363/{year}'
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    path0 = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/{year}')
+    fnunw = path0 / 'unwrapped.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     dates = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[site][year]]
     doys = [d.timetuple().tm_yday for d in dates]
     K, geospatial_K = read_K(fnK)
@@ -67,10 +67,10 @@ def read_InSAR(site, year):
     return sres
 
 def InSAR_results(site, year, rmethod='hadamard', overwrite=False):
-    pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/{rmethod}'
+    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/{rmethod}')
 
-    fnsite = os.path.join(pathres, 'site.p')
-    if not os.path.exists(fnsite) or overwrite:
+    fnsite = pathres / 'site.p'
+    if not fnsite.exists() or overwrite:
         res = read_results(pathres)
         sres = read_InSAR(site, year)
         s_obs, K = sres['s_obs'], sres['K']
@@ -136,7 +136,7 @@ def plot_core(ax, site, year, method=None, c='#000000'):
     from scripts.pathnames import paths
     from scripts.core_analysis import read_site, bootstrap_percentiles, fns
     site_abbr = {'happyvalley': 'HV', 'icecut': 'IC'}
-    fns_abs = os.path.join(paths['cores'], fns(site_abbr[site], year))
+    fns_abs = paths['cores'] / fns(site_abbr[site], year)
     y_grid_core = np.arange(150) / 100  # hard-coded for now
 
     e_grid = read_site(fns_abs, method=method)
@@ -294,9 +294,9 @@ def plot_comparison_2023(fnout=None, overwrite=False):
 
 def comparison_thaw_depth(site='happyvalley', year=2022, ind=-1):
     from analysis import InversionResults, thaw_depth
-    path_res = f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/hadamard'
+    path_res = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/hadamard')
 
-    ir = InversionResults.from_file(os.path.join(path_res, 'ir.p'))
+    ir = InversionResults.from_file(path_res / 'ir.p')
     _rc_site = ir.geospatial.rowcol(xy_site[site])[:, 0]
     ir.lw = ir.lw[_rc_site[0], _rc_site[1],:][np.newaxis, ...]
     frac_thawed = ir.frac_thawed(ind_scene=ind)
@@ -306,9 +306,9 @@ def comparison_thaw_depth(site='happyvalley', year=2022, ind=-1):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    fnout = os.path.join(paths['figures'], f'northslope_comparison.pdf')
+    fnout = paths['figures'] / f'northslope_comparison.pdf'
     # plot_comparison(fnout=fnout, overwrite=False)
-    fnout = os.path.join(paths['figures'], f'northslope_comparison23.pdf')
+    fnout = paths['figures'] / f'northslope_comparison23.pdf'
     # plot_comparison_2023(fnout=fnout, overwrite=False)
 
     from forcing import parse_dates

@@ -7,7 +7,6 @@ Created on Sep 14, 2022
 import numpy as np
 from scipy.linalg import block_diag
 import warnings
-import os
 from abc import ABC, abstractmethod
 
 from analysis import save_object, load_object, save_geotiff
@@ -84,7 +83,7 @@ def distance_to_ref(
     crs_dist = s_ref.estimate_utm_crs()
     s_ref_proj = s_ref.to_crs(crs_dist)
     x_ref_proj, y_ref_proj = np.array(s_ref_proj.x), np.array(s_ref_proj.y)
-    if fndist is None or overwrite or not os.path.exists(fndist):
+    if fndist is None or overwrite or not fndist.exists():
         print('reprocessing')
         xy_raster = geospatial.xy_raster
         if njobs not in [0, 1, None]:
@@ -296,9 +295,9 @@ def spatial_referencing(
     return unw_cor, K_cor
 
 if __name__ == '__main__':
-    import os
+    from pathlib import Path
     from analysis import (read_K, read_geotiff_geospatial)
-    path0 = f'/home/simon/Work/gie/processed/kivalina/2019'
+    path0 = Path(f'/home/simon/Work/gie/processed/kivalina/2019')
     geom = {'ia': 39.29 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
@@ -306,8 +305,8 @@ if __name__ == '__main__':
     l = 1e4
     wvl = wvl0
 
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    fnunw = path0 / 'unwrapped.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     assert geospatial_unw == geospatial_K
@@ -317,7 +316,7 @@ if __name__ == '__main__':
     var_atmo = np.ones(P) * ((0.03) ** 2)  # in m
     covmodel = RationalQuadraticSepDiagCovMV(l, var_atmo)
 
-    fndist = os.path.join(path0, 'distance.p')
+    fndist = path0 / 'distance.p'
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, wvl=wvl,
         convert_to_length=False, overwrite=False)

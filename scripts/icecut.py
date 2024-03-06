@@ -7,12 +7,10 @@ Created on Oct 4, 2022
 import numpy as np
 import pandas as pd
 import datetime
-import os
+from pathlib import Path
 
-from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
-from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+from analysis import StefanPredictor, PredictionEnsemble
+from simulation import (StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
 
 params_distribution = {
@@ -45,15 +43,15 @@ def icecut_forcing(fnforcing, year=2022):
     return dailytemp, ind_scenes
 
 def process_icecut(year=2019, rmethod='hadamard'):
-    path0 = f'/10TBstorage/Work/stacks/Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
-    fnforcing = '/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv'
-    pathout = f'/10TBstorage/Work/gie/processed/icecut/{year}/{rmethod}'
+    path0 = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded')
+    fnforcing = Path('/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv')
+    pathout = Path(f'/10TBstorage/Work/gie/processed/icecut/{year}/{rmethod}')
 
     geom = {'ia': 43.54 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
-    
+
     N = 10000
     Nbatch = 1
 
@@ -61,8 +59,8 @@ def process_icecut(year=2019, rmethod='hadamard'):
         read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
         InversionResults)
 
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    fnunw = path0 / 'unwrapped.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric_K(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
@@ -82,9 +80,9 @@ def process_icecut(year=2019, rmethod='hadamard'):
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
-    ir.save(os.path.join(pathout, 'ir.p'))
+    ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
-    ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
+    ir = InversionResults.from_file(pathout / 'ir.p')
 
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),

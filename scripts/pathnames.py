@@ -4,23 +4,23 @@ Created on Nov 23, 2019
 @author: simon
 '''
 
-import os
+from pathlib import Path
 import socket
 
 hostname = socket.gethostname()
 
 if hostname == 'Vienna':
-    path0 = '/10TBstorage/Work/gie/'
+    path0 = Path('/10TBstorage/Work/gie/')
 elif hostname == 'homer':
-    path0 = '/home2/Work/gie'
+    path0 = Path('/home2/Work/gie')
 else:
-    path0 = os.path.join(os.path.expanduser('~'), 'Work/gie/')
+    path0 = Path.home() / 'Work/gie/'
 
 
-paths = {'simulation': os.path.join(path0, 'simulation'),
-         'stacks': os.path.join(path0, 'stacks'),
-         'processed': os.path.join(path0, 'processed'),
-         'forcing': os.path.join(path0, 'forcing'),
-         'figures': os.path.join(path0, 'figures'),
-         'cores': os.path.join(path0, 'cores'),
-         'ancillary': os.path.join(path0, 'ancillary')}
+paths = {'simulation': path0 / 'simulation',
+         'stacks': path0 / 'stacks',
+         'processed': path0 /  'processed',
+         'forcing': path0 /  'forcing',
+         'figures': path0 /  'figures',
+         'cores': path0 /  'cores',
+         'ancillary': path0 /  'ancillary'}

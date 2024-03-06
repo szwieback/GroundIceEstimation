@@ -3,16 +3,17 @@ Created on Oct 5, 2022
 
 @author: simon
 '''
+
 import numpy as np
-import os
-from analysis import (
-    Geospatial, load_object, save_object, InversionResults, read_K)
+from pathlib import Path
+
+from analysis import load_object, save_object, InversionResults, read_K
 from scripts.kivalina_analysis import resample_dem
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
 
 def path_results(year):
-    pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/hadamard'
+    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/hadamard')
     return pathres
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
@@ -29,32 +30,31 @@ def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelengt
     return invalid
 
 def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True):
-    fngeospatial = os.path.join(pathres, 'geospatial.p')
-    fnygrid = os.path.join(pathres, 'ygrid.p')
-    if not os.path.exists(fngeospatial) or not os.path.exists(fnygrid) or overwrite:
-        ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
+    fngeospatial = pathres / 'geospatial.p'
+    fnygrid = pathres / 'ygrid.p'
+    if not fngeospatial.exists() or not fnygrid.exists() or overwrite:
+        ir = InversionResults.from_file(pathres / 'ir.p')
         geospatial = ir.geospatial
         ygrid = ir.ygrid
         save_object(geospatial, fngeospatial)
         save_object(ygrid, fnygrid)
     else:
-        geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
+        geospatial = load_object(pathres / 'geospatial.p')
         ygrid = load_object(fnygrid)
     res = {'ygrid': ygrid, 'geospatial': geospatial}
-    res['e_mean'] = np.load(os.path.join(pathres, 'e_mean.npy'))
-    res['e_quantile'] = np.load(os.path.join(pathres, 'e_quantile.npy'))
-    res['frac_thawed'] = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+    res['e_mean'] = np.load(pathres / 'e_mean.npy')
+    res['e_quantile'] = np.load(pathres / 'e_quantile.npy')
+    res['frac_thawed'] = np.load(pathres / 'frac_thawed_None.npy')
 
     if fnimraw is not None:
-        fnimres = os.path.join(pathres, 'optical.tif')
+        fnimres = pathres / 'optical.tif'
         res['optical'] = resample_dem(
             geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
     if fndemraw is not None:
-        fndemres = os.path.join(pathres, 'dem.tif')
+        fndemres = pathres / 'dem.tif'
         res['dem'] = resample_dem(
             geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     return res
-
 
 def happyvalley_map_profiles(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt
@@ -63,9 +63,10 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         prepare_figure, cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
         add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
     years = (2022, 2019)
-    fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211417_74_249d/analytic_sr_udm2/20220620_211417_74_249d_3B_AnalyticMS_SR.tif'
-    fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    fnimraw = Path('/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211417_74_249d/'
+                   'analytic_sr_udm2/20220620_211417_74_249d_3B_AnalyticMS_SR.tif')
+    fndemraw = Path('/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif')
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -103,7 +104,7 @@ def happyvalley_map_profiles(fnout=None, overwrite=True):
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -183,7 +184,7 @@ def happyvalley_map_subsidence(fnout=None, overwrite=True):
         prepare_figure, cmap_e, cmap_s, _get_index, add_scalebar,)
     site = 'happyvalley'
     years = (2022, 2019)
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -214,7 +215,7 @@ def happyvalley_map_subsidence(fnout=None, overwrite=True):
         'e) $s$ Aug 01 -- Sep 06, 2019', 'f) $s$ Jun 02 -- Sep 06, 2019', ]
 
     for jyear, year in enumerate(years):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -276,9 +277,10 @@ def happyvalley_map_profiles_2023(fnout=None, overwrite=True):
         prepare_figure, cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
         add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
     years = (2023, 2022)
-    fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211417_74_249d/analytic_sr_udm2/20220620_211417_74_249d_3B_AnalyticMS_SR.tif'
-    fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    fnimraw = Path('/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211417_74_249d/'
+                   'analytic_sr_udm2/20220620_211417_74_249d_3B_AnalyticMS_SR.tif')
+    fndemraw = Path('/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif')
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -316,7 +318,7 @@ def happyvalley_map_profiles_2023(fnout=None, overwrite=True):
         'g) false-color image', 'h) 2023: transect T1', 'i) 2022: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -392,10 +394,10 @@ def happyvalley_map_profiles_2023(fnout=None, overwrite=True):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    fnplot = os.path.join(paths['figures'], 'happyvalley.pdf')
+    fnplot = paths['figures'] / 'happyvalley.pdf'
     # happyvalley_map_profiles(fnout=fnplot, overwrite=False)
-    fnplot = os.path.join(paths['figures'], 'happyvalley23.pdf')
+    fnplot = paths['figures'] / 'happyvalley23.pdf'
     # happyvalley_map_profiles_2023(fnout=fnplot, overwrite=False)
-    fnplot = os.path.join(paths['figures'], 'happyvalley_subs.pdf')
+    fnplot = paths['figures'] / 'happyvalley_subs.pdf'
     happyvalley_map_subsidence(fnplot, overwrite=False)
 

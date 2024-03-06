@@ -3,7 +3,7 @@ Created on Jul 24, 2023
 
 @author: simon
 '''
-import os
+from pathlib import Path
 import numpy as np
 
 from analysis import load_object
@@ -30,10 +30,10 @@ def sample_points(shape, N, max_distance=4, rng=None):
     
 
 if __name__ == '__main__':
-    fncovariates = '/home/simon/Work/gie/ancillary/GEE/covariates.tif'
-    fnout = '/home/simon/Work/gie/ancillary/GEE/sample.csv'
+    fncovariates = Path('/home/simon/Work/gie/ancillary/GEE/covariates.tif')
+    fnout = Path'/home/simon/Work/gie/ancillary/GEE/sample.csv')
     
-    ft = load_object(os.path.join(path0, '2019r', 'forcing_timing.p'))
+    ft = load_object(path0 / '2019r' / 'forcing_timing.p')
     indranges_names = ft['indranges_names']
     config = ('2019r', 'TDD900_lastday')
     ebar = _read_config(config, indranges_names, geospatial_proc, path0)['mean']

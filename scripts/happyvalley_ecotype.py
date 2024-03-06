@@ -6,7 +6,7 @@ Created on Oct 6, 2022
 import numpy as np
 import pandas as pd
 import datetime
-import os
+from pathlib import Path
 
 from analysis import StefanPredictor, PredictionEnsemble, enforce_directory, MulticlassPredictionEnsemble
 from simulation import (
@@ -54,17 +54,17 @@ def happyvalley_forcing(fnforcing, year=2022):
     return dailytemp, ind_scenes
 
 def process_happyvalley(year=2019, rmethod='hadamard'):
-    # path0 = f'/10TBstorage/Work/stacks/Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
-    # fnforcing = '/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv'
-    # pathout = f'/10TBstorage/Work/gie/processed/happyvalley/{year}/{rmethod}'
+    # path0 = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded')
+    # fnforcing = Path('/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv')
+    # pathout = Path(f'/10TBstorage/Work/gie/processed/happyvalley/{year}/{rmethod}')
     
-    path0 = f'/home/simon/Work/gie/processed/Dalton_131_363/{year}/'
-    fnforcing = '/home/simon/Work/gie/forcing/sagwon/sagwon.csv'
-    pathout = '/home/simon/Work/gie/processed/Dalton_131_363/hv_ecotype/'
-    fnlc = '/home/simon/Work/gie/ancillary/TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
+    path0 = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/{year}/')
+    fnforcing = Path('/home/simon/Work/gie/forcing/sagwon/sagwon.csv')
+    pathout = Path('/home/simon/Work/gie/processed/Dalton_131_363/hv_ecotype/')
+    fnlc = Path('/home/simon/Work/gie/ancillary/TNC/ecosystems_northern_alaska_jorgenson_2010.tif')
 
 
-    fns_unw_offset = {2019: [(7, os.path.join('/10TBstorage/Work/stacks/Dalton_131_363/2019_unw_offset.gpkg'))],
+    fns_unw_offset = {2019: [(7, Path('/10TBstorage/Work/stacks/Dalton_131_363/2019_unw_offset.gpkg'))],
                       2022: [],
                       2023: []}[year]
 
@@ -80,8 +80,8 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
         InversionResults, MulticlassInversionResults)
     from scripts.ecotypes import reclassify
     
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    fnunw = path0 / 'unwrapped.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     
     K, geospatial_K = read_K(fnK)
     s_obs, geospatial = read_referenced_motion(
@@ -93,12 +93,12 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     K = add_atmospheric_K(K, var_atmo)
     assert geospatial == geospatial_K
 
-    fnec = os.path.join(pathout, 'ec.tif')
+    fnec = pathout / 'ec.tif'
     ec = reclassify(fnlc, eclasses, geospatial, fnout=fnec)
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
 
-    '''
+    
     predictor = StefanPredictor()
     strats = {sc: StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch) 
@@ -112,12 +112,10 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
-    ir.save(os.path.join(pathout, 'ir.p'))
+    ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
     
-    '''
-    
-    ir = MulticlassInversionResults.from_file(os.path.join(pathout, 'ir.p'))
+    ir = MulticlassInversionResults.from_file(pathout / 'ir.p')
 
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),

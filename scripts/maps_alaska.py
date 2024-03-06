@@ -4,6 +4,7 @@ Created on Oct 27, 2022
 @author: simon
 '''
 # PYPROJ_GLOBAL_CONTEXT=ON
+from pathlib import Path
 import os
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -41,7 +42,7 @@ def map_alaska(ax):
 def load_landsat_ard(path0, scene, bands):
     def _fn(band):
         fn = f'{scene}_SR_B{band}.TIF'
-        return os.path.join(path0, scene, fn)
+        return path0 / scene / fn)
     im = np.concatenate([read_geotiff(_fn(band)) for band in bands])
     geospatial = Geospatial.from_file(_fn(bands[0]))
     return im, geospatial
@@ -51,7 +52,7 @@ def map_dalton(fnout=None):
         nrows=1, ncols=1, figsize=(2.45, 3.60), figsizeunit='in', left=0.01, right=0.99, 
         top=0.995, bottom=0.005)
     from scripts.pathnames import paths
-    path0 = os.path.join(paths['ancillary'], 'Landsat')
+    path0 = paths['ancillary'] / 'Landsat'
     scene = 'LC08_AK_016002_20200703_20210504_02'
     im, geospatial = load_landsat_ard(path0, scene, [4, 3, 2])
 
@@ -109,7 +110,7 @@ def map_dalton(fnout=None):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    fnout = os.path.join(paths['figures'], 'akmap.pdf')
+    fnout = paths['figures'] / 'akmap.pdf'
     map_dalton(fnout=fnout)
 
     # map_alaska()

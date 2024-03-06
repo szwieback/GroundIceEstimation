@@ -3,8 +3,9 @@ Created on Sep 19, 2022
 
 @author: simon
 '''
-import os
+from pathlib import Path
 import numpy as np
+
 from analysis import Geospatial, save_geotiff, save_object, load_object, InversionResults
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
@@ -37,7 +38,7 @@ def read_core_data(fngpkg, geospatial, layer=None):
 
 def resample_dem(geospatial, fnraw, fnresampled, upscale=None, overwrite=False):
     from analysis import read_geotiff
-    if os.path.exists(fnresampled) and not overwrite:
+    if fnresampled.exists() and not overwrite:
         return read_geotiff(fnresampled)
     else:
         dem, _gs = geospatial.warp_from_file(fnraw, upscale=upscale)
@@ -52,24 +53,25 @@ def plot_kivalina(fnout=None, overwrite=False):
         contrast, add_arrow_line, plot_profile, add_scalebar)
     import matplotlib.pyplot as plt
 
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/'
-    fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
-    fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
-    fndemres = os.path.join(pathres, 'DEM.tif')
-    fnimraw = '/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif'
-    fnimres = os.path.join(pathres, 'optical.tif')
-    fngpkg = '/home/simon/Work/Kivalina/geology/cores2005.gpkg'
+    pathres = Path('/home/simon/Work/gie/processed/kivalina/2019/hadamard/')
+    fnK = Path('/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif')
+    fndemraw = Path('/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif')
+    fndemres = pathres / 'DEM.tif'
+    fnimraw = Path('/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/'
+                   'analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif')
+    fnimres = pathres / 'optical.tif'
+    fngpkg = Path('/home/simon/Work/Kivalina/geology/cores2005.gpkg')
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3
 
-    ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
+    ir = InversionResults.from_file(pathres / 'ir.p')
     geospatial = ir.geospatial
     ygrid = ir.ygrid
-    save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    save_object(ygrid, os.path.join(pathres, 'ygrid.p'))
+    save_object(geospatial, pathres / 'geospatial.p')
+    save_object(ygrid, pathres / 'ygrid.p')
 
-    # geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    # ygrid = np.arange(0, 1.5, step=2e-3)
+    # geospatial = load_object(pathres / 'geospatial.p')
+    # ygrid = load_object(pathres / 'ygrid.p')
 
     K, geospatial_K = read_K(fnK)
     invalid = invalid_mask(
@@ -81,8 +83,8 @@ def plot_kivalina(fnout=None, overwrite=False):
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
     dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
-    frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+    e_mean = np.load(pathres / 'e_mean.npy')
+    frac_thawed = np.load(pathres / 'frac_thawed_None.npy')
 
     cores = read_core_data(fngpkg, geospatial)
 
@@ -215,18 +217,19 @@ def plot_kivalina_ICOP(fnout=None, overwrite=False):
         contrast, add_arrow_line, plot_profile, add_scalebar)
     import matplotlib.pyplot as plt
 
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/'
-    fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
-    fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
-    fndemres = os.path.join(pathres, 'DEM.tif')
-    fnimraw = '/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif'
-    fnimres = os.path.join(pathres, 'optical.tif')
-    fngpkg = '/home/simon/Work/Kivalina/geology/cores2005.gpkg'
+    pathres = Path('/home/simon/Work/gie/processed/kivalina/2019/')
+    fnK = Path('/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif')
+    fndemraw = Path('/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif')
+    fndemres = pathres / 'DEM.tif'
+    fnimraw = Path('/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/'
+                   'analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif')
+    fnimres = pathres / 'optical.tif'
+    fngpkg = Path('/home/simon/Work/Kivalina/geology/cores2005.gpkg')
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3
 
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
+    geospatial = load_object(pathres / 'geospatial.p')
+    ygrid = load_object(pathres / 'ygrid.p')
 
     K, geospatial_K = read_K(fnK)
     invalid = invalid_mask(
@@ -237,8 +240,8 @@ def plot_kivalina_ICOP(fnout=None, overwrite=False):
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
     dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
-    frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+    e_mean = np.load(pathres / 'e_mean.npy')
+    frac_thawed = np.load(pathres / 'frac_thawed_None.npy')
 
     cores = read_core_data(fngpkg, geospatial)
 
@@ -369,9 +372,9 @@ def plot_kivalina_subsidence(fnout=None, overwrite=False):
     from scripts.plotting import (
         prepare_figure, cmap_e, cmap_s, _get_index, add_scalebar)
     site = 'kivalina'
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/'
-    fnK = os.path.join(pathres, 'K_vec.geo.tif')
-    fnunw = os.path.join(pathres, 'unwrapped.geo.tif')
+    pathres = Path('/home/simon/Work/gie/processed/kivalina/2019/')
+    fnK = pathres / 'K_vec.geo.tif'
+    fnunw = pathres / 'unwrapped.geo.tif'
 
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3    
@@ -387,14 +390,14 @@ def plot_kivalina_subsidence(fnout=None, overwrite=False):
     yticks_im = (31,)
     ys = (0.55, 0.65)
 
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
+    geospatial = load_object(pathres / 'geospatial.p')
+    ygrid = load_object(pathres / 'ygrid.p')
     K, geospatial_K = read_K(fnK)
     invalid = invalid_mask(
         K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
     
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
+    e_mean = np.load(pathres / 'e_mean.npy')
 
     s_obs, geospatial_s = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength,)
     
@@ -463,22 +466,21 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
         initialize_matplotlib, cmap_e, colslist, _get_index, ProfileInterpolator,
         contrast, add_arrow_line, plot_profile, add_scalebar)
     import matplotlib.pyplot as plt
-    pathres = '/home/simon/Work/gie/processed/kivalina/2019/hadamard/'
-    fnK = '/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif'
-    fndemraw = '/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif'
-    fndemres = os.path.join(pathres, 'DEM.tif')
-    fnimraw = '/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif'
-    fnimres = os.path.join(pathres, 'optical.tif')
-    fngpkg = '/home/simon/Work/Kivalina/geology/cores2005.gpkg'
+    pathres = Path('/home/simon/Work/gie/processed/kivalina/2019/hadamard/')
+    fnK = Path('/home/simon/Work/gie/processed/kivalina/2019/K_vec.geo.tif')
+    fndemraw = Path('/home/simon/Work/Kivalina/optical/DEM/ArcticDEM/53_19_2_1_2m_v3.0_reg_dem.tif')
+    fndemres = pathres / 'DEM.tif'
+    fnimraw = Path('/home/simon/Work/Kivalina/optical/Planet/Kivalina2019/20190625_220816_0e26/'
+                   'analytic_sr_udm2/20190625_220816_0e26_3B_AnalyticMS_SR.tif')
+    fnimres = pathres / 'optical.tif'
+    fngpkg = Path('/home/simon/Work/Kivalina/geology/cores2005.gpkg')
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3
 
-    ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
+    ir = InversionResults.from_file(pathres / 'ir.p')
     geospatial = ir.geospatial
     ygrid = ir.ygrid
-    save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    # geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    # ygrid = np.arange(0, 1.5, step=2e-3)
+
 
     K, geospatial_K = read_K(fnK)
     invalid = invalid_mask(
@@ -488,8 +490,8 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
     dem = resample_dem(geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
     optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
-    frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
+    e_mean = np.load(pathres / 'e_mean.npy')
+    frac_thawed = np.load(pathres / 'frac_thawed_None.npy')
 
     cores = read_core_data(fngpkg, geospatial)
 
@@ -613,28 +615,11 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    fnplot = os.path.join(paths['figures'], 'kivalina.pdf')
+    fnplot = paths['figures'] / 'kivalina.pdf'
     # plot_kivalina(fnplot, overwrite=False)
-    # plot_kivalina_slide(os.path.join(paths['figures'], 'kivalina_slide.pdf'), overwrite=False)
-    plot_kivalina_ICOP(os.path.join(paths['figures'], 'kivalina_ICOP.pdf'), overwrite=False)
-    # plot_kivalina_subsidence(fnout=os.path.join(paths['figures'], 'kivalina_subs.pdf'))
-    # e_mean_ = np.mean(e_mean[..., _get_index(ygrid, 0.40):_get_index(ygrid, 0.50)], axis=-1)  # 0.5
-    # e_mean_[invalid] = nodata
-    # print(np.nanpercentile(e_mean_, (10, 25, 50, 75, 90)))
-
-    # profile_frac = profile_frac[:,:_get_index(ygrid, ymax)]
-
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots()
-    # ax.imshow(profile.T, vmin=0.0, vmax=vmax, cmap=cmap, alpha=1)  # profile_frac.T)
-    # ax.set_yticks(_get_index(ygrid, yticks))
-    # ax.set_yticklabels(yticks)
-    # ax.set_xticks(_get_index(pi.distance_steps, xticks))
-    # ax.set_xticklabels(xticks)
-    # ax.set_xlabel('Distance [m]')
-    # ax.set_ylabel('Depth [m]')
-    # ax.set_ylims()
-    # # plt.imshow(e_mean_)
-    # plt.show()
-    # save_geotiff(e_mean_[np.newaxis, ...], geospatial, os.path.join(pathres, 'e_mean.tif'), nodata=nodata)
+    # plot_kivalina_slide(paths['figures'] / 'kivalina_slide.pdf', overwrite=False)
+    plot_kivalina_ICOP(paths['figures'] / 'kivalina_ICOP.pdf', overwrite=False)
+    # plot_kivalina_subsidence(fnout=paths['figures'] / 'kivalina_subs.pdf')
+    
+    
 

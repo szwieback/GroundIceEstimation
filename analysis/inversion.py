@@ -7,7 +7,7 @@ Created on Sep 14, 2022
 from analysis import enforce_directory, MulticlassPredictionEnsemble
 
 import numpy as np
-import os
+from pathlib import Path
 from collections import namedtuple
 
 Mmap = namedtuple('Mmap', ('filename', 'dtype', 'shape'))
@@ -60,11 +60,11 @@ class InversionProcessor():
             return None
         else:
             _fn = ftype if number is None else f'{ftype}_{number}'
-            return os.path.join(path0, _fn + f'.{ext}')
+            return path0 / f'{_fn}.{ext}'
 
     def _overwrite(self, fn, overwrite=False):
         try:
-            ow = not os.path.exists(fn) or overwrite
+            ow = not fn.exists() or overwrite
         except:
             ow = True
         return ow
@@ -127,9 +127,9 @@ class InversionProcessor():
     def delete_weight_files(self, pathout):
         if pathout is not None:
             import glob
-            for f in glob.glob(self._filename(pathout, 'lw', '*')):
+            for f in glob.glob(str(self._filename(pathout, 'lw', '*'))):
                 try:
-                    os.remove(f)
+                    Path(f).unlink()
                 except:
                     pass
 
@@ -276,7 +276,7 @@ class InversionResults():
             **kwargs):
         res = self.expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
         if fn is None: fn = f'{param}_{etype}.npy'
-        fnout = os.path.join(pathout, fn)
+        fnout = pathout / fn
         np.save(fnout, res)
     
     @property
@@ -306,7 +306,7 @@ class MulticlassInversionResults(InversionResults):
         self.ec = ec
 
     @property
-    def _to_dict(self):
+    def _dict(self):
         dictout = {
             'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
@@ -347,7 +347,7 @@ class InversionResultsMmap(InversionResults):
     def _dict_from_file(fn):
         from analysis import load_object
         dictin = load_object(fn)
-        if not os.path.exists(dictin['lwmmap'].filename):
+        if not Path(dictin['lwmmap'].filename).exists:
             dictin['lwmmap'] = None
         return dictin        
     

@@ -4,7 +4,8 @@ Created on Jun 8, 2023
 @author: simon
 '''
 import numpy as np
-import os
+from pathlib import Path
+
 from analysis import (
     read_K, read_geotiff_geospatial, RationalQuadraticSepDiagCovMV, extract_reference, distance_to_ref,
     add_nugget, Geospatial, save_object)
@@ -43,17 +44,17 @@ def references(year=2019):
     return refs
 
 def prepare_references(path0, refs, reftype='regular'):
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
+    fnunw = path0 / 'unwrapped.geo.tif'
     geospatial = Geospatial.from_file(fnunw)
     refs_latlon = {_reftype: refs[_reftype][::-1, ...].T for _reftype in refs}
-    save_object(refs_latlon, os.path.join(path0, 'references_latlon.p'))
+    save_object(refs_latlon, path0 / 'references_latlon.p')
     np.savetxt(
-        os.path.join(path0, 'references_latlon.csv'), refs_latlon['all'].T, delimiter=',', fmt='%10.5f')
+        path0 / 'references_latlon.csv', refs_latlon['all'].T, delimiter=',', fmt='%10.5f')
     return refs_latlon[reftype]
 
 def evaluate_calibration(path0, caldict, overwrite=False):
-    fnunw = os.path.join(path0, 'unwrapped_corr.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    fnunw = path0 / 'unwrapped_corr.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     assert geospatial_unw == geospatial_K
@@ -73,7 +74,7 @@ def evaluate_calibration(path0, caldict, overwrite=False):
     refs = references()
     xy_ref = prepare_references(path0, refs, reftype='all')
 
-    fndist = os.path.join(path0, 'distance_cal.p')
+    fndist = path0 / 'distance_cal.p'
     dist = distance_to_ref(geospatial_unw, xy_ref, fndist=fndist, overwrite=overwrite)
     unw_ref, K_ref_comb, dist_matrix = extract_reference(K, unw, dist, geospatial_unw, xy_ref, covmodel)
 
@@ -132,14 +133,15 @@ def plot_calibration(dist_c, svar_pred_c, svar_obs_c, fnout=None):
         loc='upper left', bbox_to_anchor=(-0.16, 1.06), frameon=False, markerscale=1.2, borderpad=0.2,
         labelspacing=0.2, handletextpad=0.7, handlelength=1.0)
     if fnout is None:
+        import matplotlib.pyplot as plt
         plt.show()
     else:
         fig.savefig(fnout)
 
 if __name__ == '__main__':
-    path0 = '/home/simon/Work/gie/'
-    fnout = os.path.join(path0, 'figures', 'kivalina_calibration.pdf')
-    path1 = os.path.join(path0, 'processed', 'kivalina', '2019_index')
+    path0 = Path('/home/simon/Work/gie/')
+    fnout = path0 / 'figures' /'kivalina_calibration.pdf'
+    path1 = path0 / 'processed' / 'kivalina', '2019_index'
     dist_c, svar_pred_c, svar_obs_c = evaluate_calibration(path1, caldict, overwrite=False)
     plot_calibration(dist_c, svar_pred_c, svar_obs_c, fnout=fnout)
 

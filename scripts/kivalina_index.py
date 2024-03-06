@@ -5,7 +5,7 @@ Created on Jun 16, 2023
 '''
 import pandas as pd
 import numpy as np
-import os
+from pathlib import Path
 import datetime
 from collections import namedtuple
 
@@ -69,11 +69,11 @@ def process_index_kivalina(
     dict_forcing = {
         'dailytemp': dailytemp, 'ind_scenes': ind_scenes, 'indranges_names': indranges_names, 
         'indranges': indranges}
-    save_object(dict_forcing, os.path.join(pathout, 'forcing_timing.p'))
+    save_object(dict_forcing, pathout / 'forcing_timing.p')
     
     _fununw = 'unwrapped_corr.geo.tif' if year in (2018, 2019) else 'unwrapped.geo.tif'
-    fnunw = os.path.join(pathin, _fununw)
-    fnK = os.path.join(pathin, 'K_vec.geo.tif')
+    fnunw = pathin / _fununw
+    fnK = pathin / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     assert geospatial_unw == geospatial_K    
@@ -89,7 +89,7 @@ def process_index_kivalina(
     # apply nugget
     K = add_nugget(K, caldict['nugget_speckle'])
     
-    fndist = os.path.join(pathout, 'distance_cal.p')
+    fndist = pathout / 'distance_cal.p'
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
@@ -111,10 +111,10 @@ def process_index_kivalina(
     ir = ip.results(
         ind_scenes, data['s_obs'], _K, pathout=pathout, n_jobs=-1, overwrite=overwrite, memory=False)
     
-    ir.save(os.path.join(pathout, 'ir.p'))
+    ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
     
-    ir = InversionResultsMmap.from_file(os.path.join(pathout, 'ir.p'))
+    ir = InversionResultsMmap.from_file(pathout / 'ir.p')
     expecs = [
         ('yf', 'mean'),  ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
@@ -140,18 +140,18 @@ if __name__ == '__main__':
     N, Nbatch = 10000, 1    
     
     path0 = '/10TBstorage/Work/gie'
-    folder_forcing = os.path.join(path0, 'forcing', 'kivalina')
+    folder_forcing = path0 / 'forcing' / 'kivalina'
     pathin0 = '/10TBstorage/Work/stacks/Kivalina/gie/'
-    pathout0 = os.path.join(path0, 'processed', 'kivalina', 'index')
+    pathout0 = path0 / 'processed' / 'kivalina' / 'index'
     
     fnref= 'references_latlon.p'
     
     overwrite = True
     # loop over scenarios
     for scenario in scenarios:
-        pathout = os.path.join(pathout0, scenario.name)
-        pathin = os.path.join(pathin0, str(scenario.year), 'proc', 'hadamard', 'geocoded')
-        fnref_full = os.path.join(pathin, fnref)
+        pathout = pathout0 / scenario.name
+        pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
+        fnref_full = pathin / fnref
         xy_ref = load_object(fnref_full)['regular']
         if scenario.reference is not None:
             xy_ref = xy_ref[:, scenario.reference]

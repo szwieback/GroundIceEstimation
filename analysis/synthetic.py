@@ -4,7 +4,7 @@ Created on Aug 11, 2021
 @author: simon
 '''
 import numpy as np
-import os
+from pathlib import Path
 
 from analysis import save_object, load_object
 
@@ -74,7 +74,7 @@ class InversionSimulator():
 
     def logweights(self, replicates=10, pathout=None, n_jobs=-1):
         if pathout is None:
-            pathout = os.getcwd()
+            pathout = Path.cwd()
             import warnings
             warnings.warn(f'Storing data in {pathout}')
         pred_scenes = self.predictions_scenes
@@ -100,7 +100,7 @@ class InversionSimulator():
         else:
             from itertools import count
             for r in count(0):
-                if os.path.exists(self.filename_sim(pathout, r)):
+                if self.filename_sim(pathout, r).exists():
                     yield r
                 else:
                     break
@@ -130,10 +130,10 @@ class InversionSimulator():
         return p_mean
 
     def filename_sim(self, pathout, r):
-        return os.path.join(pathout, f'sim_{r}.npy')
+        return pathout / f'sim_{r}.npy'
 
     def filename_simobs(self, pathout, r):
-        return os.path.join(pathout, f'simobs_{r}.npy')
+        return pathout / f'simobs_{r}.npy'
 
     def filename_metrics(self, pathout, r, suffix=None):
         if suffix is not None:
@@ -141,7 +141,7 @@ class InversionSimulator():
         else:
             suffix_ = ''
         rstr = '' if r is None else f'_{r}'
-        return os.path.join(pathout, f'metrics{suffix_}{rstr}.p')
+        return pathout / f'metrics{suffix_}{rstr}.p'
 
     def results(self, pathout, prior=False, replicates=None):
         lw_list = []
@@ -244,7 +244,7 @@ class InversionSimulator():
         if delete_temp:
             for r in self._replicate_generator(pathout, replicates=None):
                 try:
-                    os.remove(self.filename_metrics(pathout, r, suffix=suffix))
+                    self.filename_metrics(pathout, r, suffix=suffix).unlink()
                 except:
                     pass
 

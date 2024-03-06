@@ -3,7 +3,7 @@ Created on Jul 25, 2022
 
 @author: simon
 '''
-import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import copy
@@ -15,8 +15,8 @@ from simulation import (StefanStratigraphyPrescribedConstantE)
 def toolik_sensitivity(fnout):
     from forcing import read_toolik_forcing, parse_dates
 
-    fnforcing = os.path.join(paths['forcing'], 'toolik2019', '1-hour_data.csv')
-    pathout = os.path.join(paths['simulation'], 'sensitivity')
+    fnforcing = paths['forcing'] / 'toolik2019' / '1-hour_data.csv'
+    pathout = paths['simulation'] / 'sensitivity'
 
     df = read_toolik_forcing(fnforcing)
     d0, d1 = '2019-05-20', '2019-09-15'
@@ -34,9 +34,9 @@ def toolik_sensitivity(fnout):
 def sensitivity_scenario(fnout):
     from scripts.synthetic_simulation import sagwon_covariance, sagwon_forcing
     from scripts.kivalina import kivalina_forcing
-    fnforcing = os.path.join(paths['forcing'], 'sagwon', 'sagwon.csv')
+    fnforcing = paths['forcing'] / 'sagwon' / 'sagwon.csv'
     dailytemp, ind_scenes = sagwon_forcing(fnforcing)
-    # dailytemp, ind_scenes = kivalina_forcing(os.path.join(paths['forcing'], 'kivalina'))
+    # dailytemp, ind_scenes = kivalina_forcing(paths['forcing'] / 'kivalina')
     d0_ = dailytemp.index[0]
     
     geom = {'ia': 40 * np.pi / 180}
@@ -138,5 +138,5 @@ def plot_sensitivity(e_sim, results, d0_, meta, fnout=None):
         plt.show()
 
 if __name__ == '__main__':
-    sensitivity_scenario(os.path.join(paths['figures'], 'sensitivity.pdf'))
+    sensitivity_scenario(paths['figures'] / 'sensitivity.pdf')
 

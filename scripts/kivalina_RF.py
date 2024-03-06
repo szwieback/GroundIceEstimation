@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 import joblib
 
-path0 = '/home/simon/Work/gie/ancillary/GEE/'
+path0 = Path('/home/simon/Work/gie/ancillary/GEE/')
 y_variable = 'ebar'
 
-df = pd.read_csv(os.path.join(path0, 'sample.csv'), index_col=0)
+df = pd.read_csv(path0 / 'sample.csv', index_col=0)
 df.dropna(subset=[y_variable], inplace=True)
 
 def xy_split(df, y_variable=y_variable, train_test=True, test_size=0.1, random_state=9999):
@@ -138,13 +138,7 @@ def predict_image(fnim, rfr, fnout):
                     dst.write(y[np.newaxis, np.newaxis, ...], window=window)
 
 if __name__ == '__main__':
-    fnrf = os.path.join(path0, 'rfr.joblib')
-    fnimp = os.path.join(path0, 'importance.joblib')
+    fnrf = path0 / 'rfr.joblib'
+    fnimp = path0 / 'importance.joblib'
 
     run_RF(df, search=True, fnout=None)
-    # variable_importance(df, fnrf, fnimp) # compute default and permutation importance
-    #
-    # fnim = os.path.join(path0, 'covariates.tif')
-    # fnout = os.path.join(path0, 'e_pred.tif')
-    # rfr = joblib.load(fnrf)
-    # predict_image(fnim, rfr, fnout)

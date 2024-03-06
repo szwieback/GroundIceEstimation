@@ -3,7 +3,7 @@ Created on Sep 20, 2021
 
 @author: simon
 '''
-import os
+from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -111,7 +111,7 @@ def plot_examples(show_quantile=False):
     import datetime
     from string import ascii_lowercase
     simname = 'spline_plot_sagwon'
-    pathsim = os.path.join(paths['simulation'], simname)
+    pathsim = paths['simulation'] / simname
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     # instances = (Instance(0, 54), Instance(1, 52), Instance(0, 95))
     # labels = ('near-surface ice', 'ice poor', 'deep ice')
@@ -131,7 +131,7 @@ def plot_examples(show_quantile=False):
         ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.00, 0.72),
         top=0.94, left=0.125, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.31)
-    invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
+    invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
     for jinstance, instance in enumerate(instances):
         axs[0, jinstance].text(
             0.500, 1.040, labels[jinstance], ha='center', va='baseline',
@@ -150,7 +150,7 @@ def plot_examples(show_quantile=False):
         borderpad=0.00, handlelength=0.8, borderaxespad=0.3, handletextpad=0.5,
         labelspacing=0.0, bbox_to_anchor=(0.05, 0.02, 0.5, 0.2))
 
-    plt.savefig(os.path.join(paths['figures'], 'synthetic_examples_sagwon.pdf'))
+    plt.savefig(paths['figures'] / 'synthetic_examples_sagwon.pdf')
 
 def plot_examples_exploratory(show_quantile=False):
     from collections import namedtuple
@@ -158,7 +158,7 @@ def plot_examples_exploratory(show_quantile=False):
     import matplotlib.lines as mlines
     import datetime
     simname = 'spline_plot_sagwon'
-    pathsim = os.path.join(paths['simulation'], simname)
+    pathsim = paths['simulation'] / simname
     Instance = namedtuple('instance', ['replicate', 'jsim'])
     k = 90
     # instances = (Instance(0, k), Instance(0, k+1) , Instance(0, k+2),
@@ -179,7 +179,7 @@ def plot_examples_exploratory(show_quantile=False):
         top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.35)
     for jinstance, instance in enumerate(instances):
-        invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
+        invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,
@@ -216,9 +216,8 @@ def plot_metrics(ymax=0.8, suffix=''):
     axs[2].axvline(80, lw=0.5, c='#eeeeee')
     for sim in simnames:
         simname = sim + suffix
-        metrics = load_object(os.path.join(paths['simulation'], simname, 'metrics_e.p'))
-        metrics_p = load_object(
-            os.path.join(paths['simulation'], simname, 'metrics_e_prior.p'))
+        metrics = load_object(paths['simulation'] / simname / 'metrics_e.p')
+        metrics_p = load_object(paths['simulation'] / simname / 'metrics_e_prior.p')
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0), metrics['ygrid'],
             lw=lwscen[sim], c=colscen[sim], alpha=alphascen[sim])
@@ -272,7 +271,7 @@ def plot_metrics(ymax=0.8, suffix=''):
         fancybox=False, ncol=3, bbox_to_anchor=(0.200, -0.186, 1.200, 0.100),
         handlelength=1.0, handletextpad=0.5)
     axs[1].text(-1.10, -0.09, 'accuracy', transform=axs[1].transAxes)
-    plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics{suffix}.pdf'))
+    plt.savefig(paths['figures'] / f'synthetic_metrics{suffix}.pdf')
 
 def plot_scatter_indrange(suffix='', subsample=100):
     import colorcet as cc
@@ -285,8 +284,8 @@ def plot_scatter_indrange(suffix='', subsample=100):
         ncols=1, sharey=True, sharex=False, figsize=(1.62, 0.90), figsizeunit='in',
         top=0.955, left=0.170, right=0.730, bottom=0.215, wspace=0.38, hspace=0.46, remove_spines=False)
     simname = f'spline_stdacc{suffix}'
-    pathsim = os.path.join(paths['simulation'], simname)
-    metrics = load_object(os.path.join(pathsim, 'metrics_e_indranges.p'))
+    pathsim = paths['simulation'] / simname
+    metrics = load_object(pathsim / 'metrics_e_indranges.p')
     post_mean = metrics['mean']
     presc = np.ones_like(post_mean)
     presc[:, ...] = metrics['sim'][np.newaxis, ...]
@@ -320,7 +319,7 @@ def plot_scatter_indrange(suffix='', subsample=100):
     cbar.solids.set_rasterized(True)
     cbarlabel = 'KDE [$-$]'
     cax.text(1.0, 1.2, cbarlabel, ha='center', va='baseline', transform=cax.transAxes)
-    fig.savefig(os.path.join(paths['figures'], f'synthetic_scatter_indrange{suffix}.pdf'))
+    fig.savefig(paths['figures'] / f'synthetic_scatter_indrange{suffix}.pdf')
 
 def plot_metrics_indrange(suffix=''):
     from string import ascii_lowercase
@@ -351,9 +350,9 @@ def plot_metrics_indrange(suffix=''):
     for jsimname, sim in enumerate(simnames):
         simname = sim + suffix
         metrics = load_object(
-            os.path.join(paths['simulation'], simname, 'metrics_e_indranges.p'))
+            paths['simulation'] / simname / 'metrics_e_indranges.p')
         metrics_p = load_object(
-            os.path.join(paths['simulation'], simname, 'metrics_e_indranges_prior.p'))
+            paths['simulation'] / simname / 'metrics_e_indranges_prior.p')
         axs[0].plot(
             np.nanmean(metrics['MAD'], axis=0)[jindrange], jsimname,
             linestyle='none', mfc=colscen[sim], alpha=alphascen[sim], marker=marker,
@@ -404,7 +403,7 @@ def plot_metrics_indrange(suffix=''):
         axs[0].transAxes, axs[0].transData)
     for jtickl, tickl in enumerate(yticklabels):
         axs[0].text(xpos, jtickl, tickl, va='center', ha='right', transform=trans)
-    plt.savefig(os.path.join(paths['figures'], f'synthetic_metrics_indrange{suffix}.pdf'))
+    plt.savefig(paths['figures'] / f'synthetic_metrics_indrange{suffix}.pdf')
 
 if __name__ == '__main__':
     plot_examples(show_quantile=True)

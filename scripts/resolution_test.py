@@ -1,20 +1,16 @@
-import os
 import numpy as np
-import pandas as pd
-import copy
 
 from scripts.pathnames import paths
 from scripts.sensitivity import compute_sensitivity
-from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, enforce_directory, load_object, save_object
-from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+from analysis import (
+    StefanPredictor, InversionSimulator, PredictionEnsemble, enforce_directory, load_object, save_object)
+from simulation import (StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
 def resolution_scenario(fnout=None, overwrite=False):
     from scripts.synthetic_simulation import sagwon_covariance, sagwon_forcing
-    fnforcing = os.path.join(paths['forcing'], 'sagwon', 'sagwon.csv')
-    pathout = os.path.join(paths['simulation'], 'resolution')
-    fnK = os.path.join(paths['processed'], 'Dalton_131_363', '2019', 'K_vec.geo.tif')
+    fnforcing = paths['forcing'] / 'sagwon' / 'sagwon.csv'
+    pathout = paths['simulation'] / 'resolution'
+    fnK = paths['processed'] / 'Dalton_131_363' / '2019' / 'K_vec.geo.tif'
     dailytemp, ind_scenes = sagwon_forcing(fnforcing)
     # d0_ = dailytemp.index[0]
     geom = {'ia': 40 * np.pi / 180}
@@ -61,15 +57,15 @@ def plot_inversion(meta, pathout, N_ens=20, fnout=None):
     alpham = 0.6
     cl = ['#777777', '#eeeeee']
     for jscen in range(Nscen):
-        pathsim = os.path.join(pathout, str(jscen))
-        invsim = InversionSimulator.from_file(os.path.join(pathsim, 'invsim.p'))
+        pathsim = pathout / str(jscen)
+        invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
         invres = invsim.results(pathsim)
         lw = invres.lw[0, 0,:]
         ind_ens = np.argsort(lw)[-N_ens:]
         e_ens = invres.predictions('e')[ind_ens,:]
         yff = invres.predictions('yf')[..., invres.ind_scenes[0]][ind_ens] * 100
         yfl = invres.predictions('yf')[..., invres.ind_scenes[-1]][ind_ens] * 100
-        metrics = load_object(os.path.join(pathsim, 'metrics_e.p'))
+        metrics = load_object(pathsim / 'metrics_e.p')
         e_sim = meta['predens_sim'][jscen].results['e'][0,:]
         axs[jscen].fill_betweenx(ygrid, 0 * e_sim, e_sim, ec='none', fc=colslist[jscen], alpha=0.2)
         axs[jscen].fill_betweenx(ygrid, 0 * e_sim, e_sim, fc='none', ec=colslist[jscen], lw=0.3)
@@ -126,9 +122,9 @@ def resolution_inversion(
     predens.predict(dailytemp)
     Nscen = len(meta['predens_sim'])
     for jscen in range(Nscen):
-        _pathout = os.path.join(pathout, str(jscen))
-        fninvsim = os.path.join(_pathout, 'invsim.p')
-        if overwrite or not os.path.exists(fninvsim):
+        _pathout = pathout / str(jscen)
+        fninvsim = _pathout / 'invsim.p'
+        if overwrite or not fninvsim.exists():
             invsim = InversionSimulator(predens=predens, predens_sim=meta['predens_sim'][jscen])
             invsim.register_observations(ind_scenes, C_obs)
             enforce_directory(fninvsim)
@@ -137,5 +133,5 @@ def resolution_inversion(
             invsim.export_metrics(_pathout, param='e')
 
 if __name__ == '__main__':
-    resolution_scenario(fnout=os.path.join(paths['figures'], 'resolution.pdf'))
+    resolution_scenario(fnout=paths['figures'] / 'resolution.pdf')
 

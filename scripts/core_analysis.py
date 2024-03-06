@@ -168,12 +168,12 @@ def plot_inset(fnout):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     year = 2022
-    fns_abs = {site: os.path.join(paths['cores'], fns(site, year)) for site in sitenames}
+    fns_abs = {site: paths['cores'] / fns(site, year) for site in sitenames}
     
     # for site in sitenames:
     #     plot_site(
     #         fns_abs[site], ylim=(75, 0), method='watervolume', 
-    #         fnout=os.path.join(paths['figures'], f'cores_{site}_{year}.pdf'))
+    #         fnout=paths['figures'] / f'cores_{site}_{year}.pdf'))
 
     df_dict = pd.read_excel(fns_abs['HV'], sheet_name=None, engine='openpyxl')
     data_dict = {core: extract_core(df_dict[core]) for core in df_dict}

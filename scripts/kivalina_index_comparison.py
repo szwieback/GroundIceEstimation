@@ -4,23 +4,24 @@ Created on Jun 28, 2023
 @author: simon
 '''
 
-import os
+from pathlib import Path
 import numpy as np
 from rasterio.crs import CRS
 import copy
 from rasterio.transform import Affine
+
 from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
     InversionResultsMmap, assemble_tril)
 
-path0 = '/home/simon/Work/gie/processed/kivalina/index/'
-pathfig = '/home/simon/Work/gie/figures/index/'
-pathls, lsscene = '/home/simon/Work/gie/optical/Landsat/', 'LC08_L2SP_083012_20190707_20200827_02_T1'
-fnls = os.path.join(pathls, f'{lsscene}.vrt')
-fnswir = os.path.join(pathls, lsscene, f'{lsscene}_SR_B7.TIF')
-fndem = '/home/simon/Work/Kivalina/TDM90/Kivalina/DEM.tif'
-fnforcing = '/home/simon/Work/Kivalina/forcing/T2MMEAN.csv'
-fnpred = '/home/simon/Work/gie/ancillary/GEE/e_pred.tif'
+path0 = Path('/home/simon/Work/gie/processed/kivalina/index/')
+pathfig = Path('/home/simon/Work/gie/figures/index/')
+pathls, lsscene = Path('/home/simon/Work/gie/optical/Landsat/'), 'LC08_L2SP_083012_20190707_20200827_02_T1'
+fnls = pathls / f'{lsscene}.vrt'
+fnswir = pathls / lsscene, f'{lsscene}_SR_B7.TIF'
+fndem = Path('/home/simon/Work/Kivalina/TDM90/Kivalina/DEM.tif')
+fnforcing = Path('/home/simon/Work/Kivalina/forcing/T2MMEAN.csv')
+fnpred = Path('/home/simon/Work/gie/ancillary/GEE/e_pred.tif')
 
 profile = ((-164.4236, 67.8357), (-164.3395, 67.7895))
 
@@ -39,9 +40,9 @@ transform_proc = Affine(posting, 0.0, 489274, 0.0, -posting, -2397437)
 shape_proc = (310, 690)
 geospatial_proc = Geospatial(transform_proc, crs_large, shape=shape_proc)
 
-pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
-_fnK = os.path.join(pathm1, f'2019_index', 'K_vec.geo.tif')
-geospatial_native = Geospatial.from_file(os.path.join(path0, _fnK))
+pathm1 = path0.parents[0]
+_fnK = pathm1 / f'2019_index' / 'K_vec.geo.tif'
+geospatial_native = Geospatial.from_file(path0 / _fnK)
 
 from scripts.plotting import cmap_e
 c_bad = '#444444'
@@ -66,9 +67,9 @@ def resample_iceoptical(fniceoptical, geospatial):
     # return rasterized
 
 def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), apply_mask=True):
-    geospatial_mean = load_object(os.path.join(path0, scenario, 'ir.p'))['geospatial']
+    geospatial_mean = load_object(path0 / scenario, 'ir.p')['geospatial']
     def _read(metric, mask=None):
-        fnm = os.path.join(path0, scenario, f'e_mean_period_{metric}.npy')
+        fnm = path0 / scenario / f'e_mean_period_{metric}.npy'
         arrm = np.moveaxis(load_object(fnm), -1, 0)
         if mask is not None:
             np.putmask(arrm, np.broadcast_to(mask, arrm.shape), np.nan)
@@ -87,8 +88,8 @@ def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), appl
 # 1.5
 def mask_year(path0, year, thresh=1.25, opening=3, closing=20, geospatial_out=None):
     print(f'masking year {year}')
-    pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
-    fn = os.path.join(pathm1, f'{year}_index', 'K_vec.geo.tif')
+    pathm1 = path0.parents[0]
+    fn = pathm1 / f'{year}_index' / 'K_vec.geo.tif'
     if geospatial_out is None:
         K_vec = read_geotiff(fn)
         geospatial_out = Geospatial.from_file(fn)
@@ -122,7 +123,7 @@ def plot_subset(
         f = np.reshape(kernel(positions).T, xx.shape)
         return f
     def _prepare_data():
-        if fntmp is None or not os.path.exists(fntmp) or overwrite:
+        if fntmp is None or not fntmp.exists() or overwrite:
             em = [_read_config(config, indranges_names, geospatial_subset, path0) for config in configs]
             kd = []
             for jconfig, config in enumerate(configs[:-1]):
@@ -213,8 +214,8 @@ def plot_subset(
             ax.text(0.50, 1.11, config_labels[jax], ha='center', va='baseline', transform=ax.transAxes)
     for ax in axs[-1,:-1]:
         ax.text(
-            0.50, -0.33, 'baseline $\\mathrm{std}_{\\mathrm{p}}(\\hat{\\bar{e}})$ [$-$]', ha='center', va='baseline',
-            transform=ax.transAxes)
+            0.50, -0.33, 'baseline $\\mathrm{std}_{\\mathrm{p}}(\\hat{\\bar{e}})$ [$-$]', ha='center',
+            va='baseline', transform=ax.transAxes)
     ylab = ('$\\hat{\\bar{e}}$ [$-$]', '$\\mathrm{std}_{\\mathrm{p}}(\\hat{\\bar{e}})$ [$-$]')
     for jax, ax in enumerate(axs[1:, 0]):
         ax.text(-0.33, 0.50, ylab[jax], rotation=90, ha='right', va='center', transform=ax.transAxes)
@@ -256,7 +257,7 @@ def rasterize_cores(fncores, geospatial):
 def violin_plot(config, fncores=None, fnout=None):
     from scripts.plotting import colslist, prepare_figure
     imap = resample_iceoptical(fniceoptical, geospatial_subset)[0, ...]
-    ft = load_object(os.path.join(path0, config[0], 'forcing_timing.p'))
+    ft = load_object(path0 / config[0] / 'forcing_timing.p')
     indranges_names = ft['indranges_names']
     emean = _read_config(config, indranges_names, geospatial_subset, path0)['mean']
     labels = ['ice poor', 'ice rich', 'indeterminate']
@@ -316,14 +317,14 @@ def _read_timeseries_kivalina(year=2019, remove_last=False, overwrite=False):
     from analysis import RationalQuadraticSepDiagCovMV, read_K, length_conversion, spatial_referencing
     from scripts.kivalina_index import kivalina_forcing, wavelength, geom
 
-    path1 = os.path.join(pathm1, f'{year}_index')
-    fnK = os.path.join(path1, 'K_vec.geo.tif')
-    fnunw = os.path.join(path1, 'unwrapped_corr.geo.tif')
-    fnref = os.path.join(path1, 'references_latlon.p')
+    path1 = pathm1 / f'{year}_index'
+    fnK = path1 / 'K_vec.geo.tif'
+    fnunw = path1 / 'unwrapped_corr.geo.tif'
+    fnref = path1 / 'references_latlon.p'
     xy_ref = load_object(fnref)['regular']
-    fntmp = os.path.join(path1, 'tmp_unwrapped_ref.p')
+    fntmp = path1 / 'tmp_unwrapped_ref.p'
 
-    if not os.path.exists(fntmp) or overwrite:
+    if not fntmp.exists() or overwrite:
         K, geospatial_K = read_K(fnK)
         unw, geospatial_unw = read_geotiff_geospatial(fnunw)
         assert geospatial_unw == geospatial_K
@@ -334,10 +335,10 @@ def _read_timeseries_kivalina(year=2019, remove_last=False, overwrite=False):
         var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
         covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
 
-        folder_forcing = os.path.join(pathm1, os.pardir, os.pardir, 'forcing', 'kivalina')
+        folder_forcing = pathm1.parents[1] / 'forcing' / 'kivalina'
         dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year, remove_last=remove_last)
 
-        fndist = os.path.join(path1, 'distance_cal.p')
+        fndist = path1 / 'distance_cal.p'
         unw_cor, K_cor = spatial_referencing(
             unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=False)
         s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=False)
@@ -363,7 +364,7 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
     import matplotlib.transforms as transforms
     from datetime import timedelta, date
     from string import ascii_lowercase
-    pathres = os.path.join(path0, scenario)
+    pathres = path0 / scenario
     year = int(config[0])
     steps = 1024
     step_ts = (272, 940)  # (268)(245, 980)
@@ -379,16 +380,16 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
              (left, bottom, width, height), (right - width, bottom, width, height)]
     axs = [fig.add_axes(rect) for rect in rects]
 
-    ir = InversionResultsMmap.from_file(os.path.join(pathres, 'ir.p'))
+    ir = InversionResultsMmap.from_file(pathres / 'ir.p')
     geospatial = ir.geospatial
     ygrid = ir.ygrid
-    save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-    save_object(ygrid, os.path.join(pathres, 'ygrid.p'))
+    save_object(geospatial, pathres / 'geospatial.p')
+    save_object(ygrid, pathres / 'ygrid.p')
 
-    geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-    ygrid = load_object(os.path.join(pathres, 'ygrid.p'))
+    geospatial = load_object(pathres / 'geospatial.p')
+    ygrid = load_object(pathres / 'ygrid.p')
 
-    ft = load_object(os.path.join(path0, config[0], 'forcing_timing.p'))
+    ft = load_object(path0 / config[0] / 'forcing_timing.p')
     indranges = ft['indranges']
     indrange = indranges[ft['indranges_names'].index(config[1])]
 
@@ -401,8 +402,8 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
               (750, 'colluvial--alluvial'), (980, 'floodplain')]
 
     # profile
-    yf = load_object(os.path.join(pathres, 'yf_mean.npy'))
-    e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
+    yf = load_object(pathres / 'yf_mean.npy')
+    e_mean = np.load(pathres / 'e_mean.npy')
     plot_profile(
         axs[0], e_mean, geospatial, profile, ymax=ymax, vlim=elim, ygrid=ygrid, cmap=cmap,
         yf=yf[..., indrange], y_xlabel=None, steps=steps, yticks=(0.0, 0.2, 0.4, 0.6), x_ylabel=-0.04,
@@ -503,7 +504,7 @@ def plot_regional(fnout=None):
 
     axs = [fig.add_axes(rect) for rect in rects]
     labels = ['Landsat true color', 'elevation', 'thawing degree days (TDD) [$^{\\circ}$C]']
-    
+
     ax = axs[0]
     ls, _ = geospatial.warp_from_file(fnls)
     ls = ls[::-1,:,:]
@@ -523,13 +524,13 @@ def plot_regional(fnout=None):
         transform=crs_pc)
     iax.spines['geo'].set_linewidth(0.5)
     iax.spines['geo'].set_edgecolor('#666666')
-    
+
     ax = axs[1]
     cmap_topo = copy.copy(cc.cm['CET_L10'])
     # dem, _ = geospatial_large.warp_from_file(fndem)
     thresh_swir = None
     dem, _ = geospatial.warp_from_file('/home/simon/Work/gie/ancillary/USGS_DEM/3DEP_DEM_Kivalina.tif')
-    dem[dem<=0.2] = -0.1 #np.nan
+    dem[dem <= 0.2] = -0.1  # np.nan
     cmap_topo.set_under(col_water)
     if thresh_swir is not None:
         from scipy.ndimage import binary_closing, binary_opening
@@ -537,7 +538,7 @@ def plot_regional(fnout=None):
         mask = (ls_swir < thresh_swir)[0, ...]
         mask = binary_opening((binary_closing(mask, iterations=1)), iterations=5)
         dem[mask[np.newaxis, ...]] = np.nan
-    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0.0, vmax=300, interpolation_stage='rgba')#, interpolation='nearest')
+    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0.0, vmax=300, interpolation_stage='rgba')  # , interpolation='nearest')
     rc = geospatial.rowcol(
         np.array([geospatial_proc.transform.xoff, geospatial_proc.transform.yoff])[:, np.newaxis])
     rect = Rectangle(
@@ -552,7 +553,7 @@ def plot_regional(fnout=None):
     cbar.set_ticks((0, 100, 200, 300))
     cax.text(1.10, 0.20, '[m]', ha='left', va='center', transform=cax.transAxes)
     cbar.solids.set_rasterized(True)
-    
+
     ax = axs[2]
     TDDs = (900,)
     TDDdict, cumdict = TDD_kivalina(fnforcing)
@@ -590,7 +591,7 @@ def plot_regional(fnout=None):
         lab = f"{ascii_lowercase[jlabel]}) {label}"
         trans_b = transforms.blended_transform_factory(ax.transAxes, fig.transFigure)
         ax.text(0.00, 0.95, lab, ha='left', va='baseline', transform=trans_b)
-    
+
     if fnout is None:
         plt.show()
     else:
@@ -641,9 +642,9 @@ def TDD_kivalina(fnforcing):
 def rc_references(path0, config, geospatial):
     # import geopandas as gpd
     # from shapely.geometry import Point
-    pathm1 = os.path.abspath(os.path.join(path0, os.pardir))
-    path1 = os.path.join(pathm1, f'{config[0]}_index')
-    fnref = os.path.join(path1, 'references_latlon.p')
+    pathm1 = path0.parents[0]
+    path1 = pathm1 / f'{config[0]}_index'
+    fnref = path1 / 'references_latlon.p'
     xy_ref = load_object(fnref)['regular']
     rc_ref = geospatial.rowcol(xy_ref, crs='EPSG:4326')
     # geometry = [Point((lon, lat)) for lon, lat in xy_ref.T]
@@ -708,7 +709,7 @@ def plot_index(config, path0, fnls, fnout=None, _cmap=None):
     import matplotlib.patheffects as path_effects
     from string import ascii_lowercase
     if _cmap is None: _cmap = cmap
-    
+
     e_lim = (0.00, 0.70)
     rc_ref = rc_references(path0, config, geospatial_proc)
     fig, axs = prepare_figure(
@@ -809,7 +810,7 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
 
     add_scalebar(
         axs[0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.19, dx=0.80, ylab=ylab)
-    
+
     cax_extent = [1.053, 0.120, 0.033, 0.600]
     cbarlabel = '$\\bar{e}$ [$-$]'
     cax = axs[-1].inset_axes(cax_extent)
@@ -817,7 +818,7 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     cbar.set_ticks((0.0, 0.3, 0.6))
     cbar.solids.set_rasterized(True)
     cax.text(0.00, 1.20, cbarlabel, ha='left', va='baseline', transform=cax.transAxes)
-    
+
     collabels = ('f) random forest $\\bar{e}$', 'g) InSAR $\\hat{\\bar{e}}$', 'h) Landsat-8 true-color ')
     for jcol, collabel in enumerate(collabels):
         axs[jcol].text(
@@ -831,8 +832,8 @@ def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
 def plot_index_cbars(config, path0, fnls):
     import colorcet as cc
     from matplotlib.colors import LinearSegmentedColormap
-    cmapnames = ['CET_CBC1'] 
-    #cmapnames = ['bgy', 'bmw', 'bmy', 'CET_CBL1', 'CET_L4', 'kgy', 'CET_L16', 'CET_CBL2', 'CET_CBC1']
+    cmapnames = ['CET_CBC1']
+    # cmapnames = ['bgy', 'bmw', 'bmy', 'CET_CBL1', 'CET_L4', 'kgy', 'CET_L16', 'CET_CBL2', 'CET_CBC1']
     for cmapname in cmapnames:
         if cmapname != 'CET_CBC1':
             _cmap = copy.copy(cc.cm[cmapname])
@@ -841,31 +842,30 @@ def plot_index_cbars(config, path0, fnls):
             cmap = cc.cm[cmapname]
             _cmap = LinearSegmentedColormap.from_list('clipped', cmap(np.linspace(0.8, 0.2, 256)))
             _cmap.set_bad(color='#666666')
-        plot_index(config, path0, fnls, fnout=os.path.join(pathfig, f'index_{cmapname}.pdf'), _cmap=_cmap)
+        plot_index(config, path0, fnls, fnout=pathfig / f'index_{cmapname}.pdf', _cmap=_cmap)
 
 if __name__ == '__main__':
-    fnsubset = os.path.join(path0, 'subset.gpkg')
-    fniceoptical = os.path.join(path0, 'iceoptical.gpkg')
-    fncores = os.path.join(path0, 'cores2005.gpkg')
-    ft = load_object(os.path.join(path0, '2019r', 'forcing_timing.p'))
+    fnsubset = path0 / 'subset.gpkg'
+    fniceoptical = path0 / 'iceoptical.gpkg'
+    fncores = path0 / 'cores2005.gpkg'
+    ft = load_object(path0 / '2019r' / 'forcing_timing.p')
     indranges_names = ft['indranges_names']
     configs = [
         ('2019', 'TDD900_lastday'), ('2019', 'TDD1000_lastday'), ('2018', 'TDD900_lastday'),
         ('2019r', 'TDD900_lastday')]
     config_labels = ['extra scene', 'later $\\bar{e}$', '2018', 'baseline']
 
-    # violin_plot(configs[-1], fncores=fncores, fnout=os.path.join(pathfig, 'violin.pdf'))
-    # fntmp = os.path.join(pathfig, 'kde.p')
+    # violin_plot(configs[-1], fncores=fncores, fnout=pathfig / 'violin.pdf')
+    # fntmp = pathfig / 'kde.p'
     # plot_subset(
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
-    #     fnout=os.path.join(pathfig, 'subset.pdf'), overwrite=False)
-    # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=os.path.join(pathfig, 'profile.pdf'))
-    # plot_regional(fnout=os.path.join(pathfig, 'regional.pdf'))
+    #     fnout=pathfig / 'subset.pdf', overwrite=False)
+    # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
+    # plot_regional(fnout=pathfig / 'regional.pdf')
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
-    #     fnout=os.path.join(pathfig, 'atmos.pdf'))
-    # plot_index(configs[0], path0, fnls, fnout=os.path.join(pathfig, 'index.pdf'))
-    # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=os.path.join(pathfig, 'RFmap.pdf'))
+    #     fnout=pathfig / 'atmos.pdf')
+    # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
+    # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     plot_index_cbars(configs[0], path0, fnls)
-    

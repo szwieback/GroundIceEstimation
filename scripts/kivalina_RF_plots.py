@@ -5,7 +5,6 @@ Created on Aug 29, 2023
 '''
 import numpy as np
 import joblib
-import os
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import pandas as pd
@@ -17,7 +16,6 @@ from scripts.pathnames import paths
 cmap_e_clipped = colors.LinearSegmentedColormap.from_list('clipped', cmap_e(np.linspace(0.0, 0.7, 256)))
 
 def plot_fit(df, rfr, impres):
-    import matplotlib.pyplot as plt
     fig, axs = prepare_figure(ncols=2, figsize=(1.0, 0.4), sharex=False, sharey=False, wspace=1)
     X, y = xy_split(df, train_test=False)
     axs[0].plot(y, rfr.predict(X), linestyle='none', mec='none', mfc='k', ms=1, marker='o', alpha=0.1)
@@ -36,8 +34,6 @@ def plot_pred(df, rfr):
     fixed_values = {'northerliness': 0.0, 'easterliness': 1.0, 'DEM_bp': 0, 'rugged': 30}
     fixed_values_plot = [{'ndvi': 0.25}, {'ndvi': 0.75}]
     # dem_bp also has big influence, but RF did not learn rocky (DEM_bp >>0,NDVI~0, NDWI<0) well
-    import matplotlib.pyplot as plt
-    from scripts.plotting import prepare_figure, cmap_e
     fig, axs = prepare_figure(
         ncols=len(fixed_values_plot), figsize=(1.6, 0.5), sharex=False, sharey=False, wspace=1, bottom=0.22)
     for jp, _fv in enumerate(fixed_values_plot):
@@ -206,12 +202,12 @@ def plot_rf(df, rfr, impres, fnout=None):
         plt.show()
 
 if __name__ == '__main__':
-    fnrf = os.path.join(path0, 'rfr.joblib')
-    fnimp = os.path.join(path0, 'importance.joblib')
+    fnrf = path0 / 'rfr.joblib'
+    fnimp = path0 / 'importance.joblib'
     rfr = joblib.load(fnrf)
     impres = joblib.load(fnimp)
 
-    fnplot = os.path.join(paths['figures'], 'index/rf.pdf')
+    fnplot = paths['figures'] / 'index' /'rf.pdf'
     plot_rf(df, rfr, impres, fnout=fnplot)
 
     # plot_fit(df, rfr, impres)

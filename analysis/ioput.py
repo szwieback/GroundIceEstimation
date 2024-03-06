@@ -4,7 +4,7 @@ Created on Aug 9, 2021
 @author: simon
 '''
 
-import os
+from pathlib  import Path
 import numpy as np
 import pickle
 import zlib
@@ -23,7 +23,7 @@ class Geospatial():
         gsp = Geospatial(transform=src.transform, crs=src.crs, shape=shape)
         del src
         return gsp
-    
+
     @classmethod
     def plate_carree(cls, bbox, dlat=-2e-4, dlon=None):
         from rasterio.transform import Affine
@@ -37,7 +37,7 @@ class Geospatial():
             int((bbox[3] - bbox[2]) / np.abs(dlon)))
         gsp = Geospatial(transform=transform, crs=crs, shape=shape)
         return gsp
-    
+
     @property
     def rowcol_grids(self):
         return (np.arange(self.shape[0]), np.arange(self.shape[1]))
@@ -62,9 +62,9 @@ class Geospatial():
                 return self.rowcol(_xy)
             except:
                 raise ValueError(f"xy data type not recognized")
-    
+
     def xy(self, rc):
-        r, c = rc[0, :], rc[1, :]
+        r, c = rc[0,:], rc[1,:]
         return np.array(rasterio.transform.AffineTransformer(self.transform).xy(r, c))
 
     @property
@@ -94,11 +94,11 @@ class Geospatial():
         strlist = (
             f"Transform: {self.transform}", f"CRS: {self.crs}", f"Shape: {self.shape}")
         return '\n'.join(strlist)
-    
+
     def __repr__(self):
         strlist = (
             f"Transform: {repr(self.transform)}", f"CRS: {repr(self.crs)}", f"Shape: {self.shape}")
-        return '\n'.join(strlist)    
+        return '\n'.join(strlist)
 
     def _rc_bbox(self, ll, ur):
         rc_ll = self.rowcol(np.array(ll)[:, np.newaxis])[:, 0]
@@ -133,7 +133,7 @@ class Geospatial():
             self, arr_in, geospatial_in, method='bilinear', dtype=np.float32, upscale=None):
         from rasterio.warp import reproject, Resampling
         rmethods = {'bilinear': Resampling.bilinear, 'nearest': Resampling.nearest, 'mode': Resampling.mode}
-        r = rmethods[method] 
+        r = rmethods[method]
         _gs = self.upscaled(upscale=upscale)
         arr_out = np.zeros(arr_in.shape[:-2] + _gs.shape, dtype=dtype)
         reproject(
@@ -152,7 +152,7 @@ class Geospatial():
         from pyproj import Geod
         g = Geod(ellps='WGS84')
         s = gpd.GeoSeries(
-            [Point(xy[0, :]), Point(xy[1, :])], crs=self.crs)
+            [Point(xy[0,:]), Point(xy[1,:])], crs=self.crs)
         s_4326 = s.to_crs(epsg='4326')
         ls = LineString([s_4326[0], s_4326[1]])
         return g.geometry_length(ls)
@@ -162,7 +162,7 @@ class Geospatial():
         xys = [self.xy(np.array([[self.shape[0], 0], self.shape]).T).T,
                self.xy(np.array([[0, self.shape[1]], self.shape]).T).T]
         return [self.distance(xy) for xy in xys]
-        
+
     def rasterize(self, gdf, field='id'):
         from rasterio import features
         geom = [(shps, vals) for shps, vals in zip(gdf.geometry, gdf[field])]
@@ -170,10 +170,9 @@ class Geospatial():
             geom, out_shape=self.shape, fill=-1, out=None,
             transform=self.transform, default_value=-1, dtype=np.int64)[np.newaxis, ...]
         return rasterized
-    
+
     def save_geotiff(self, arr, fnout, nodata=None):
-        save_geotiff(arr, self, fnout, nodata=nodata)     
-        
+        save_geotiff(arr, self, fnout, nodata=nodata)
 
 def read_geotiff(fntif):
     src = rasterio.open(fntif)
@@ -213,8 +212,6 @@ def vectorize_tril(G):
     G_vec = G[ind_]
     return G_vec
 
-
-
 def read_referenced_motion(
         fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)
@@ -223,7 +220,7 @@ def read_referenced_motion(
     def unw_to_motion(unw, wavelength=0.055, flip_sign=True):
         unw *= wavelength / (4 * np.pi)
         if flip_sign: unw *= -1
-        return unw    
+        return unw
     geospatial = Geospatial.from_file(fnunw)
     if len(fns_unw_offset) >= 1:
         import geopandas as gpd
@@ -232,7 +229,7 @@ def read_referenced_motion(
             offset = gpd.read_file(fn).to_crs(geospatial.crs)
             geom = [(shps, offs) for shps, offs in zip(offset.geometry, offset['offset'])]
             rasterized = features.rasterize(
-                geom, out_shape=geospatial.shape, fill=0, out=None, 
+                geom, out_shape=geospatial.shape, fill=0, out=None,
                 transform=geospatial.transform, default_value=0, dtype=np.int64)
             unw[scene:, ...] += rasterized * 2 * np.pi
     rc = geospatial.rowcol(xy)
@@ -250,26 +247,22 @@ def read_K(fntif):
     return K, geospatial
 
 def enforce_directory(path):
-    path0 = os.path.dirname(path)
-    if not os.path.exists(path0):
-        try:
-            os.makedirs(path0)
-        except:
-            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
 
 def save_object(obj, filename):
-    enforce_directory(filename)
-    if os.path.splitext(filename)[1].strip() == '.npy':
-        np.save(filename, obj)
+    pfn = Path(filename)
+    enforce_directory(pfn)
+    if pfn.suffix == '.npy':
+        np.save(pfn, obj)
     else:
-        with open(filename, 'wb') as f:
+        with open(pfn, 'wb') as f:
             f.write(zlib.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)))
 
 def load_object(filename):
-    if os.path.splitext(filename)[1].strip() == '.npy':
+    pfn = Path(filename)
+    if pfn.suffix == '.npy':
         return np.load(filename)
     with open(filename, 'rb') as f:
         obj = pickle.loads(zlib.decompress(f.read()))
     return obj
 
-    

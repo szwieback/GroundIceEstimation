@@ -6,12 +6,10 @@ Created on Sep 7, 2022
 import numpy as np
 import pandas as pd
 import datetime
-import os
+from pathlib import Path
 
-from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
-from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+from analysis import StefanPredictor, PredictionEnsemble
+from simulation import StefanStratigraphySmoothingSpline, StratigraphyMultiple
 from forcing import load_forcing_merra_subset, parse_dates
 
 geom = {'ia': 39.29 / 180 * np.pi}
@@ -43,12 +41,12 @@ def kivalina_forcing(folder_forcing, year=2019):
     return dailytemp, ind_scenes
 
 def process_kivalina(year=2019, rmethod='hadamard'):
-    path0 = f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}/geocoded'
-    folder_forcing = '/10TBstorage/Work/gie/forcing/kivalina'
-    pathout = f'/10TBstorage/Work/gie/processed/kivalina/{year}/{rmethod}'
-    # path0 = f'/home/simon/Work/gie/processed/kivalina/{year}/{rmethod}'
-    # folder_forcing = '/home/simon/Work/gie/forcing/Kivalina'
-    # pathout = os.path.join(path0, 'temp')
+    path0 = Path(f'/10TBstorage/Work/stacks/Kivalina/gie/{year}/proc/{rmethod}/geocoded')
+    folder_forcing = Path('/10TBstorage/Work/gie/forcing/kivalina')
+    pathout = Path(f'/10TBstorage/Work/gie/processed/kivalina/{year}/{rmethod}')
+    # path0 = Path(f'/home/simon/Work/gie/processed/kivalina/{year}/{rmethod}')
+    # folder_forcing = Path('/home/simon/Work/gie/forcing/Kivalina')
+    # pathout = path0 / 'temp'
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-164.7300, 67.8586])[:, np.newaxis]
@@ -63,15 +61,15 @@ def process_kivalina(year=2019, rmethod='hadamard'):
         read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
         InversionResults)
 
-    fnunw = os.path.join(path0, 'unwrapped.geo.tif')
-    fnK = os.path.join(path0, 'K_vec.geo.tif')
+    fnunw = path0 / 'unwrapped.geo.tif'
+    fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric_K(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
     from analysis.ioput import save_geotiff
     
-    # save_geotiff(s_obs - s_obs[4, ...][np.newaxis, ...], geospatial, os.path.join(pathout, 's_obs_late.tif'))
+    # save_geotiff(s_obs - s_obs[4, ...][np.newaxis, ...], geospatial, pathout / 's_obs_late.tif')
     
     dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year)
     
@@ -87,9 +85,9 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
-    ir.save(os.path.join(pathout, 'ir.p'))
+    ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
-    ir = InversionResults.from_file(os.path.join(pathout, 'ir.p'))
+    ir = InversionResults.from_file(pathout / 'ir.p')
     
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),

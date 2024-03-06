@@ -5,7 +5,7 @@ Created on Jul 15, 2020
 '''
 import pandas as pd
 import numpy as np
-import os
+from pathlib import Path
 import datetime
 
 from scripts.pathnames import paths
@@ -15,15 +15,14 @@ from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
 
-
 def toolik_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
 
     from forcing import read_toolik_forcing, parse_dates
-    
-    fn = os.path.join(paths['processed'], 'kivalina2019/timeseries/disp_polygons2.p')
-    fnforcing = os.path.join(paths['forcing'], 'toolik2019', '1-hour_data.csv')
-    pathout = os.path.join(paths['simulation'], simname)
+
+    fn = paths['processed'] / 'kivalina2019' / 'timeseries' / 'disp_polygons2.p'
+    fnforcing = paths['forcing'] / 'toolik2019' / '1-hour_data.csv'
+    pathout = paths['simulation'] / simname
 
     C_obs0 = load_object(fn)['C']
     var_atmo = (3e-3) ** 2
@@ -53,7 +52,7 @@ def toolik_simulation(
     else:
         raise ValueError(f'Simulation {simname} not known')
 
-    fninvsim = os.path.join(pathout, 'invsim.p')
+    fninvsim = pathout / 'invsim.p'
     enforce_directory(fninvsim)
 
     predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
@@ -91,7 +90,7 @@ def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multipli
 
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric_K(K, var_atmo, wavelength=wavelength)
-    
+
     _rc_site = geospatial_K.rowcol(site)[:, 0]
     C_obs0 = K[..., _rc_site[0], _rc_site[1]]
     C_obs = C_obs0 * C_obs_multiplier
@@ -100,9 +99,9 @@ def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multipli
 
 def sagwon_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
-    fnforcing = '/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv'
-    fnK = f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
-    pathout = os.path.join(paths['simulation'], simname)
+    fnforcing = Path('/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv')
+    fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
+    pathout = paths['simulation'] / simname
     params_distribution = {
         'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
         'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
@@ -115,7 +114,7 @@ def sagwon_simulation(
     wavelength = 0.055
 
     dailytemp, ind_scenes = sagwon_forcing(fnforcing)
-    
+
     C_obs = sagwon_covariance(
         fnK, var_atmo, wavelength=wavelength, C_obs_multiplier=C_obs_multiplier)
 
@@ -131,7 +130,7 @@ def sagwon_simulation(
     else:
         raise ValueError(f'Simulation {simname} not known')
 
-    fninvsim = os.path.join(pathout, 'invsim.p')
+    fninvsim = pathout / 'invsim.p'
     enforce_directory(fninvsim)
 
     predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
@@ -149,13 +148,12 @@ def sagwon_simulation(
     invsim.export_metrics(pathout, param='e', indranges=indranges)
     invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
 
-
 if __name__ == '__main__':
     N = 10000
     Nsim = 1000
     replicates = 100
     multipliers = {'stdacc': 1.0, 'lowacc': 16.0, 'highacc': 1.0 / 16}
-    Nbatch_list = [1,]
+    Nbatch_list = [1, ]
     for Nbatch in Nbatch_list:
         for accn in multipliers:
             for scenarion in ['spline']:
@@ -163,8 +161,7 @@ if __name__ == '__main__':
                 #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
                 #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
                 sagwon_simulation(
-                    f'{scenarion}_{accn}_{Nbatch}_sagwon_indrange', N=N, Nsim=Nsim, Nbatch=Nbatch, 
+                    f'{scenarion}_{accn}_{Nbatch}_sagwon_indrange', N=N, Nsim=Nsim, Nbatch=Nbatch,
                     replicates=replicates, C_obs_multiplier=multipliers[accn])
 
     # sagwon_simulation('spline_plot_sagwon', Nsim=100, N=N, replicates=5, Nbatch=1)
-    

@@ -61,8 +61,7 @@ def plot_CALM_HV(fn_hv, year_min=None, xticks=None, fnout=None):
 
 if __name__ == '__main__':
     from pathnames import paths
-    import os
-    fn_hv = os.path.join(paths['ancillary'], 'CALM', 'U9b_alt_2007_2022.csv')
-    fnout = os.path.join(paths['figures'], 'CALM.pdf')
+    fn_hv = paths['ancillary'] / 'CALM' / 'U9b_alt_2007_2022.csv'
+    fnout = paths['figures'] / 'CALM.pdf'
     plot_CALM_HV(fn_hv, year_min=2013, xticks=[2013, 2016, 2019, 2022], fnout=fnout)
 

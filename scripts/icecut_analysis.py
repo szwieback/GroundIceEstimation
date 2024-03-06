@@ -4,14 +4,14 @@ Created on Oct 5, 2022
 @author: simon
 '''
 import numpy as np
-import os
+from pathlib import Path
 
 from scripts.happyvalley_analysis import read_results
 
 site = np.array((-148.8317, 69.0414))[:, np.newaxis]
 
 def path_results(year):
-    pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
+    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard')
     return pathres
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
@@ -35,9 +35,10 @@ def icecut_map_profiles(fnout=None, overwrite=True):
         cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
         add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
     years = (2022, 2019)
-    fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
-    fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    fnimraw = Path('/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/'
+                   'analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif')
+    fndemraw = Path('/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif')
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -74,7 +75,7 @@ def icecut_map_profiles(fnout=None, overwrite=True):
         'g) false-color image', 'h) 2022: transect T1', 'i) 2019: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -157,7 +158,7 @@ def icecut_map_subsidence(fnout=None, overwrite=True):
         prepare_figure, cmap_e, cmap_s, _get_index, add_scalebar)
     site = 'icecut'
     years = (2022, 2019)
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -188,7 +189,7 @@ def icecut_map_subsidence(fnout=None, overwrite=True):
         'e) $s$ Aug 01 -- Sep 06, 2019', 'f) $s$ Jun 02 -- Sep 06, 2019',]
 
     for jyear, year in enumerate(years):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -251,9 +252,10 @@ def icecut_2023(fnout=None, overwrite=False):
         cmap_e, colslist, _get_index, contrast, initialize_matplotlib,
         add_scalebar, plot_profile, add_arrow_line, ProfileInterpolator)
     years = (2023, 2022)
-    fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
-    fndemraw = '/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif'
-    path0 = '/home/simon/Work/gie/processed/Dalton_131_363/'
+    fnimraw = Path('/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/'
+                   'analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif')
+    fndemraw = Path('/home/simon/Work/gie/ancillary/ArcticDEM/46_18_10m_v3.0_reg_dem.tif')
+    path0 = Path('/home/simon/Work/gie/processed/Dalton_131_363/')
     wavelength, thresh = 0.055, 4.3e-3
     upscale = 32
 
@@ -290,7 +292,7 @@ def icecut_2023(fnout=None, overwrite=False):
         'g) false-color image', 'h) 2023: transect T1', 'i) 2022: transect T1']
 
     for jyear, res in enumerate([res0, res1]):
-        fnK = os.path.join(path0, str(years[jyear]), 'K_vec.geo.tif')
+        fnK = path0 / str(years[jyear]) / 'K_vec.geo.tif'
         K, geospatial_K = read_K(fnK)
         invalid = invalid_mask(
             K, thresh, geospatial_K, geospatial, ind1=4, wavelength=wavelength)
@@ -367,65 +369,7 @@ def icecut_2023(fnout=None, overwrite=False):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    # fnplot = os.path.join(paths['figures'], 'icecut.pdf')
+    # fnplot = paths['figures'] / 'icecut.pdf'
     # icecut_map_profiles(fnout=fnplot, overwrite=False)
-    # icecut_2023(fnout=os.path.join(paths['figures'], 'icecut23.pdf'))
-    icecut_map_subsidence(os.path.join(paths['figures'], 'icecut_subs.pdf'), overwrite=False)
-'''year = '2019'#'2022'
-pathres = f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard'
-fnimraw = '/home/simon/Work/gie/ancillary/Planet/20220620/20220620_211420_05_249d/analytic_sr_udm2/20220620_211420_05_249d_3B_AnalyticMS_SR.tif'
-fnimres = os.path.join(pathres, 'optical.tif')
-upscale = 8
-site = np.array((-148.8317, 69.0414))[:, np.newaxis]
-
-ir = InversionResults.from_file(os.path.join(pathres, 'ir.p'))
-geospatial = ir.geospatial
-ygrid = ir.ygrid
-save_object(geospatial, os.path.join(pathres, 'geospatial.p'))
-geospatial = load_object(os.path.join(pathres, 'geospatial.p'))
-ygrid = np.arange(0, 1.5, step=2e-3)
-e_mean = np.load(os.path.join(pathres, 'e_mean.npy'))
-e_quantile = np.load(os.path.join(pathres, 'e_quantile.npy'))
-frac_thawed = np.load(os.path.join(pathres, 'frac_thawed_None.npy'))
-rc_site = geospatial.rowcol(site)
-# rc_site[0,0] -=1
-e_mean_site = e_mean[rc_site[0, 0], rc_site[1, 0],:]
-
-e_quantile_site = e_quantile[rc_site[0, 0], rc_site[1, 0], ...]
-frac_site = frac_thawed[rc_site[0, 0], rc_site[1, 0]]
-print(ygrid[np.nonzero(frac_site < 1 / 2)[0][0]])
-
-import matplotlib.pyplot as plt
-from scripts.plotting import prepare_figure, cmap_e, colslist, _get_index, contrast
-fig, ax = prepare_figure(nrows=1, ncols=1)
-ax.fill_betweenx(ygrid, e_quantile_site[:, 0], e_quantile_site[:, 1], edgecolor='none', facecolor=colslist[0], alpha=0.07)
-ax.plot(e_mean_site, ygrid, c=colslist[0])
-ax.set_ylim((0.60, 0))
-plt.show()
-
-cmap = cmap_e
-elim = (0.0, 0.5)
-xticks_im = (25, 65, 105, 145)
-yticks_im = (10, 50)
-ys = [(0.05, 0.15), (0.20, 0.30), (0.50, 0.60)]
-fig, axs = prepare_figure(ncols=3, nrows=2, sharex='none', sharey='none')
-
-optical = resample_dem(geospatial, fnimraw, fnimres, upscale=upscale)
-
-for jy, y in enumerate(ys):
-    _e_mean = np.mean(
-        e_mean[..., _get_index(ygrid, y[0]):_get_index(ygrid, y[1])], axis=-1)
-    # _e_mean[invalid] = np.nan
-    ax = axs[0, jy]
-    im_e = ax.imshow(_e_mean, cmap=cmap, vmin=elim[0], vmax=elim[1])
-    ax.set_facecolor('#aaaaaa')
-    ax.set_xticks(xticks_im)
-    ax.set_yticks(yticks_im)
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-    ax.grid(color='#dddddd', linewidth=0.4)
-optical = optical[::-1, ...][0:3]
-ax = axs[1][0]
-ax.imshow(contrast(np.moveaxis(optical, 0, -1)))
-plt.show()
-'''
+    # icecut_2023(fnout=paths['figures'] / 'icecut23.pdf')
+    icecut_map_subsidence(paths['figures'] / 'icecut_subs.pdf', overwrite=False)
