@@ -80,14 +80,16 @@ class PredictionEnsemble():
 
     def predict_mean_period(self, indranges, param='e'):
         if isinstance(param, str):
-            results = self.results
-            self.results[f'{param}_mean_period'] = self._mean_period(results, indranges, param=param)
+            self._predict_mean_period(indranges, param=param)            
         else:
             for _p in param: self.predict_mean_period(indranges, _p)
 
-    @classmethod
-    def _mean_period(cls, results, indranges, param='e'):
-        ygrid = results.ygrid
+    def _predict_mean_period(self, indranges, param='e'):
+        mp = self._mean_period(self.results, indranges, param=param)
+        self.results[f'{param}_mean_period'] = mp
+
+    def _mean_period(self, results, indranges, param='e'):
+        ygrid = self.ygrid
         yf = results['yf']
         p = results[param]
         p_mean = []
@@ -180,13 +182,11 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
         s0 = self.strats[self.classnames[0]]
         return s0.dy
 
-    def predict_mean_period(self, indranges, param='e'):
-        if isinstance(param, str):
-            for sc in self.strats:
-                results = self.results[sc]
-                self.results[f'{param}_mean_period'] = self._mean_period(results, indranges, param=param)
-        else:
-            for _p in param: self.predict_mean_period(indranges, _p)
+    def _predict_mean_period(self, indranges, param='e'):
+        for sc in self.strats:
+            results = self.results[sc]
+            mp = self._mean_period(results, indranges, param=param)        
+            self.results[sc][f'{param}_mean_period'] = mp
 
     def predict(self, forcing, n_jobs=-8, **kwargs):
         self.results = {}

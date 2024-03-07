@@ -150,11 +150,11 @@ class InversionProcessor():
             # these two should be equivalent, hence simply overwrite tuple
             # lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=_lw.shape).reshape(shape)
             # _lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=shape)
+            mmap = Mmap(_lw.filename, _lw.dtype, shape)
             if ec is None:
-                mmap = Mmap(_lw.filename, _lw.dtype, shape)
-                return InversionResultsMmap(self.predens, mmap, geospatial=self.geospatial, ec=ec)
+                return InversionResultsMmap(self.predens, mmap, geospatial=self.geospatial)
             else:
-                raise NotImplementedError('Need to implement MulticlassInversionResultsMmap')
+                return MulticlassInversionResultsMmap(self.predens, mmap, ec, geospatial=self.geospatial)
 
     @property
     def depth(self):
