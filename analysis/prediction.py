@@ -53,6 +53,10 @@ class PredictionEnsemble():
         self.geom = geom
         self.results = results
 
+    @property
+    def N(self):
+        return self.strat.N
+
     def predict(self, forcing, n_jobs=-8, **kwargs):
         strat = self.strat
         self.results = self._predict(strat, forcing, n_jobs=n_jobs, **kwargs)
@@ -171,16 +175,19 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
         for s in strats.values():
             assert s0.depth == s.depth
             assert s0.dy == s.dy
+            assert s0.N == s.N
             
     @property
     def depth(self):
-        s0 = self.strats[self.classnames[0]]
-        return s0.depth
+        return self.strats[self.classnames[0]].depth
 
     @property
     def dy(self):
-        s0 = self.strats[self.classnames[0]]
-        return s0.dy
+        return self.strats[self.classnames[0]].dy
+
+    @property
+    def N(self):
+        return self.strats[self.classnames[0]].N
 
     def _predict_mean_period(self, indranges, param='e'):
         for sc in self.strats:

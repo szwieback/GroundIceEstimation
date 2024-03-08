@@ -44,15 +44,15 @@ class InversionProcessor():
 
     def _logweights_single(self, ind_scenes, _s_obs, _C_obs, _ec=None, normalize=False):
         from inference import lw_mvnormal, psislw, _normalize
-        s_pred = self._simulated_observations_single(ind_scenes, _C_obs, ec=_ec)
         try:
+            s_pred = self._simulated_observations_single(ind_scenes, _C_obs, ec=_ec)
             if np.count_nonzero(np.isnan(_s_obs)) > 0: raise ValueError('Cannot handle NaN')
             lw = lw_mvnormal(
                 _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
             lw_ps, _ = psislw(lw)
             lw_ps = _normalize(lw_ps, normalize=normalize)
         except:
-            lw_ps = np.full((1, s_pred.shape[0]), np.nan)
+            lw_ps = np.full((1, self.predens.N), np.nan)
         return lw_ps
 
     def _filename(self, path0, ftype, number=None, ext='npy'):

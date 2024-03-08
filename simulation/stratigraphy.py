@@ -56,6 +56,10 @@ class StratigraphyMultiple():
     def dy(self):
         return self.strat.dy
 
+    @property
+    def N(self):
+        return self.strat.N * self.Nbatch
+
     def params(self, fields=None, batch=None):
         params0 = {**self.strat.constants, 'depth': self.strat.depth, 'dy': self.strat.dy}
         params_strat = {}

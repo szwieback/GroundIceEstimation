@@ -7,14 +7,13 @@ import numpy as np
 
 from analysis import read_geotiff_geospatial, save_geotiff
 
-
 def check_lut(classes):
     for clist in classes.values():
         for v in clist:
             if sum([v in cl for cl in classes.values()]) > 1:
                 raise ValueError(f'Ambiguous assignment of original class {v}')
 
-def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False,nodata=-1):
+def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False, nodata=-1):
     if overwrite or fnout is None or not fnout.exists():
         dtype, dtypename = np.int16, 'int16'
         check_lut(eclasses)
@@ -27,7 +26,7 @@ def reclassify(fnlc, eclasses, geospatial, fnout=None, overwrite=False,nodata=-1
     else:
         ec, geospatial_ec = read_geotiff_geospatial(fnout)
         if not geospatial == geospatial_ec: raise ValueError(f'Geospatial of {fnout} inconsistent')
-    return ec 
+    return ec
 
 if __name__ == '__main__':
     from pathlib import Path
@@ -42,5 +41,4 @@ if __name__ == '__main__':
     fnec = Path('/home/simon/Work/gie/processed/ec.tif')
 
     ec = reclassify(fnlc, eclasses, geospatial, fnout=fnec, overwrite=False)
-
 

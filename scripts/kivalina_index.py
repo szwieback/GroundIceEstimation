@@ -243,7 +243,7 @@ if __name__ == '__main__':
     #         Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
     #         extended_metrics=scenario.extended_metrics, overwrite=overwrite)
 
-    overwrite = True
+    overwrite = False
     scenario = scenarios[0]
     pathout0 = path0 / 'processed' / 'kivalina' / 'index_ecotype'
     pathout = pathout0 / scenario.name
