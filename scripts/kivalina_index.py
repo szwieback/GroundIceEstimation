@@ -151,7 +151,7 @@ def process_index_kivalina_ecotype(
         'dailytemp': dailytemp, 'ind_scenes': ind_scenes, 'indranges_names': indranges_names,
         'indranges': indranges}
     save_object(dict_forcing, pathout / 'forcing_timing.p')
-
+    '''
     _fununw = 'unwrapped_corr.geo.tif' if year in (2018, 2019) else 'unwrapped.geo.tif'
     fnunw = pathin / _fununw
     fnK = pathin / 'K_vec.geo.tif'
@@ -197,7 +197,7 @@ def process_index_kivalina_ecotype(
 
     ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
-
+    '''
     ir = MulticlassInversionResultsMmap.from_file(pathout / 'ir.p')
     expecs = [
         ('yf', 'mean'), ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
@@ -209,6 +209,7 @@ def process_index_kivalina_ecotype(
 
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
+        print(expec)
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':

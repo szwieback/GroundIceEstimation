@@ -278,13 +278,13 @@ class InversionResults():
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = pathout / fn
         np.save(fnout, res)
-    
+
     @property
     def _dict(self):
         dictout = {
             'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
             'blocksize': self.blocksize}
-        return dictout        
+        return dictout
 
     def save(self, fnout):
         from analysis import save_object
@@ -311,17 +311,17 @@ class MulticlassInversionResults(InversionResults):
             'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
-    
+
     def __getitem__(self, cn):
         ind = (self.ec == cn)
-        _lw = self.lw[ind]
+        _lw = self.lw[ind, ...]
         return InversionResults(self.predens[cn], _lw, geospatial=self.geospatial, blocksize=self.blocksize)
 
     def expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
         res = None
         for cn in self.predens.classnames:
             ir, ind = self[cn], (self.ec.flatten() == cn)
-            res_cn = ir._expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
+            res_cn = ir._expectation(param=param, etype=etype, p=None, normalize=normalize, **kwargs)
             if res is None:
                 res = np.empty((np.product(self.lw.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
             res[ind, ...] = res_cn
@@ -330,11 +330,12 @@ class MulticlassInversionResults(InversionResults):
 
 class InversionResultsMmap(InversionResults):
 
-    def __init__(self, predens, lwmmap, geospatial=None, blocksize=None):
+    def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False):
         InversionResults.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+        self.temporary = temporary
 
     @property
     def _dict(self):
@@ -343,26 +344,34 @@ class InversionResultsMmap(InversionResults):
             'blocksize': self.blocksize}
         return dictout
 
+    def __del__(self):
+        if self.temporary:
+            try:
+                Path(self.lwmmap.filename).unlink()
+            except:
+                pass
+
     @staticmethod
     def _dict_from_file(fn):
         from analysis import load_object
         dictin = load_object(fn)
         if not Path(dictin['lwmmap'].filename).exists:
             dictin['lwmmap'] = None
-        return dictin        
-    
+        return dictin
+
     @classmethod
     def from_file(cls, fn):
         return cls(**InversionResultsMmap._dict_from_file(fn))
 
 class MulticlassInversionResultsMmap(MulticlassInversionResults):
 
-    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None):
+    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False):
         MulticlassInversionResults.__init__(
             self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+        self.temporary = temporary
 
     @property
     def _dict(self):
@@ -370,9 +379,29 @@ class MulticlassInversionResultsMmap(MulticlassInversionResults):
             'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
-    
+
+    def _filename(self, path0, ftype, number=None, ext='npy'):
+        _fn = ftype if number is None else f'{ftype}_{number}'
+        return path0 / f'{_fn}.{ext}'
+
+    def __getitem__(self, cn):
+        ind = (self.ec == cn)
+        shape = (np.count_nonzero(ind), self.lw.shape[-1])
+        fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
+        mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
+        fp = np.memmap(fnmmap, dtype=mmap.dtype, mode='w+', shape=shape)
+        ncum = 0
+        for jrow, _ind in enumerate(ind): # loop to reduce memory footprint
+            _n = ncum + np.count_nonzero(_ind)
+            fp[ncum:_n, ...] = self.lw[jrow, _ind, ...]
+        # fp[:] = self.lw[ind, ...]
+        fp.flush()
+        del fp
+        ir = InversionResultsMmap(
+            self.predens[cn], mmap, geospatial=self.geospatial, blocksize=self.blocksize, temporary=True)
+        return ir
+
     @classmethod
     def from_file(cls, fn):
         return cls(**InversionResultsMmap._dict_from_file(fn))
-
 
