@@ -7,13 +7,13 @@ Created on Oct 5, 2022
 import numpy as np
 from pathlib import Path
 
-from analysis import load_object, save_object, InversionResults, read_K
+from analysis import load_object, save_object, InversionResults, read_K, MulticlassInversionResults
 from scripts.kivalina_analysis import resample_dem
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
 
-def path_results(year):
-    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/hadamard')
+def path_results(year, method='hadamard'):
+    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/happyvalley/{year}/{method}')
     return pathres
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
@@ -33,7 +33,10 @@ def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True
     fngeospatial = pathres / 'geospatial.p'
     fnygrid = pathres / 'ygrid.p'
     if not fngeospatial.exists() or not fnygrid.exists() or overwrite:
-        ir = InversionResults.from_file(pathres / 'ir.p')
+        try:
+            ir = InversionResults.from_file(pathres / 'ir.p')
+        except:
+            ir = MulticlassInversionResults.from_file(pathres / 'ir.p')
         geospatial = ir.geospatial
         ygrid = ir.ygrid
         save_object(geospatial, fngeospatial)
@@ -270,7 +273,7 @@ def happyvalley_map_subsidence(fnout=None, overwrite=True):
     else:
         plt.savefig(fnout, dpi=450)
 
-def happyvalley_map_profiles_2023(fnout=None, overwrite=True):
+def happyvalley_map_profiles_2023(fnout=None, overwrite=True, method='hadamard'):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     from scripts.plotting import (
@@ -295,9 +298,9 @@ def happyvalley_map_profiles_2023(fnout=None, overwrite=True):
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
 
     res0 = read_results(
-        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale,
+        path_results(years[0], method=method), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale, 
         overwrite=overwrite)
-    res1 = read_results(path_results(years[1]), overwrite=overwrite)
+    res1 = read_results(path_results(years[1], method=method), overwrite=overwrite)
     geospatial = res0['geospatial']
     assert res1['geospatial'] == geospatial
 
@@ -396,8 +399,10 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = paths['figures'] / 'happyvalley.pdf'
     # happyvalley_map_profiles(fnout=fnplot, overwrite=False)
-    fnplot = paths['figures'] / 'happyvalley23.pdf'
-    # happyvalley_map_profiles_2023(fnout=fnplot, overwrite=False)
+    for method in ('hadamard', 'ecotype_hadamard'):
+        print(method)
+        fnplot = paths['figures'] / f'happyvalley23_{method}.pdf'
+        happyvalley_map_profiles_2023(method=method, fnout=fnplot, overwrite=False)
     fnplot = paths['figures'] / 'happyvalley_subs.pdf'
-    happyvalley_map_subsidence(fnplot, overwrite=False)
+    # happyvalley_map_subsidence(fnplot, overwrite=False)
 

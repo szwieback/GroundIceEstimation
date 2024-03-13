@@ -10,8 +10,8 @@ from scripts.happyvalley_analysis import read_results
 
 site = np.array((-148.8317, 69.0414))[:, np.newaxis]
 
-def path_results(year):
-    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/hadamard')
+def path_results(year, method='hadamard'):
+    pathres = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/icecut/{year}/{method}')
     return pathres
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
@@ -244,7 +244,7 @@ def icecut_map_subsidence(fnout=None, overwrite=True):
     else:
         plt.savefig(fnout, dpi=450)
         
-def icecut_2023(fnout=None, overwrite=False):
+def icecut_map_profiles_2023(method='hadamard', fnout=None, overwrite=False):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     from analysis import read_K
@@ -265,13 +265,15 @@ def icecut_2023(fnout=None, overwrite=False):
     yticks_im = (31,)
     ys = [(0.00, 0.20), (0.20, 0.40), (0.40, 0.60)]
 
-    profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))  # (-148.7465, 69.0419))
+    # profile = ((-148.7819, 69.0419), (-148.7560, 69.0408))  # (-148.7465, 69.0419))
+    profile = ((-148.7788,69.0447), (-148.7536, 69.0407))
+    
     xy_ref = np.array([-148.7794, 69.0466])[:, np.newaxis]
 
     res0 = read_results(
-        path_results(years[0]), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale,
+        path_results(years[0], method=method), fnimraw=fnimraw, fndemraw=fndemraw, upscale=upscale,
         overwrite=overwrite)
-    res1 = read_results(path_results(years[1]), overwrite=overwrite)
+    res1 = read_results(path_results(years[1], method=method), overwrite=overwrite)
     geospatial = res0['geospatial']
     assert res1['geospatial'] == geospatial
 
@@ -332,14 +334,14 @@ def icecut_2023(fnout=None, overwrite=False):
     ax.plot(
         _xy_site[1], _xy_site[0], c=colslist[0], linestyle='none',
         marker='o', ms=5, mfc='none')
-    ax.text(_xy_site[1] - 320, _xy_site[0] + 500, 'IC', c=colslist[0])
+    ax.text(_xy_site[1] - 420, _xy_site[0] + 500, 'IC', c=colslist[0])
     add_scalebar(
         ax, geospatial.upscaled(upscale), length=1000, label='1 km', y=-0.2)
     ax.text(0.01, -0.09, 'Planet Labs', ha='left', va='top', transform=ax.transAxes)
 
     xticks = [0, 250, 500, 750, 1000]
-    yticks = (0.00, 0.25, 0.50)
-    ymax = 0.60
+    yticks = (0.0, 0.4, 0.8)
+    ymax = 1.20
 
     plabels = [
         (0.11, 'inactive fp'), (0.52, 'abandoned fp'), (0.93, 'slope')]
@@ -348,13 +350,13 @@ def icecut_2023(fnout=None, overwrite=False):
     plot_profile(
         axs[-1][1], res0['e_mean'], geospatial, profile, im_frac=res0['frac_thawed'],
         ymax=ymax, vlim=elim, ygrid=res0['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,
-        labels=None, x_ylabel=x_ylabel, y_xlabel=y_xlabel)
+        labels=plabels, x_ylabel=x_ylabel, y_xlabel=y_xlabel, y_plabels=0.80)
     axs[-1][1].text(
         0.05, 0.19, '$y_\\mathrm{f}$', c='#ffffff', transform=axs[-1][1].transAxes, alpha=0.6)
     plot_profile(
         axs[-1][2], res1['e_mean'], geospatial, profile, im_frac=res1['frac_thawed'],
         ymax=ymax, vlim=elim, ygrid=res1['ygrid'], cmap=cmap, xticks=xticks, yticks=yticks,
-        labels=plabels, x_ylabel=x_ylabel, y_xlabel=y_xlabel, y_plabels=0.83)
+        labels=None, x_ylabel=x_ylabel, y_xlabel=y_xlabel)
 
     cax = axs[0][-1].inset_axes([1.17, -0.75, 0.10, 1.20])
     cax.text(1.0, 1.18, '$e$ [-]', ha='center', va='baseline', transform=cax.transAxes)
@@ -371,5 +373,8 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     # fnplot = paths['figures'] / 'icecut.pdf'
     # icecut_map_profiles(fnout=fnplot, overwrite=False)
-    # icecut_2023(fnout=paths['figures'] / 'icecut23.pdf')
-    icecut_map_subsidence(paths['figures'] / 'icecut_subs.pdf', overwrite=False)
+    for method in ('hadamard', 'ecotype_hadamard'):
+        print(method)
+        fnplot = paths['figures'] / f'icecut23_{method}.pdf'
+        icecut_map_profiles_2023(method=method, fnout=fnplot, overwrite=False)    
+    # icecut_map_subsidence(paths['figures'] / 'icecut_subs.pdf', overwrite=False)

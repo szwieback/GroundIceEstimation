@@ -19,6 +19,8 @@ def fns(site, year):
     elif year == 2023:
         fns = {
             'IC': 'FSA_Dalton_IC_2023_20231019.xlsx', 'HV': 'FSA_Dalton_HV_2023_20231018.xlsx'}
+        fns = {
+            'IC': 'FSA_Dalton_IC_2023_20240312.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
     else:
         raise ValueError
     return fns[site]
@@ -46,7 +48,10 @@ def extract_core(df, method=None):
                 V_thawedtotal = entry['Container w/water'] * 1e-6 #m3
                 V_water = entry['Container only water'] * 1e-6 #m3             
                 if method is None or method == 'supernatant':
-                    e = V_ei / V_frozen
+                    if V_frozen > 0:
+                        e = V_ei / V_frozen
+                    else:
+                        e = None
                 elif method == 'thawed':   # Morse                 
                     e = V_ei / (V_ei + V_thawedtotal) if V_thawed > 0 else 0.0
                 elif method == 'difference':
@@ -55,7 +60,7 @@ def extract_core(df, method=None):
                     e = (rho_water / rho_ice) * V_water / V_frozen
                 else:
                     raise ValueError(f"Excess ice method {method} not recognized")
-                if not np.isfinite(e):
+                if e is None or not np.isfinite(e):
                     e = None
                 if e is not None and e < 0.0:
                     e = 0.0
@@ -167,7 +172,7 @@ def plot_inset(fnout):
 
 if __name__ == '__main__':
     from scripts.pathnames import paths
-    year = 2022
+    year = 2023
     fns_abs = {site: paths['cores'] / fns(site, year) for site in sitenames}
     
     # for site in sitenames:
@@ -175,10 +180,10 @@ if __name__ == '__main__':
     #         fns_abs[site], ylim=(75, 0), method='watervolume', 
     #         fnout=paths['figures'] / f'cores_{site}_{year}.pdf'))
 
-    df_dict = pd.read_excel(fns_abs['HV'], sheet_name=None, engine='openpyxl')
-    data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
-    # print(data_dict)
-    e_grid = read_site(fns_abs['HV'])
-    print(np.nanstd(e_grid, axis=0))
+    df_dict = pd.read_excel(fns_abs['IC'], sheet_name=None, engine='openpyxl')
+    # data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
+    # print(extract_core(df_dict['IC_G']))
+    # e_grid = read_site(fns_abs['HV'])
+    # print(np.nanstd(e_grid, axis=0))
     
     

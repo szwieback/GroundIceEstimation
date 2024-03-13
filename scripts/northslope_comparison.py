@@ -222,13 +222,14 @@ def plot_comparison_2023(fnout=None, overwrite=False):
     from scripts.plotting import prepare_figure, colslist
     from string import ascii_lowercase
     sites = ('happyvalley', 'icecut')
-    methods = {2023: 'watervolume', 2022: 'supernatant'}
+    methods = {2023: 'supernatant', 2022: 'supernatant'}#2023: watervolume
+    rmethod = 'ecotype_hadamard'
     years = (2023, 2022)
     res = {}
     for site in sites:
         res[site] = {}
         for year in years:
-            res[site][year] = InSAR_results(site, year, overwrite=overwrite)
+            res[site][year] = InSAR_results(site, year, overwrite=overwrite, rmethod=rmethod)
 
     yyticks = (0.0, 0.2, 0.4, 0.6)
     syticks = (0.0, 0.02, 0.04)
@@ -309,7 +310,7 @@ if __name__ == '__main__':
     fnout = paths['figures'] / f'northslope_comparison.pdf'
     # plot_comparison(fnout=fnout, overwrite=False)
     fnout = paths['figures'] / f'northslope_comparison23.pdf'
-    # plot_comparison_2023(fnout=fnout, overwrite=False)
+    plot_comparison_2023(fnout=fnout, overwrite=False)
 
     from forcing import parse_dates
     # hv calm: 2019-08-12: 0.46
