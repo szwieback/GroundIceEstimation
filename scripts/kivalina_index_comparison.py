@@ -60,14 +60,10 @@ def resample_iceoptical(fniceoptical, geospatial):
     iceoptical = gpd.read_file(fniceoptical).to_crs(geospatial.crs)
     iceoptical = iceoptical[iceoptical['include'] == 1]
     return geospatial.rasterize(iceoptical, field='code')
-    # geom = [(shps, vals) for shps, vals in zip(iceoptical.geometry, iceoptical['code'])]
-    # rasterized = features.rasterize(
-    #     geom, out_shape=geospatial.shape, fill=-1, out=None,
-    #     transform=geospatial.transform, default_value=-1, dtype=np.int64)[np.newaxis, ...]
-    # return rasterized
+
 
 def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), apply_mask=True):
-    geospatial_mean = load_object(path0 / scenario, 'ir.p')['geospatial']
+    geospatial_mean = load_object(path0 / scenario / 'ir.p')['geospatial']
     def _read(metric, mask=None):
         fnm = path0 / scenario / f'e_mean_period_{metric}.npy'
         arrm = np.moveaxis(load_object(fnm), -1, 0)
@@ -85,7 +81,6 @@ def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), appl
         dictout[metric] = arr
     return dictout
 
-# 1.5
 def mask_year(path0, year, thresh=1.25, opening=3, closing=20, geospatial_out=None):
     print(f'masking year {year}')
     pathm1 = path0.parents[0]
@@ -380,11 +375,11 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
              (left, bottom, width, height), (right - width, bottom, width, height)]
     axs = [fig.add_axes(rect) for rect in rects]
 
-    ir = InversionResultsMmap.from_file(pathres / 'ir.p')
-    geospatial = ir.geospatial
-    ygrid = ir.ygrid
-    save_object(geospatial, pathres / 'geospatial.p')
-    save_object(ygrid, pathres / 'ygrid.p')
+    # ir = InversionResultsMmap.from_file(pathres / 'ir.p')
+    # geospatial = ir.geospatial
+    # ygrid = ir.ygrid
+    # save_object(geospatial, pathres / 'geospatial.p')
+    # save_object(ygrid, pathres / 'ygrid.p')
 
     geospatial = load_object(pathres / 'geospatial.p')
     ygrid = load_object(pathres / 'ygrid.p')
@@ -538,7 +533,7 @@ def plot_regional(fnout=None):
         mask = (ls_swir < thresh_swir)[0, ...]
         mask = binary_opening((binary_closing(mask, iterations=1)), iterations=5)
         dem[mask[np.newaxis, ...]] = np.nan
-    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0.0, vmax=300, interpolation_stage='rgba')  # , interpolation='nearest')
+    im = ax.imshow(dem[0, ...], cmap=cmap_topo, vmin=0.0, vmax=300, interpolation_stage='rgba')
     rc = geospatial.rowcol(
         np.array([geospatial_proc.transform.xoff, geospatial_proc.transform.yoff])[:, np.newaxis])
     rect = Rectangle(
@@ -640,17 +635,11 @@ def TDD_kivalina(fnforcing):
     return TDDdict, cumTDDdict
 
 def rc_references(path0, config, geospatial):
-    # import geopandas as gpd
-    # from shapely.geometry import Point
     pathm1 = path0.parents[0]
     path1 = pathm1 / f'{config[0]}_index'
     fnref = path1 / 'references_latlon.p'
     xy_ref = load_object(fnref)['regular']
     rc_ref = geospatial.rowcol(xy_ref, crs='EPSG:4326')
-    # geometry = [Point((lon, lat)) for lon, lat in xy_ref.T]
-    # gdf = gpd.GeoDataFrame(geometry=geometry, crs='EPSG:4326').to_crs(geospatial.crs)
-    # pts = np.array([(x.x, x.y) for x in gdf['geometry']]).T
-    # rc_ref = geospatial.rowcol(pts)
     return rc_ref
 
 def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
@@ -860,7 +849,7 @@ if __name__ == '__main__':
     # plot_subset(
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
-    # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
+    plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
     # plot_regional(fnout=pathfig / 'regional.pdf')
 
     # plot_atmosphere(
@@ -868,4 +857,4 @@ if __name__ == '__main__':
     #     fnout=pathfig / 'atmos.pdf')
     # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
-    plot_index_cbars(configs[0], path0, fnls)
+    # plot_index_cbars(configs[0], path0, fnls)
