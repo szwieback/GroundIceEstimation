@@ -315,10 +315,11 @@ class MulticlassInversionResults(InversionResults):
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         _lw = self.lw[ind, ...]
-        return InversionResults(self.predens[cn], _lw, geospatial=self.geospatial, blocksize=self.blocksize)
+        return InversionResults(self.predens[cn], _lw, blocksize=self.blocksize)
 
     def expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
         res = None
+        if p is not None: raise ValueError('p input not supported')
         for cn in self.predens.classnames:
             ir, ind = self[cn], (self.ec.flatten() == cn)
             res_cn = ir._expectation(param=param, etype=etype, p=None, normalize=normalize, **kwargs)
@@ -370,7 +371,8 @@ class MulticlassInversionResultsMmap(MulticlassInversionResults):
             self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
             self.lwmmap = lwmmap
-            self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+            if Path(lwmmap.filename).exists():
+                self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
 
     @property
@@ -389,16 +391,16 @@ class MulticlassInversionResultsMmap(MulticlassInversionResults):
         shape = (np.count_nonzero(ind), self.lw.shape[-1])
         fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
         mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
-        fp = np.memmap(fnmmap, dtype=mmap.dtype, mode='w+', shape=shape)
+        fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)
         ncum = 0
         for jrow, _ind in enumerate(ind): # loop to reduce memory footprint
             _n = ncum + np.count_nonzero(_ind)
             fp[ncum:_n, ...] = self.lw[jrow, _ind, ...]
-        # fp[:] = self.lw[ind, ...]
+            ncum = _n
         fp.flush()
         del fp
         ir = InversionResultsMmap(
-            self.predens[cn], mmap, geospatial=self.geospatial, blocksize=self.blocksize, temporary=True)
+            self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
         return ir
 
     @classmethod
