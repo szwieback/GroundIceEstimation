@@ -293,8 +293,8 @@ def happyvalley_map_profiles_2023(fnout=None, overwrite=True, method='hadamard')
     yticks_im = (25, 65, 105)
     ys = [(0.00, 0.20), (0.20, 0.40), (0.40, 0.60)]
 
-    # profile = ((-148.8013, 69.1609), (-148.7717, 69.1609))
-    profile = ((-148.7950, 69.1466), (-148.7655, 69.1466))
+    profile = ((-148.8409, 69.1540), (-148.8121, 69.1499))
+    # profile = ((-148.7950, 69.1466), (-148.7655, 69.1466))
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
 
     res0 = read_results(

@@ -175,6 +175,6 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(year=2022)
-    process_happyvalley_ecotype(year=2022)
+    process_happyvalley_ecotype(year=2023)
 
 

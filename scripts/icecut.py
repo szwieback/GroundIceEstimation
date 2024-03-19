@@ -100,7 +100,7 @@ def process_icecut_ecotype(year=2019, rmethod='hadamard'):
     fnlc = p0 / f'ancillary/TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
 
     eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
-               1: (2, 21, 25, 26, 33, 34, 35)}
+               1: (2, 12, 21, 25, 26, 33, 34, 35)}
 
     params_distribution_0 = params_distribution.copy()
     params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,

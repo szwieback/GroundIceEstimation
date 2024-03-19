@@ -139,8 +139,8 @@ def process_index_kivalina_ecotype(
     indranges_names, indranges = tuple(indranges_dict.keys()), tuple(indranges_dict.values())
     fnlc = path0 / f'ancillary/TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
 
-    eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
-               1: (2, 21, 25, 26, 33, 34, 35)}
+    eclasses = {0: (1, 3, 11, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
+               1: (2, 12, 21, 25, 26, 33, 34, 35)}#12 as thick organic near Kivalina
     params_distribution_0 = params_distribution.copy()
     params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
                                      'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
@@ -151,7 +151,7 @@ def process_index_kivalina_ecotype(
         'dailytemp': dailytemp, 'ind_scenes': ind_scenes, 'indranges_names': indranges_names,
         'indranges': indranges}
     save_object(dict_forcing, pathout / 'forcing_timing.p')
-    '''
+    
     _fununw = 'unwrapped_corr.geo.tif' if year in (2018, 2019) else 'unwrapped.geo.tif'
     fnunw = pathin / _fununw
     fnK = pathin / 'K_vec.geo.tif'
@@ -183,21 +183,21 @@ def process_index_kivalina_ecotype(
     predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
     predens.predict(dailytemp)
     predens.predict_mean_period(indranges)
-
+    
     data, geospatial_crop = {'s_obs': s_obs, 'K': K_s, 'ec': ec[0, ...]}, geospatial_unw
-        # for testing only
-        # ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
-        # for dname in data:
-        #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
+    # for testing only
+    # ll, ur = (-164.4097, 67.8059), (-164.3701, 67.8192)
+    # for dname in data:
+    #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
     ip = InversionProcessor(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
         ind_scenes, data['s_obs'], _K, ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=overwrite,
         memory=False)
-
+    
     ir.save(pathout / 'ir.p')
     ip.delete_weight_files(pathout)
-    '''
+    
     ir = MulticlassInversionResultsMmap.from_file(pathout / 'ir.p')
     expecs = [
         ('yf', 'mean'), ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
@@ -230,8 +230,8 @@ if __name__ == '__main__':
 
     fnref = 'references_latlon.p'
 
-    # overwrite = True
-    # # loop over scenarios
+    overwrite = True
+    # loop over scenarios
     # for scenario in scenarios:
     #     pathout = pathout0 / scenario.name
     #     pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     #         Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
     #         extended_metrics=scenario.extended_metrics, overwrite=overwrite)
 
-    overwrite = False
+    overwrite = True
     scenario = scenarios[0]
     pathout0 = path0 / 'processed' / 'kivalina' / 'index_ecotype'
     pathout = pathout0 / scenario.name

@@ -12,9 +12,9 @@ from rasterio.transform import Affine
 
 from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
-    InversionResultsMmap, assemble_tril)
+    InversionResultsMmap, MulticlassInversionResultsMmap, assemble_tril)
 
-path0 = Path('/home/simon/Work/gie/processed/kivalina/index/')
+path0 = Path('/home/simon/Work/gie/processed/kivalina/index_ecotype/')
 pathfig = Path('/home/simon/Work/gie/figures/index/')
 pathls, lsscene = Path('/home/simon/Work/gie/optical/Landsat/'), 'LC08_L2SP_083012_20190707_20200827_02_T1'
 fnls = pathls / f'{lsscene}.vrt'
@@ -375,11 +375,12 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
              (left, bottom, width, height), (right - width, bottom, width, height)]
     axs = [fig.add_axes(rect) for rect in rects]
 
-    # ir = InversionResultsMmap.from_file(pathres / 'ir.p')
-    # geospatial = ir.geospatial
-    # ygrid = ir.ygrid
-    # save_object(geospatial, pathres / 'geospatial.p')
-    # save_object(ygrid, pathres / 'ygrid.p')
+    ir = MulticlassInversionResultsMmap.from_file(pathres / 'ir.p')
+    # ir = InversionResultsMmap.from_file(pathres / 'ir.p')    
+    geospatial = ir.geospatial
+    ygrid = ir.ygrid
+    save_object(geospatial, pathres / 'geospatial.p')
+    save_object(ygrid, pathres / 'ygrid.p')
 
     geospatial = load_object(pathres / 'geospatial.p')
     ygrid = load_object(pathres / 'ygrid.p')
@@ -837,7 +838,7 @@ if __name__ == '__main__':
     fnsubset = path0 / 'subset.gpkg'
     fniceoptical = path0 / 'iceoptical.gpkg'
     fncores = path0 / 'cores2005.gpkg'
-    ft = load_object(path0 / '2019r' / 'forcing_timing.p')
+    ft = load_object(path0 / '2019' / 'forcing_timing.p')
     indranges_names = ft['indranges_names']
     configs = [
         ('2019', 'TDD900_lastday'), ('2019', 'TDD1000_lastday'), ('2018', 'TDD900_lastday'),
@@ -849,12 +850,12 @@ if __name__ == '__main__':
     # plot_subset(
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
-    plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
+    # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
     # plot_regional(fnout=pathfig / 'regional.pdf')
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
-    # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
+    plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)
