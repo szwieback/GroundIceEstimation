@@ -64,7 +64,7 @@ class PredictionEnsemble():
     def _predict(self, strat, forcing, n_jobs=-8, **kwargs):
         results = {}
         if strat.Nbatch == 0:
-            self.results = self.predictor.predict(
+            results = self.predictor.predict(
                 forcing, strat.params(), geom=self.geom, **kwargs)
         else:
             from joblib import Parallel, delayed
