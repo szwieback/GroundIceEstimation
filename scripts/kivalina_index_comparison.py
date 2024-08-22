@@ -14,7 +14,7 @@ from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
     InversionResultsMmap, MulticlassInversionResultsMmap, assemble_tril)
 
-path0 = Path('/home/simon/Work/gie/processed/kivalina/index_ecotype/')
+path0 = Path('/home/simon/Work/gie/processed/kivalina/index/')
 pathfig = Path('/home/simon/Work/gie/figures/index/')
 pathls, lsscene = Path('/home/simon/Work/gie/optical/Landsat/'), 'LC08_L2SP_083012_20190707_20200827_02_T1'
 fnls = pathls / f'{lsscene}.vrt'
@@ -60,7 +60,6 @@ def resample_iceoptical(fniceoptical, geospatial):
     iceoptical = gpd.read_file(fniceoptical).to_crs(geospatial.crs)
     iceoptical = iceoptical[iceoptical['include'] == 1]
     return geospatial.rasterize(iceoptical, field='code')
-
 
 def resample_scenario(path0, scenario, geospatial, metrics=('mean', 'var'), apply_mask=True):
     geospatial_mean = load_object(path0 / scenario / 'ir.p')['geospatial']
@@ -375,12 +374,14 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
              (left, bottom, width, height), (right - width, bottom, width, height)]
     axs = [fig.add_axes(rect) for rect in rects]
 
-    ir = MulticlassInversionResultsMmap.from_file(pathres / 'ir.p')
-    # ir = InversionResultsMmap.from_file(pathres / 'ir.p')    
-    geospatial = ir.geospatial
-    ygrid = ir.ygrid
-    save_object(geospatial, pathres / 'geospatial.p')
-    save_object(ygrid, pathres / 'ygrid.p')
+    # try:
+    #     ir = MulticlassInversionResultsMmap.from_file(pathres / 'ir.p')
+    # except:
+    #     ir = InversionResultsMmap.from_file(pathres / 'ir.p')
+    # geospatial = ir.geospatial
+    # ygrid = ir.ygrid
+    # save_object(geospatial, pathres / 'geospatial.p')
+    # save_object(ygrid, pathres / 'ygrid.p')
 
     geospatial = load_object(pathres / 'geospatial.p')
     ygrid = load_object(pathres / 'ygrid.p')
@@ -692,6 +693,13 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
     else:
         fig.savefig(fnout, dpi=450)
 
+def export_index(path0, config, fnoutdict):
+    from analysis import save_geotiff
+    e_res = _read_config(config, indranges_names, geospatial_proc, path0)
+    for ftype in fnoutdict:
+        save_geotiff(e_res[ftype][np.newaxis, ...], geospatial=geospatial_proc, fnout=fnoutdict[ftype])
+        print(fnoutdict[ftype])
+
 def plot_index(config, path0, fnls, fnout=None, _cmap=None):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
     from matplotlib import cm
@@ -772,6 +780,44 @@ def plot_index(config, path0, fnls, fnout=None, _cmap=None):
     else:
         fig.savefig(fnout, dpi=450)
 
+def plot_graphical_abstract(config, path0, fnout=None, _cmap=None):
+    from scripts.plotting import prepare_figure, add_scalebar, colslist
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    import matplotlib.patheffects as path_effects
+    from string import ascii_lowercase
+    if _cmap is None: _cmap = cmap
+
+    e_lim = (0.00, 0.70)
+    fig, ax = prepare_figure(
+        nrows=1, ncols=1, figsize=(1.00, 0.45), top=0.99, bottom=0.01, right=0.99, left=0.01,
+        hspace=0.10, wspace=0.06, remove_spines=False)
+
+    e_res = _read_config(config, indranges_names, geospatial_proc, path0)
+    ax.imshow(e_res['mean'], cmap=_cmap, vmin=e_lim[0], vmax=e_lim[1], interpolation='nearest')
+
+    # cbar
+    cax_left, cax_height, cax_top = 0.04, 0.06, 0.18
+    cax = ax.inset_axes((cax_left, cax_top - cax_height, 0.30, cax_height))
+    cbar = fig.colorbar(
+        cm.ScalarMappable(norm=Normalize(*e_lim, clip=True), cmap=_cmap), cax=cax, orientation='horizontal')
+    cbar.set_ticks([e_lim[0], e_lim[1] / 2, e_lim[1]])
+    cbar.ax.tick_params(color='w', pad=1.7, labelcolor='w')
+    cbar.solids.set_rasterized(True)
+    cbar.outline.set_color('w')
+    cax.text(1.07, 0.30, '$\\hat{\\bar{e}}$ [$-$]', ha='left', va='center', transform=cax.transAxes, c='w')
+    # add_scalebar(
+    #     axs[0], geospatial_proc, length=5e3, label='5 km', y=cax_top, dx=cax_left,
+    #     ylab=cax_top - cax_height)
+
+    ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
+
+    if fnout is None:
+        import matplotlib.pyplot as plt
+        plt.show()
+    else:
+        fig.savefig(fnout, dpi=450)
+
 def plot_rf_map(config_ref, fnpred, fnls, path0, indranges_names, fnout=None):
     from scripts.plotting import prepare_figure, add_scalebar
     from matplotlib import cm
@@ -845,6 +891,13 @@ if __name__ == '__main__':
         ('2019r', 'TDD900_lastday')]
     config_labels = ['extra scene', 'later $\\bar{e}$', '2018', 'baseline']
 
+    # pathout = Path('/home/simon/Work/gie/shared/index/')
+    # for config in configs:
+    #     print(config[1])
+    #     export_index(
+    #         path0, config, fnoutdict={ftype: pathout / f'{config[0]}_{config[1]}' / f'{ftype}.tif'
+    #                                   for ftype in ('mean', 'var')})
+
     # violin_plot(configs[-1], fncores=fncores, fnout=pathfig / 'violin.pdf')
     # fntmp = pathfig / 'kde.p'
     # plot_subset(
@@ -856,6 +909,7 @@ if __name__ == '__main__':
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
-    plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
+    # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)
+    plot_graphical_abstract(configs[0], path0, fnout=pathfig / 'graphabs.pdf')
