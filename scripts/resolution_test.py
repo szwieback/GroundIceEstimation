@@ -31,11 +31,11 @@ def resolution_scenario(fnout=None, overwrite=False):
                  'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
         'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
 
-    # C_obs = sagwon_covariance(
-    #     fnK, var_atmo, wavelength=wavelength, C_obs_multiplier=C_obs_multiplier)
-    # resolution_inversion(
-    #     dailytemp, ind_scenes, C_obs, meta, geom, params_distribution, pathout, N=N, Nbatch=Nbatch,
-    #     replicates=replicates, overwrite=True)
+    C_obs = sagwon_covariance(
+        fnK, var_atmo, wavelength=wavelength, C_obs_multiplier=C_obs_multiplier)
+    resolution_inversion(
+        dailytemp, ind_scenes, C_obs, meta, geom, params_distribution, pathout, N=N, Nbatch=Nbatch,
+        replicates=replicates, overwrite=True)
     plot_inversion(meta, pathout, fnout=fnout)
 
 def plot_inversion(meta, pathout, N_ens=20, fnout=None):
