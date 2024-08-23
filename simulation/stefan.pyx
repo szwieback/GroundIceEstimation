@@ -45,7 +45,8 @@ def extract_ensemble(dailytemp, params, balance=False):
             ens['dailytemp'][:, :] = np.array(dailytemp)[np.newaxis, :]
         ens['n_factor'] = _fill('n_factor', 0.9, (Ne,))
         ens['e'] = _fill('e', 0.1, (Ne, Ng))
-        ens['w'] = _fill('w', 0.4, (Ne, Ng))
+        ens['i'] = _fill('i', 0.4, (Ne, Ng))
+        ens['w'] = _fill('w', 0.0, (Ne, Ng))
         ens['k0'] = _fill('k0', 0.4, (Ne,))
         ens['k0ik'] = _fill('k0ik', 1.0, (Ne, Ng))
         ens['Ct'] = _fill('Ct', 1e6, (Ne,))
@@ -57,7 +58,7 @@ def stefan_initialize(dailytemp_ens, params, k0ikupsQ=None):
     ens = extract_ensemble(dailytemp_ens, params)
     k0s = (ens['k0'] * (3600 * 24 * fac))  #scaled, per day
     
-    Lg = (params['Lvw'] * (ens['w'] + ens['e'])).astype(nptype)
+    Lg = (params['Lvw'] * (ens['i'] + ens['e'])).astype(nptype)
     sg = (np.cumsum(ens['e'] * params['dy'], axis=1)).astype(nptype)
     ups = (yg[np.newaxis, :] - sg).astype(nptype)
     k0ikups = (ens['k0ik'] * ups).astype(nptype)

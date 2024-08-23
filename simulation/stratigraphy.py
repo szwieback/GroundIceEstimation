@@ -47,7 +47,7 @@ class StratigraphyMultiple():
         self.strat = strat
         self.Nbatch = Nbatch
         self.seed0 = seed0
-        
+
     @property
     def depth(self):
         return self.strat.depth
@@ -132,7 +132,7 @@ class StefanStratigraphy(Stratigraphy):
         knots = np.concatenate(([0, 0], cpoints , [self.depth, self.depth]))
         c = np.eye(self.Nb)
         bspline = BSpline(knots, c, k=2, extrapolate=False)
-        # integrate than difference
+        # integrate then difference
         # focus on average rather than at grid point
         # partition of unity is preserved (except 0 element)
         bsplinead = bspline.antiderivative()
@@ -159,7 +159,7 @@ class StefanStratigraphy(Stratigraphy):
                              high=self.soil_params['high_horizon'], size=(self.N,))
         return od
 
-    def _draw_mow(self, od, e):
+    def _draw_moiw(self, od, e, frozen_fraction=1.0):
         ind_above = self._ygrid[np.newaxis,:] < od[:, np.newaxis]
         ind_below = np.logical_not(ind_above)
         m = np.zeros_like(ind_above, dtype=np.float64)
@@ -175,8 +175,10 @@ class StefanStratigraphy(Stratigraphy):
                                     high=self.wsat_params['high_below'], size=(self.N,))
         np.putmask(sat, ind_above, sat_above[:, np.newaxis] * np.ones_like(sat))
         np.putmask(sat, ind_below, sat_below[:, np.newaxis] * np.ones_like(sat))
-        w = (1 - e - m - o) * sat
-        return m, o, w
+        iw = (1 - e - m - o) * sat
+        i = iw * frozen_fraction
+        w = iw * (1 - frozen_fraction)
+        return m, o, i, w
 
     def _draw_n_factor(self):
         beta = self.rs.beta(self.n_factor_params['alphabeta'],
@@ -186,14 +188,14 @@ class StefanStratigraphy(Stratigraphy):
         return n_factor
 
     def _thermal_conductivity_thawed(self):
-        if any([con not in self.stratigraphy for con in ['m', 'o', 'w']]):
+        if any([con not in self.stratigraphy for con in ['m', 'o', 'w', 'i']]):
             raise AttributeError('Stratigraphy needs to be assigned first')
         # Cosenza; neglect air
         depthf = (1 - self.stratigraphy['e'])
         # actually each constituent should be divided by depthf
         k = (((self.constants['km']) ** 0.5 * self.stratigraphy['m'] +
              (self.constants['ko']) ** 0.5 * self.stratigraphy['o'] +
-             (self.constants['kw']) ** 0.5 * self.stratigraphy['w']
+             (self.constants['kw']) ** 0.5 * (self.stratigraphy['i'] + self.stratigraphy['w'])
              ) ** 2) / depthf
         ikg = k ** (-1)
         ik = np.cumsum(ikg * depthf, axis=1) / np.cumsum(depthf, axis=1)
@@ -215,12 +217,12 @@ class StefanStratigraphy(Stratigraphy):
             warnings.warn("Overwriting stratigraphy", RuntimeWarning)
         e = self._draw_e().astype(self.dtype)
         od = self._draw_organic_depth().astype(self.dtype)
-        m, o, w = self._draw_mow(od, e)
+        m, o, i, w = self._draw_moiw(od, e)
         n_factor = self._draw_n_factor().astype(self.dtype)
         p = self._ancillary()
         self.stratigraphy = {
             'e': e, 'm': m.astype(self.dtype), 'o': o.astype(self.dtype),
-            'w': w.astype(self.dtype), 'od': od, 'n_factor': n_factor, **p}
+            'w': w.astype(self.dtype), 'i': i.astype(self.dtype), 'od': od, 'n_factor': n_factor, **p}
         self.stratigraphy.update(self._thermal_conductivity_thawed())
 
     def params(self):
@@ -229,6 +231,7 @@ class StefanStratigraphy(Stratigraphy):
         return {**self.constants, **self.stratigraphy, 'depth': self.depth, 'dy': self.dy}
 
     def _override_stratigraphy(self):
+        # helper function for prescribed classes
         self.stratigraphy['od'] = (
             0.20 * np.ones_like(self.stratigraphy['od']))
         self.stratigraphy['n_factor'] = (
@@ -245,10 +248,10 @@ class StefanStratigraphy(Stratigraphy):
         np.putmask(o, ind_below, (1 - e) * self.soil_params['organic_below'])
         np.putmask(sat, ind_above, 0.6 * np.ones_like(sat))
         np.putmask(sat, ind_below, 0.9 * np.ones_like(sat))
-        w = (1 - e - m - o) * sat
-        w = (1 - e - m - o) * sat
+        i = (1 - e - m - o) * sat
+        w = 0 * i
         self.stratigraphy.update({'m': m.astype(self.dtype), 'o': o.astype(self.dtype),
-            'w': w.astype(self.dtype)})
+            'w': w.astype(self.dtype), 'i': i.astype(self.dtype)})
         self.stratigraphy.update(self._thermal_conductivity_thawed())
 
     def replace_e(self, e):
@@ -292,14 +295,85 @@ class StefanStratigraphyPrescribedConstantE(StefanStratigraphyConstantE):
         super().draw_stratigraphy(verbose=verbose)
         super()._override_stratigraphy()
 
+class StefanStratigraphySmoothingSplineTalik(StefanStratigraphySmoothingSpline):
+    def __init__(
+            self, dy=None, depth=None, N=10000, dist=None, ancillary=None, rs=None, seed=1,
+            constants=None):
+        super().__init__(
+            dy=dy, depth=depth, N=N, dist=dist, ancillary=ancillary, rs=rs, seed=seed, constants=constants)
+        self.talik_params = dist['talik']
+
+    def _draw_talik(self):
+        print(self.talik_params)
+        tp = self.talik_params
+        presence = self.rs.binomial(1, tp['probability'], size=(self.N, 1))
+        depth = self.rs.uniform(
+            low=tp['low_depth'], high=tp['high_depth'], size=(self.N, 1))
+        thickness = self.rs.uniform(
+            low=tp['low_thickness'], high=tp['high_thickness'], size=(self.N, 1))
+        _ind_talik = np.logical_and(self._ygrid[np.newaxis,:] >= depth,
+                                   self._ygrid[np.newaxis,:] <= depth + thickness)
+        ind_talik = np.logical_and(_ind_talik, presence)
+        return ind_talik
+    
+    def _draw_e(self, ind_talik):
+        e = super()._draw_e()
+        e *= np.logical_not(ind_talik).astype(np.int64)
+        return e
+
+    def _draw_moiw(self, od, e, ind_talik, frozen_fraction=1.0):
+        if frozen_fraction < 1.0: raise NotImplementedError("Frozen fraction outside talik needs to be 1")
+        m, o, i, w = super()._draw_moiw(od, e, frozen_fraction=frozen_fraction)
+        dw = i * (ind_talik.astype(np.int64)) * (1 - self.talik_params['frozen_fraction'])
+        i -= dw
+        w += dw
+        return m, o, i, w
+         
+    def draw_stratigraphy(self, verbose=True):
+        if len(self.stratigraphy) > 0 and verbose:
+            warnings.warn("Overwriting stratigraphy", RuntimeWarning)
+        ind_talik = self._draw_talik()
+        e = self._draw_e(ind_talik).astype(self.dtype)
+        od = self._draw_organic_depth().astype(self.dtype)
+        m, o, i, w = self._draw_moiw(od, e, ind_talik)
+        n_factor = self._draw_n_factor().astype(self.dtype)
+        p = self._ancillary()
+        self.stratigraphy = {
+            'e': e, 'm': m.astype(self.dtype), 'o': o.astype(self.dtype),
+            'w': w.astype(self.dtype), 'i': i.astype(self.dtype), 'od': od, 'n_factor': n_factor, **p}
+        self.stratigraphy.update(self._thermal_conductivity_thawed())
+
 if __name__ == '__main__':
-    strat = StefanStratigraphySmoothingSpline(seed=2, N=100000)
-    print(strat._cpoints())
-#     print(np.sum(strat._spline_basis(), axis=1))
-    e = strat._draw_e()
-    import matplotlib.pyplot as plt
-    ygrid = strat._ygrid
-    plt.plot(ygrid, e[0:50,:].T, alpha=0.5)
-    print(np.std(e[:, 3]), np.std(e[:, 500]))
-#     plt.show()
+
+    dist = {
+        'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
+                 'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+        'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0},
+        'talik': {'low_depth': 0.2, 'high_depth': 0.4, 'probability': 0.8, 'high_thickness': 0.5,
+                  'low_thickness': 0.2, 'frozen_fraction': 0.1}}
+    strat = StefanStratigraphySmoothingSplineTalik(seed=2, N=16, dist=dist)
+    
+    strat.draw_stratigraphy()
+    from pathlib import Path
+    from analysis import StefanPredictor, PredictionEnsemble
+    from scripts.happyvalley import happyvalley_forcing
+    predictor = StefanPredictor()
+    geom = {'ia': 38.40 / 180 * np.pi}
+    fnforcing = Path('/home/simon/Work/gie/forcing/sagwon/sagwon.csv')
+    dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=2019)
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    predens.predict(dailytemp)
+
+    # print(predens.results['yf'][10, :])
+#     print(strat._cpoints())
+# #     print(np.sum(strat._spline_basis(), axis=1))
+#     e = strat._draw_e()
+#     import matplotlib.pyplot as plt
+#     ygrid = strat._ygrid
+#     plt.plot(ygrid, e[0:50,:].T, alpha=0.5)
+#     print(np.std(e[:, 3]), np.std(e[:, 500]))
+# #     plt.show()
 
