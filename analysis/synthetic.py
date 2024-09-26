@@ -255,23 +255,96 @@ class InversionSimulatorIS(InversionSimulator):
         lw, simobs = np.array(lw_list), np.array(simobs)
         if prior:
             lw = np.ones(lw.shape, dtype=np.float64)
-        return SimInvEnsemble(self, lw, simobs=simobs)        
+        return SimInvEnsembleIS(self, lw, simobs=simobs)        
 
     def inference(self, replicates=10, pathout=None, n_jobs=-1):
         return self.logweights(replicates=replicates, pathout=pathout, n_jobs=n_jobs)
 
 class SimInvEnsemble():
 
-    def __init__(self, invsim, lw, simobs=None):
-        self.lw = lw
-        self.invsim = invsim
-        self.simobs = simobs
+    @abstractmethod
+    def __init__(self, invsim, infres, simobs=None):
+        pass
 
     def predictions(self, param='e', p=None):
         if p is None:
             p = self.invsim.predens.results[param]
         return p
 
+    def prescribed(self, param='e'):
+            return self.invsim.predens_sim.results[param]
+
+    def observed(self, replicate=None):
+        if replicate is None:
+            return self.simobs
+        else:
+            return self.simobs[replicate, ...]
+
+    def predicted_mean_period(self, indranges, param='e'):
+        return self.invsim.predens._mean_period(self.invsim.predens.results, indranges, param=param)
+
+    def prescribed_mean_period(self, indranges, param='e'):
+        return self.invsim.predens_sim._mean_period(self.invsim.predens_sim.results, indranges, param=param)
+
+    @property
+    def depth(self):
+        return self.invsim.predens.results['depth']
+
+    @property
+    def dy(self):
+        return self.invsim.predens.results['dy']
+
+    @property
+    def ygrid(self):
+        return np.arange(0, self.depth, step=self.dy)
+
+    @property
+    def ind_scenes(self):
+        return self.invsim.ind_scenes
+
+    def export_metrics(self, fnout, param='e', metrics=None, indranges=None):
+        results = {}
+        if metrics is None:
+            metrics = [
+                ('mean',), ('variance',), ('ensemble_quantile',), ('quantile', (0.1, 0.9))]
+        for metric in metrics:
+            mr = self._metric(
+                metric[0], param=param, metric_args=metric[1:], indranges=indranges)
+            results[metric[0]] = (mr, metric[1:])
+        save_object(results, fnout)
+
+    def _metric(self, metric, param='e', metric_args=(), indranges=None):
+        if indranges is None:
+            p = self.predictions(param=param)
+            ref = self.prescribed(param)
+        else:
+            p = self.predicted_mean_period(indranges, param=param)
+            ref = self.prescribed_mean_period(indranges, param=param)
+        if metric == 'mean':
+            return self.mean(p=p)
+        elif metric == 'variance':
+            return self.variance(p=p)
+        elif metric == 'quantile':
+            return self.quantile(metric_args[0], p=p)
+        elif metric == 'ensemble_quantile':
+            return self._ensemble_quantile(p, ref)
+        else:
+            raise NotImplementedError(f'{metric} not known')
+
+    @abstractmethod
+    def mean(self, param='e', p=None, replicate=None):
+        pass
+    
+    @abstractmethod
+    def variance(self, param='e', p=None, replicate=None):
+        pass
+        
+class SimInvEnsembleIS(SimInvEnsemble):
+    def __init__(self, invsim, infres, simobs=None):
+        self.lw = infres
+        self.invsim = invsim
+        self.simobs = simobs
+        
     def moment(self, param='e', replicate=None, power=1, p=None):
         from inference import expectation
         p = self.predictions(param=param, p=p)
@@ -297,6 +370,14 @@ class SimInvEnsemble():
                -self.moment(param=None, replicate=replicate, p=p, power=1) ** 2)
         return var
 
+    def mean(self, param='e', p=None, replicate=None):
+        return self.moment(param=param, p=p, replicate=replicate)        
+        
+    def _ensemble_quantile(self, p, ref):
+        # computes quantile of "truth" with respect to ensemble distribution
+        from inference import ensemble_quantile as eq
+        return eq(p, self.lw, ref)        
+    
     def quantile(
             self, quantiles, param='e', replicate=None, jsim=None, smooth=None, steps=8,
             p=None, method='bisection'):
@@ -309,17 +390,8 @@ class SimInvEnsemble():
         postquant = quant(
             p, lw_, quantiles, method=method, steps=steps,
             normalize=True, smooth=smooth)
-        return postquant
-
-    def prescribed(self, param='e'):
-            return self.invsim.predens_sim.results[param]
-
-    def observed(self, replicate=None):
-        if replicate is None:
-            return self.simobs
-        else:
-            return self.simobs[replicate, ...]
-
+        return postquant    
+    
     def frac_thawed(self, jsim=0, replicate=0):
         yf = self.predictions('yf')[..., self.ind_scenes[-1]]
         from inference.isi import sumlogs
@@ -328,63 +400,4 @@ class SimInvEnsemble():
         w_ = np.exp(lw_)[np.newaxis, :] * np.ones((self.ygrid.shape[0], lw_.shape[0]))
         np.putmask(w_, self.ygrid[:, np.newaxis] > yf[np.newaxis, :], 0)
         frac_thawed = np.sum(w_, axis=1)
-        return frac_thawed
-
-    def predicted_mean_period(self, indranges, param='e'):
-        return self.invsim.predens._mean_period(self.invsim.predens.results, indranges, param=param)
-
-    def prescribed_mean_period(self, indranges, param='e'):
-        return self.invsim.predens_sim._mean_period(self.invsim.predens_sim.results, indranges, param=param)
-
-    @property
-    def depth(self):
-        return self.invsim.predens.results['depth']
-
-    @property
-    def dy(self):
-        return self.invsim.predens.results['dy']
-
-    @property
-    def ygrid(self):
-        return np.arange(0, self.depth, step=self.dy)
-
-    @property
-    def ind_scenes(self):
-        return self.invsim.ind_scenes
-
-    def mean(self, param='e', p=None, replicate=None):
-        return self.moment(param=param, p=p, replicate=replicate)
-
-    def _metric(self, metric, param='e', metric_args=(), indranges=None):
-        if indranges is None:
-            p = self.predictions(param=param)
-            ref = self.prescribed(param)
-        else:
-            p = self.predicted_mean_period(indranges, param=param)
-            ref = self.prescribed_mean_period(indranges, param=param)
-        if metric == 'mean':
-            return self.mean(p=p)
-        elif metric == 'variance':
-            return self.variance(p=p)
-        elif metric == 'quantile':
-            return self.quantile(metric_args[0], p=p)
-        elif metric == 'ensemble_quantile':
-            return self._ensemble_quantile(p, ref)
-        else:
-            raise NotImplementedError(f'{metric} not known')
-
-    def _ensemble_quantile(self, p, ref):
-        # computes quantile of "truth" with respect to ensemble distribution
-        from inference import ensemble_quantile as eq
-        return eq(p, self.lw, ref)
-
-    def export_metrics(self, fnout, param='e', metrics=None, indranges=None):
-        results = {}
-        if metrics is None:
-            metrics = [
-                ('mean',), ('variance',), ('ensemble_quantile',), ('quantile', (0.1, 0.9))]
-        for metric in metrics:
-            mr = self._metric(
-                metric[0], param=param, metric_args=metric[1:], indranges=indranges)
-            results[metric[0]] = (mr, metric[1:])
-        save_object(results, fnout)
+        return frac_thawed    
