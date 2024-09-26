@@ -10,7 +10,7 @@ import datetime
 
 from scripts.pathnames import paths
 from analysis import (
-    StefanPredictor, InversionSimulator, PredictionEnsemble, load_object, enforce_directory)
+    StefanPredictor, InversionSimulatorIS, PredictionEnsemble, load_object, enforce_directory)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
@@ -59,11 +59,11 @@ def toolik_simulation(
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-    invsim = InversionSimulator(predens=predens, predens_sim=predens_sim)
+    invsim = InversionSimulatorIS(predens=predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
     invsim.export(fninvsim)
 
-    invsim.logweights(replicates=replicates, pathout=pathout)
+    invsim.inference(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
     invsim.export_metrics(pathout, param='e', prior=True)
     indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
@@ -99,8 +99,9 @@ def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multipli
 
 def sagwon_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
-    fnforcing = Path('/10TBstorage/Work/gie/forcing/sagwon/sagwon.csv')
-    fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
+    fnforcing =  paths['forcing'] / 'sagwon/sagwon.csv'
+    # fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
+    fnK = paths['stacks']/ 'Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
     pathout = paths['simulation'] / simname
     params_distribution = {
         'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
@@ -137,11 +138,11 @@ def sagwon_simulation(
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-    invsim = InversionSimulator(predens=predens, predens_sim=predens_sim)
+    invsim = InversionSimulatorIS(predens=predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
 
     invsim.export(fninvsim)
-    invsim.logweights(replicates=replicates, pathout=pathout)
+    invsim.inference(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
     invsim.export_metrics(pathout, param='e', prior=True)
     indranges = [(invsim.ind_scenes[-3], invsim.ind_scenes[-1])]
