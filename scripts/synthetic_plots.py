@@ -10,7 +10,7 @@ import numpy as np
 from scripts.pathnames import paths
 from scripts.plotting import prepare_figure, colslist, cmap_e
 from analysis import load_object
-from analysis import InversionSimulator
+from analysis import InversionSimulatorIS
 
 cols = {'est': colslist[2], 'true': colslist[0], 'unc': colslist[2]}
 
@@ -131,7 +131,7 @@ def plot_examples(show_quantile=False):
         ncols=len(instances), nrows=2, sharey=False, sharex='row', figsize=(1.00, 0.72),
         top=0.94, left=0.125, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.31)
-    invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
+    invsim = InversionSimulatorIS.from_file(pathsim / 'invsim.p')
     for jinstance, instance in enumerate(instances):
         axs[0, jinstance].text(
             0.500, 1.040, labels[jinstance], ha='center', va='baseline',
@@ -179,7 +179,7 @@ def plot_examples_exploratory(show_quantile=False):
         top=0.98, left=0.105, right=0.990, bottom=0.140, wspace=0.30,
         hspace=0.35)
     for jinstance, instance in enumerate(instances):
-        invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
+        invsim = InversionSimulatorIS.from_file(pathsim / 'invsim.p')
         sie = invsim.results(pathsim, replicates=(instance.replicate,))
         _plot_example(
             axs[:, jinstance], sie, days=days, jsim=instance.jsim, replicate=0,

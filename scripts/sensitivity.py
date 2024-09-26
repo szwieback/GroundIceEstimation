@@ -9,7 +9,7 @@ import pandas as pd
 import copy
 
 from scripts.pathnames import paths
-from analysis import StefanPredictor, InversionSimulator, PredictionEnsemble, load_object
+from analysis import StefanPredictor, PredictionEnsemble, load_object
 from simulation import (StefanStratigraphyPrescribedConstantE)
 
 def toolik_sensitivity(fnout):

@@ -5,11 +5,10 @@ Created on Aug 11, 2021
 '''
 import numpy as np
 from pathlib import Path
-
+from abc import abstractmethod
 from analysis import save_object, load_object
 
 class InversionSimulator():
-    # hard-coded to Gaussian likelihood with IS
     def __init__(self, predens=None, predens_sim=None, rng=None):
         self.predens = predens
         self.predens_sim = predens_sim
@@ -56,36 +55,6 @@ class InversionSimulator():
         rng_ = self.rng if rng is None else np.random.default_rng(rng)
         return self.predens_sim.extract_predictions(
             self.ind_scenes, C_obs=self.C_obs, rng=rng_)
-
-    def _logweights_single(self, sim_obs_jsim, pred_scenes):
-        from inference import lw_mvnormal, psislw
-        lw = lw_mvnormal(
-            sim_obs_jsim[np.newaxis, ...], self.C_obs[np.newaxis, ...], pred_scenes)
-        lw_ps, _ = psislw(lw)
-        return lw_ps
-
-    def _logweights(self, sim_obs, pred_scenes):
-        from inference import lw_mvnormal, psislw
-        _C_obs = np.broadcast_to(self.C_obs, (sim_obs.shape[0],) + self.C_obs.shape)
-        lw = lw_mvnormal(
-            sim_obs, _C_obs, pred_scenes)
-        lw_ps, _ = psislw(lw)
-        return lw_ps
-
-    def logweights(self, replicates=10, pathout=None, n_jobs=-1):
-        if pathout is None:
-            pathout = Path.cwd()
-            import warnings
-            warnings.warn(f'Storing data in {pathout}')
-        pred_scenes = self.predictions_scenes
-        child_states = self.rng.bit_generator._seed_seq.spawn(replicates)
-        def _export(r):
-            sim_obs_r = self.simulated_observations(rng=child_states[r])
-            lw_r = self._logweights(sim_obs_r, pred_scenes)
-            save_object(lw_r, self.filename_sim(pathout, r))
-            save_object(sim_obs_r, self.filename_simobs(pathout, r))
-        from joblib import Parallel, delayed
-        Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in range(replicates))
 
     def export(self, fnout):
         isdict = {
@@ -143,22 +112,18 @@ class InversionSimulator():
         rstr = '' if r is None else f'_{r}'
         return pathout / f'metrics{suffix_}{rstr}.p'
 
-    def results(self, pathout, prior=False, replicates=None):
-        lw_list = []
-        simobs = []
-        for r in self._replicate_generator(pathout, replicates):
-            lw_r = load_object(self.filename_sim(pathout, r))
-            lw_list.append(lw_r)
-            simobs.append(load_object(self.filename_simobs(pathout, r)))
-        lw, simobs = np.array(lw_list), np.array(simobs)
-        if prior:
-            lw = np.ones(lw.shape, dtype=np.float64)
-        return SimInvEnsemble(self, lw, simobs=simobs)
-
     def _suffix(self, param, indranges, prior):
         suffix = (param,) if indranges is None else (param, 'indranges')
         if prior: suffix = suffix + ('prior',)
         return suffix
+
+    @abstractmethod
+    def inference(self, replicates=10, pathout=None, n_jobs=-1):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def results(self, pathout, prior=False, replicates=None):
+        raise NotImplementedError()
 
     def export_metrics(
             self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None,
@@ -247,6 +212,53 @@ class InversionSimulator():
                     self.filename_metrics(pathout, r, suffix=suffix).unlink()
                 except:
                     pass
+
+class InversionSimulatorIS(InversionSimulator):   
+    
+    def _logweights_single(self, sim_obs_jsim, pred_scenes):
+        from inference import lw_mvnormal, psislw
+        lw = lw_mvnormal(
+            sim_obs_jsim[np.newaxis, ...], self.C_obs[np.newaxis, ...], pred_scenes)
+        lw_ps, _ = psislw(lw)
+        return lw_ps
+
+    def _logweights(self, sim_obs, pred_scenes):
+        from inference import lw_mvnormal, psislw
+        _C_obs = np.broadcast_to(self.C_obs, (sim_obs.shape[0],) + self.C_obs.shape)
+        lw = lw_mvnormal(
+            sim_obs, _C_obs, pred_scenes)
+        lw_ps, _ = psislw(lw)
+        return lw_ps
+
+    def logweights(self, replicates=10, pathout=None, n_jobs=-1):
+        if pathout is None:
+            pathout = Path.cwd()
+            import warnings
+            warnings.warn(f'Storing data in {pathout}')
+        pred_scenes = self.predictions_scenes
+        child_states = self.rng.bit_generator._seed_seq.spawn(replicates)
+        def _export(r):
+            sim_obs_r = self.simulated_observations(rng=child_states[r])
+            lw_r = self._logweights(sim_obs_r, pred_scenes)
+            save_object(lw_r, self.filename_sim(pathout, r))
+            save_object(sim_obs_r, self.filename_simobs(pathout, r))
+        from joblib import Parallel, delayed
+        Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in range(replicates))
+
+    def results(self, pathout, prior=False, replicates=None):
+        lw_list = []
+        simobs = []
+        for r in self._replicate_generator(pathout, replicates):
+            lw_r = load_object(self.filename_sim(pathout, r))
+            lw_list.append(lw_r)
+            simobs.append(load_object(self.filename_simobs(pathout, r)))
+        lw, simobs = np.array(lw_list), np.array(simobs)
+        if prior:
+            lw = np.ones(lw.shape, dtype=np.float64)
+        return SimInvEnsemble(self, lw, simobs=simobs)        
+
+    def inference(self, replicates=10, pathout=None, n_jobs=-1):
+        return self.logweights(replicates=replicates, pathout=pathout, n_jobs=n_jobs)
 
 class SimInvEnsemble():
 

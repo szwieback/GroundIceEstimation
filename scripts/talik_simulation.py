@@ -1,4 +1,4 @@
-from analysis import StefanPredictor, PredictionEnsemble, InversionSimulator, enforce_directory
+from analysis import StefanPredictor, PredictionEnsemble, InversionSimulatorIS, enforce_directory
 from simulation import StefanStratigraphySmoothingSplineTalik
 from scripts.pathnames import paths
 from scripts.synthetic_simulation import sagwon_covariance, sagwon_forcing
@@ -53,11 +53,11 @@ def talik_synthetic(
     predens, predensf = talik_simulation(N=N)
     predens_sim, predensf_sim = talik_simulation(N=Nsim, seed=654)
     _predens = predensf if '_frozen' in simname else predens
-    invsim = InversionSimulator(predens=_predens, predens_sim=predens_sim)
+    invsim = InversionSimulatorIS(predens=_predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
 
     invsim.export(fninvsim)
-    invsim.logweights(replicates=replicates, pathout=pathout)
+    invsim.inference(replicates=replicates, pathout=pathout)
     invsim.export_metrics(pathout, param='e')
     invsim.export_metrics(pathout, param='e', prior=True)
     indranges = [(invsim.ind_scenes[-3], invsim.ind_scenes[-1])]

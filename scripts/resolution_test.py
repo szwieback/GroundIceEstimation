@@ -3,7 +3,7 @@ import numpy as np
 from scripts.pathnames import paths
 from scripts.sensitivity import compute_sensitivity
 from analysis import (
-    StefanPredictor, InversionSimulator, PredictionEnsemble, enforce_directory, load_object, save_object)
+    StefanPredictor, InversionSimulatorIS, PredictionEnsemble, enforce_directory, load_object, save_object)
 from simulation import (StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
 def resolution_scenario(fnout=None, overwrite=False):
@@ -58,7 +58,7 @@ def plot_inversion(meta, pathout, N_ens=20, fnout=None):
     cl = ['#777777', '#eeeeee']
     for jscen in range(Nscen):
         pathsim = pathout / str(jscen)
-        invsim = InversionSimulator.from_file(pathsim / 'invsim.p')
+        invsim = InversionSimulatorIS.from_file(pathsim / 'invsim.p')
         invres = invsim.results(pathsim)
         lw = invres.lw[0, 0,:]
         ind_ens = np.argsort(lw)[-N_ens:]
@@ -125,11 +125,11 @@ def resolution_inversion(
         _pathout = pathout / str(jscen)
         fninvsim = _pathout / 'invsim.p'
         if overwrite or not fninvsim.exists():
-            invsim = InversionSimulator(predens=predens, predens_sim=meta['predens_sim'][jscen])
+            invsim = InversionSimulatorIS(predens=predens, predens_sim=meta['predens_sim'][jscen])
             invsim.register_observations(ind_scenes, C_obs)
             enforce_directory(fninvsim)
             invsim.export(fninvsim)
-            invsim.logweights(replicates=replicates, pathout=_pathout)
+            invsim.inference(replicates=replicates, pathout=_pathout)
             invsim.export_metrics(_pathout, param='e')
 
 if __name__ == '__main__':

@@ -12,7 +12,6 @@ from collections import namedtuple
 
 Mmap = namedtuple('Mmap', ('filename', 'dtype', 'shape'))
 
-# clean memory leaks: rm -r /dev/shm/job*
 def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
     if len(frac_thawed.shape) > 2:
         ft = np.reshape(frac_thawed, (-1, frac_thawed.shape[-1]))
