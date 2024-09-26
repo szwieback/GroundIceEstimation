@@ -319,10 +319,10 @@ class SimInvEnsemble():
         return frac_thawed
 
     def predicted_mean_period(self, indranges, param='e'):
-        return self.invsim.predens.mean_period(indranges, param=param)
+        return self.invsim.predens._mean_period(self.invsim.predens.results, indranges, param=param)
 
     def prescribed_mean_period(self, indranges, param='e'):
-        return self.invsim.predens_sim.mean_period(indranges, param=param)
+        return self.invsim.predens_sim._mean_period(self.invsim.predens_sim.results, indranges, param=param)
 
     @property
     def depth(self):
