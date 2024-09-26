@@ -700,7 +700,8 @@ def export_index(path0, config, fnoutdict):
         save_geotiff(e_res[ftype][np.newaxis, ...], geospatial=geospatial_proc, fnout=fnoutdict[ftype])
         print(fnoutdict[ftype])
 
-def plot_index(config, path0, fnls, fnout=None, _cmap=None):
+def plot_index(
+        config, path0, fnls, fnout=None, _cmap=None, transect=True, focus_region=False, reference=False):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
     from matplotlib import cm
     from matplotlib.colors import Normalize
@@ -729,25 +730,27 @@ def plot_index(config, path0, fnls, fnout=None, _cmap=None):
     axs[1].scatter(
         rc_cores[1,:], rc_cores[0,:], c=c_core, s=2, edgecolors='none')
     # show focus region
-    gss = geospatial_subset.shape
-    rc_subset = np.array([[0, 0], [gss[0], 0], [gss[0], gss[1]], [0, gss[1]]]).T
-    xy_subset = geospatial_subset.xy(rc_subset)
-    rcp = geospatial_proc.rowcol(xy_subset, crs=geospatial_subset.crs)
-    c_subset = colslist[2]
-    for js in range(rcp.shape[1]):
-        je = (js + 1) % (rcp.shape[1])
-        axs[1].plot(
-            (rcp[1, js], rcp[1, je]), (rcp[0, js], rcp[0, je]), c=c_subset, lw=0.8)
-    txt = axs[1].text(0.86, 0.43, 'subset', c=c_subset, transform=axs[1].transAxes)
-    txt.set_path_effects(
-        [path_effects.Stroke(linewidth=1.5, foreground='#333333'), path_effects.Normal()])
+    if focus_region:
+        gss = geospatial_subset.shape
+        rc_subset = np.array([[0, 0], [gss[0], 0], [gss[0], gss[1]], [0, gss[1]]]).T
+        xy_subset = geospatial_subset.xy(rc_subset)
+        rcp = geospatial_proc.rowcol(xy_subset, crs=geospatial_subset.crs)
+        c_subset = colslist[2]
+        for js in range(rcp.shape[1]):
+            je = (js + 1) % (rcp.shape[1])
+            axs[1].plot(
+                (rcp[1, js], rcp[1, je]), (rcp[0, js], rcp[0, je]), c=c_subset, lw=0.8)
+        txt = axs[1].text(0.86, 0.43, 'subset', c=c_subset, transform=axs[1].transAxes)
+        txt.set_path_effects(
+            [path_effects.Stroke(linewidth=1.5, foreground='#333333'), path_effects.Normal()])
 
     # show profile
-    from scripts.plotting import add_arrow_line
-    rc_profile = geospatial_proc.rowcol(np.array(profile).T, crs='EPSG:4326')
-    add_arrow_line(
-        axs[1], rc_profile, c='#f35092', hwidth=12, hlength=18, pos_frac=[0.75, 0.30], label='T',
-        dlabel=(-10, 30))
+    if transect:
+        from scripts.plotting import add_arrow_line
+        rc_profile = geospatial_proc.rowcol(np.array(profile).T, crs='EPSG:4326')
+        add_arrow_line(
+            axs[1], rc_profile, c='#f35092', hwidth=12, hlength=18, pos_frac=[0.75, 0.30], label='T',
+            dlabel=(-10, 30))
 
     for jax, ax in enumerate(axs.flatten()):
         ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
@@ -755,7 +758,8 @@ def plot_index(config, path0, fnls, fnout=None, _cmap=None):
         txt = ax.text(0.01, 0.02, label, ha='left', va='baseline', c='#dddddd', transform=ax.transAxes)
 
     c, lw, ec, s = 'none', 0.5, 'w', 3
-    axs[0].scatter(rc_ref[1,:], rc_ref[0,:], c=c, s=s, linewidths=lw, edgecolors=ec)
+    if reference:
+        axs[0].scatter(rc_ref[1,:], rc_ref[0,:], c=c, s=s, linewidths=lw, edgecolors=ec)
     cax_left, cax_height, cax_top = 0.04, 0.06, -0.04
     cax = axs[0].inset_axes((cax_left, cax_top - cax_height, 0.40, cax_height))
     cbar = fig.colorbar(
@@ -910,6 +914,10 @@ if __name__ == '__main__':
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
     # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
+    plot_index(
+        configs[0], path0, fnls, transect=False, focus_region=False, reference=False, 
+        fnout=pathfig / 'index_pres.pdf')
+
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)
-    plot_graphical_abstract(configs[0], path0, fnout=pathfig / 'graphabs.pdf')
+    # plot_graphical_abstract(configs[0], path0, fnout=pathfig / 'graphabs.pdf')
