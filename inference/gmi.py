@@ -34,6 +34,7 @@ def _condition_gm(
         method_condition='square_root'):
     # method_condition: 'square_root' or 'full'
     # (latter does not handle nonpos-def matrices, mainly as external check)
+    # conditional distribution of Gaussian mixture component k, including updated (nonnormalized) weight
     mu = gm.means_
     Sigma = gm.covariances_
     pi = gm.weights_
@@ -69,39 +70,27 @@ def _condition_gm(
         prod = np.einsum('mqp, mq -> mp', U_invT_k, y_obs - y_k_prior)
         maha = -0.5 * np.sum(prod ** 2, axis=1)
         logpi_p_k = np.log(pi[k]) + maha + logdetfac + normfac
-    elif method_condition == 'full':
+    elif method_condition in ('full', 'unobserved'):
+        # for checking; does not handle eigenvalues near or < 0 well
         y_k_prior = mu[k, q_y:]
-        Sigma_k_off = Sigma[k,:, q_y:]
-        Sigma_k_obs = Sigma[k, q_y:, q_y:] + C_obs            
+        # only compute for idnices up to q_y if unobserved
+        sl = slice(None, None) if method_condition == 'full' else slice(None, q_y)
+        Sigma_k_off = Sigma[k,sl, q_y:]
+        # adding observation covariance (works if observation noise is Gaussian)
+        Sigma_k_obs = Sigma[k, q_y:, q_y:] + C_obs
         Sigma_k_obs_inv = np.linalg.pinv(Sigma_k_obs, rcond=cond_thresh)
-        mu_p_k = mu[np.newaxis, k,:] + np.einsum(
-            'pb, mbc, mc -> mp', Sigma_k_off, Sigma_k_obs_inv, y_obs - y_k_prior)
-        Sigma_p_k = Sigma[np.newaxis, k, ...] - np.einsum(
-            'pb, mbc, dc -> mpd', Sigma_k_off, Sigma_k_obs_inv, Sigma_k_off)
-        log_p_y_obs = [multivariate_normal.logpdf(
-                y_obs[m, ...], y_k_prior, Sigma_k_obs[m, ...], allow_singular=True)
-            for m in range(M)]
-        logpi_p_k = np.log(pi[k]) + log_p_y_obs
-    elif method_condition == 'unobserved':
-        y_k_prior = mu[k, q_y:]
-        Sigma_k_off = Sigma[k,:q_y, q_y:]
-        Sigma_k_obs = Sigma[k, q_y:, q_y:] + C_obs            
-        Sigma_k_obs_inv = np.linalg.pinv(Sigma_k_obs, rcond=cond_thresh)
+        # a few shortcuts
         dy = y_obs - y_k_prior
-        mu_p_k = mu[np.newaxis, k,:q_y] + np.einsum(
-            'pb, mbc, mc -> mp', Sigma_k_off, Sigma_k_obs_inv, dy)
-        Sigma_p_k = Sigma[np.newaxis, k, :q_y, :q_y] - np.einsum(
-            'pb, mbc, dc -> mpd', Sigma_k_off, Sigma_k_obs_inv, Sigma_k_off)
-        log_p_y_obs = - 0.5 * (
+        mu_k = mu[np.newaxis, k, sl]
+        Sigma_k = Sigma[np.newaxis, k, sl, sl]
+        # update mu and Sigma using standard mv normal 
+        mu_p_k = mu_k + np.einsum('pb, mbc, mc -> mp', Sigma_k_off, Sigma_k_obs_inv, dy)
+        Sigma_p_k = Sigma_k - np.einsum('pb, mbc, dc -> mpd', Sigma_k_off, Sigma_k_obs_inv, Sigma_k_off)
+        # compute new weight for Gaussian mixture (not normalzied yet)
+        log_p_y_obs = -0.5 * (
             P * np.log(2 * np.pi) + np.linalg.slogdet(Sigma_k_obs)[1]
-            + np.einsum('mc, md, mcd -> m', dy, dy, Sigma_k_obs_inv))
-
-        # log_p_y_obs2 = [multivariate_normal.logpdf(
-        #         y_obs[m, ...], y_k_prior, Sigma_k_obs[m, ...], allow_singular=True)
-        #     for m in range(M)]
-        
+            +np.einsum('mc, md, mcd -> m', dy, dy, Sigma_k_obs_inv))
         logpi_p_k = np.log(pi[k]) + log_p_y_obs
-
     else:
         raise NotImplementedError
 
@@ -134,6 +123,7 @@ def posterior_gm_mvnormal(
 
     ind_invalid = np.any(np.isnan(logpi_p), axis=0)
     logpi_p[:, ind_invalid] = 0.0
+    # normalize weights
     pi_p = np.exp(logpi_p - sumlogs(logpi_p, axis=0)[np.newaxis, ...])
     mu_p[:, ind_invalid] = np.nan
     Sigma_p[:, ind_invalid] = np.nan
@@ -167,9 +157,8 @@ if __name__ == '__main__':
     y_obs[...] += parm0[np.newaxis,:] * H
     C_obs = np.zeros((M, P, P))
     C_obs[:, ...] = sigma_obs ** 2 * np.eye(P)[np.newaxis, ...]
-    mu_p, Sigma_p, pi_p = posterior_gm_mvnormal(y_obs, C_obs, gm)
+    mu_p, Sigma_p, pi_p = posterior_gm_mvnormal(y_obs, C_obs, gm, method_condition='full')
     mu_pu, Sigma_pu, pi_pu = posterior_gm_mvnormal(y_obs, C_obs, gm, method_condition='unobserved')  # need to cut this down
-
 
     # print(Sigma_pu[:, :, 0, 0] - Sigma_p[:, :, 0, 0])
     print(pi_p - pi_pu)
@@ -177,8 +166,6 @@ if __name__ == '__main__':
     # mu, Sigma = posterior_moments(mu_p, Sigma_p, pi_p)
     # print(mu_p.shape, mu.shape)
 
-    # replace log_p_y_obs
     # add square root smaller subset
-    # refactor posterior function
-    # check whether adding C_obs is permissible [should be]
-    
+    # document properly 
+
