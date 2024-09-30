@@ -53,13 +53,12 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     # xy_ref = np.array([-164.79600, 67.8700])[:, np.newaxis]
     # ll, ur = (-164.8660, 67.8400), (-164.7185, 67.8600)
     ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
-    
+
     N = 10000
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
-        InversionResults)
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionResultsIS)
 
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
@@ -68,11 +67,11 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
     assert geospatial == geospatial_K
     from analysis.ioput import save_geotiff
-    
+
     # save_geotiff(s_obs - s_obs[4, ...][np.newaxis, ...], geospatial, pathout / 's_obs_late.tif')
-    
+
     dailytemp, ind_scenes = kivalina_forcing(folder_forcing, year=year)
-    
+
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
@@ -82,13 +81,13 @@ def process_kivalina(year=2019, rmethod='hadamard'):
     data = {'s_obs': s_obs, 'K': K}
     for dname in data.keys():
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
     ir.save(pathout / 'ir.p')
-    ip.delete_weight_files(pathout)
-    ir = InversionResults.from_file(pathout / 'ir.p')
-    
+    ip.delete_temporary(pathout)
+    ir = InversionResultsIS.from_file(pathout / 'ir.p')
+
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
         ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),

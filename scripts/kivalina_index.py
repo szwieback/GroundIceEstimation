@@ -11,9 +11,9 @@ from collections import namedtuple
 
 from forcing import load_forcing_merra_subset, parse_dates, ind_TDD_exceedance
 from analysis import (save_object, load_object, read_K, read_geotiff_geospatial,
-    RationalQuadraticSepDiagCovMV, add_nugget, length_conversion, spatial_referencing, InversionProcessor,
-    StefanPredictor, PredictionEnsemble, assemble_tril, InversionResultsMmap,
-    MulticlassInversionResultsMmap, MulticlassPredictionEnsemble)
+    RationalQuadraticSepDiagCovMV, add_nugget, length_conversion, spatial_referencing, InversionProcessorIS,
+    StefanPredictor, PredictionEnsemble, assemble_tril, InversionResultsISMmap,
+    MulticlassInversionResultsISMmap, MulticlassPredictionEnsemble)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 
@@ -108,15 +108,15 @@ def process_index_kivalina(
         # ll, ur = (-164.8200, 67.8370), (-164.7185, 67.8600)
         # for dname in data:
         #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
         ind_scenes, data['s_obs'], _K, pathout=pathout, n_jobs=-1, overwrite=overwrite, memory=False)
 
     ir.save(pathout / 'ir.p')
-    ip.delete_weight_files(pathout)
+    ip.delete_temporary(pathout)
 
-    ir = InversionResultsMmap.from_file(pathout / 'ir.p')
+    ir = InversionResultsISMmap.from_file(pathout / 'ir.p')
     expecs = [
         ('yf', 'mean'), ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
@@ -189,16 +189,16 @@ def process_index_kivalina_ecotype(
     # ll, ur = (-164.4097, 67.8059), (-164.3701, 67.8192)
     # for dname in data:
     #     data[dname], geospatial_crop = geospatial_unw.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
     _K = np.moveaxis(assemble_tril(np.moveaxis(data['K'], 0, -1)), (0, 1), (-2, -1))
     ir = ip.results(
         ind_scenes, data['s_obs'], _K, ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=overwrite,
         memory=False)
     
     ir.save(pathout / 'ir.p')
-    ip.delete_weight_files(pathout)
+    ip.delete_temporary(pathout)
     
-    ir = MulticlassInversionResultsMmap.from_file(pathout / 'ir.p')
+    ir = MulticlassInversionResultsISMmap.from_file(pathout / 'ir.p')
     expecs = [
         ('yf', 'mean'), ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]

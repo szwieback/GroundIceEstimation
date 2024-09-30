@@ -6,7 +6,7 @@ Created on Sep 19, 2022
 from pathlib import Path
 import numpy as np
 
-from analysis import Geospatial, save_geotiff, save_object, load_object, InversionResults
+from analysis import Geospatial, save_geotiff, save_object, load_object, InversionResultsIS
 
 def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelength=0.055):
     from scipy.ndimage import binary_dilation, binary_opening, binary_closing
@@ -64,7 +64,7 @@ def plot_kivalina(fnout=None, overwrite=False):
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3
 
-    ir = InversionResults.from_file(pathres / 'ir.p')
+    ir = InversionResultsIS.from_file(pathres / 'ir.p')
     geospatial = ir.geospatial
     ygrid = ir.ygrid
     save_object(geospatial, pathres / 'geospatial.p')
@@ -477,7 +477,7 @@ def plot_kivalina_slide(fnout=None, overwrite=False):
     upscale = 16
     wavelength, thresh = 0.055, 4.8e-3
 
-    ir = InversionResults.from_file(pathres / 'ir.p')
+    ir = InversionResultsIS.from_file(pathres / 'ir.p')
     geospatial = ir.geospatial
     ygrid = ir.ygrid
 

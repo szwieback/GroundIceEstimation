@@ -7,7 +7,7 @@ Created on Oct 5, 2022
 import numpy as np
 from pathlib import Path
 
-from analysis import load_object, save_object, InversionResults, read_K, MulticlassInversionResults
+from analysis import load_object, save_object, InversionResultsIS, read_K, MulticlassInversionResultsIS
 from scripts.kivalina_analysis import resample_dem
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
@@ -34,9 +34,9 @@ def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True
     fnygrid = pathres / 'ygrid.p'
     if not fngeospatial.exists() or not fnygrid.exists() or overwrite:
         try:
-            ir = InversionResults.from_file(pathres / 'ir.p')
+            ir = InversionResultsIS.from_file(pathres / 'ir.p')
         except:
-            ir = MulticlassInversionResults.from_file(pathres / 'ir.p')
+            ir = MulticlassInversionResultsIS.from_file(pathres / 'ir.p')
         geospatial = ir.geospatial
         ygrid = ir.ygrid
         save_object(geospatial, fngeospatial)

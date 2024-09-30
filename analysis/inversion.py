@@ -9,6 +9,8 @@ from analysis import enforce_directory, MulticlassPredictionEnsemble
 import numpy as np
 from pathlib import Path
 from collections import namedtuple
+from abc import abstractmethod
+import glob
 
 Mmap = namedtuple('Mmap', ('filename', 'dtype', 'shape'))
 
@@ -29,7 +31,7 @@ def thaw_depth(frac_thawed, ygrid, frac=0.5, return_indices=False):
         return td
 
 class InversionProcessor():
-    # hard-coded Gaussian PSIS
+    # abstract class
     # uses the same ensemble but different C_obs
     def __init__(self, predens=None, geospatial=None, batch_size=1024):
         self.predens = predens
@@ -40,19 +42,6 @@ class InversionProcessor():
         s_pred = self.predens.extract_predictions(
             ind_scenes, C_obs=_C_obs, ec=ec, rng=None)  # hardcoded seed for now
         return s_pred
-
-    def _logweights_single(self, ind_scenes, _s_obs, _C_obs, _ec=None, normalize=False):
-        from inference import lw_mvnormal, psislw, _normalize
-        try:
-            s_pred = self._simulated_observations_single(ind_scenes, _C_obs, ec=_ec)
-            if np.count_nonzero(np.isnan(_s_obs)) > 0: raise ValueError('Cannot handle NaN')
-            lw = lw_mvnormal(
-                _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
-            lw_ps, _ = psislw(lw)
-            lw_ps = _normalize(lw_ps, normalize=normalize)
-        except:
-            lw_ps = np.full((1, self.predens.N), np.nan)
-        return lw_ps
 
     def _filename(self, path0, ftype, number=None, ext='npy'):
         if path0 is None:
@@ -67,6 +56,46 @@ class InversionProcessor():
         except:
             ow = True
         return ow
+
+    @abstractmethod
+    def inference(self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None,
+                  memory=True, overwrite=False, **kwargs):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def results(
+            self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
+            overwrite=False, **kwargs):
+        raise NotImplementedError()
+
+    def delete_temporary(self, pathout):
+        pass
+
+    @property
+    def depth(self):
+        return self.predens.depth
+
+    @property
+    def dy(self):
+        return self.predens.dy
+
+    @property
+    def ygrid(self):
+        return self.predens.ygrid
+
+class InversionProcessorIS(InversionProcessor):
+    def _logweights_single(self, ind_scenes, _s_obs, _C_obs, _ec=None, normalize=False):
+        from inference import lw_mvnormal, psislw, _normalize
+        try:
+            s_pred = self._simulated_observations_single(ind_scenes, _C_obs, ec=_ec)
+            if np.count_nonzero(np.isnan(_s_obs)) > 0: raise ValueError('Cannot handle NaN')
+            lw = lw_mvnormal(
+                _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
+            lw_ps, _ = psislw(lw)
+            lw_ps = _normalize(lw_ps, normalize=normalize)
+        except:
+            lw_ps = np.full((1, self.predens.N), np.nan)
+        return lw_ps
 
     def _logweights_batch(
             self, nbatch, ind_scenes, s_obs_flat, C_obs_flat, ec_flat=None, normalize=False, pathout=None,
@@ -123,27 +152,35 @@ class InversionProcessor():
             outp = Mmap(fnmmap, _lw.dtype, shape)
         return outp
 
-    def delete_weight_files(self, pathout):
+    def delete_temporary(self, pathout):
         if pathout is not None:
-            import glob
             for f in glob.glob(str(self._filename(pathout, 'lw', '*'))):
                 try:
                     Path(f).unlink()
                 except:
                     pass
 
+    def inference(
+            self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True, overwrite=False,
+            **kwargs):
+        _n = kwargs['normalize'] if 'normalize' in kwargs else False
+        return self.logweights(
+            ind_scenes, s_obs, C_obs, ec=ec, n_jobs=n_jobs, normalize=_n, pathout=pathout, memory=memory,
+            overwrite=overwrite)
+
     def results(
-            self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, normalize=False, pathout=None, memory=True,
-            overwrite=False):
+            self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
+            overwrite=False, **kwargs):
+        normalize = kwargs['normalize'] if 'normalize' in kwargs else False
         _lw = self.logweights(
             ind_scenes, s_obs, C_obs, ec=ec, n_jobs=n_jobs, normalize=normalize, pathout=pathout,
             memory=memory, overwrite=overwrite)
         shape = s_obs.shape[1:] + (_lw.shape[-1],)
         if memory:
             if ec is None:
-                return InversionResults(self.predens, np.reshape(_lw, shape), geospatial=self.geospatial)
+                return InversionResultsIS(self.predens, np.reshape(_lw, shape), geospatial=self.geospatial)
             else:
-                return MulticlassInversionResults(
+                return MulticlassInversionResultsIS(
                     self.predens, np.reshape(_lw, shape), ec, geospatial=self.geospatial)
         else:
             # these two should be equivalent, hence simply overwrite tuple
@@ -151,27 +188,16 @@ class InversionProcessor():
             # _lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=shape)
             mmap = Mmap(_lw.filename, _lw.dtype, shape)
             if ec is None:
-                return InversionResultsMmap(self.predens, mmap, geospatial=self.geospatial)
+                return InversionResultsISMmap(self.predens, mmap, geospatial=self.geospatial)
             else:
-                return MulticlassInversionResultsMmap(self.predens, mmap, ec, geospatial=self.geospatial)
-
-    @property
-    def depth(self):
-        return self.predens.depth
-
-    @property
-    def dy(self):
-        return self.predens.dy
-
-    @property
-    def ygrid(self):
-        return self.predens.ygrid
+                return MulticlassInversionResultsISMmap(self.predens, mmap, ec, geospatial=self.geospatial)
 
 class InversionResults():
+    # abstract class
     blocksize_default = 1024
-    def __init__(self, predens, lw, geospatial=None, blocksize=None):
+    def __init__(self, predens, invres, geospatial=None, blocksize=None):
         self.predens = predens
-        self.lw = lw
+        self.invres = invres
         self.geospatial = geospatial
         self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
 
@@ -191,6 +217,93 @@ class InversionResults():
         if p is None:
             p = self.predens.results[param]
         return p
+
+    @property
+    def _dict(self):
+        dictout = {
+            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
+            'blocksize': self.blocksize}
+        return dictout
+
+    def save(self, fnout):
+        from analysis import save_object
+        save_object(self._dict, fnout)
+
+    @classmethod
+    def from_file(cls, fn):
+        from analysis import load_object
+        dictin = load_object(fn)
+        ir = cls(**dictin)
+        return ir
+
+    @abstractmethod
+    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+        raise NotImplementedError()
+
+    def export_expectation(
+            self, pathout, param='e', etype='mean', p=None, fn=None, **kwargs):
+        res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+        if fn is None: fn = f'{param}_{etype}.npy'
+        fnout = pathout / fn
+        np.save(fnout, res)
+
+    def _expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
+        if etype == 'mean':
+            return self._moment(param=param, p=p, normalize=normalize)
+        elif etype in ('var', 'variance'):
+            return self._variance(param=param, p=p, normalize=normalize)
+        elif etype == 'quantile':
+            return self._quantile(kwargs['quantiles'], param=param)
+        elif param in ('frac_thawed'):
+            return self._frac_thawed(ind_scene=kwargs['ind_scene'])
+        else:
+            raise NotImplementedError(f"Expectation type {etype} not recognized.")
+
+    @abstractmethod
+    def _moment(self, param='e', power=1, p=None, **kwargs):
+        raise NotImplementedError()
+    
+    @abstractmethod
+    def _variance(self, param='e', p=None, **kwargs):
+        raise NotImplementedError()
+
+class InversionResultsIS(InversionResults):
+    def __init__(self, predens, invres, geospatial=None, blocksize=None):
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
+
+    @property
+    def lw(self):
+        return self.invres
+
+    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+        normalize = kwargs['normalize'] if 'normalize' in kwargs else True
+        return self._expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
+
+    def _parallel(self, fun, n_jobs=-1, block_size=None):
+        if n_jobs in (0, 1, None):
+            return fun(self.lw)
+        else:
+            from joblib import Parallel, delayed
+            res = np.concatenate(
+                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator(block_size)),
+                axis=0)
+            return res
+
+    def __frac_thawed(self, ind_scene, _lw):
+        from inference import _normalize
+        yf = self.predictions('yf')[..., ind_scene]
+        w_ = np.exp(_normalize(_lw, normalize=True))
+        frac_thawed = np.zeros((self.ygrid.shape[0],) + w_.shape[:-1])
+        # cannot vectorize because of memory issues
+        for jy in range(len(self.ygrid)):
+            valid = (self.ygrid[jy] < yf)[(np.newaxis,) * len(w_[:-1].shape) + (Ellipsis,)]
+            frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
+        return np.moveaxis(frac_thawed, 0, -1)
+
+    def _frac_thawed(self, ind_scene, n_jobs=-1):
+        def _ft(_lw):
+            return self.__frac_thawed(ind_scene, _lw)
+        return self._parallel(_ft, n_jobs=n_jobs)
 
     def _moment(self, param='e', power=1, p=None, normalize=True, n_jobs=-1):
         from inference import expectation
@@ -229,77 +342,10 @@ class InversionResults():
         for _lw in np.array_split(self.lw, ind, axis=0):
             yield _lw  # view to avoid memory issues
 
-    def _parallel(self, fun, n_jobs=-1, block_size=None):
-        if n_jobs in (0, 1, None):
-            return fun(self.lw)
-        else:
-            from joblib import Parallel, delayed
-            res = np.concatenate(
-                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._lw_generator(block_size)),
-                axis=0)
-            return res
+class MulticlassInversionResultsIS(InversionResultsIS):
 
-    def __frac_thawed(self, ind_scene, _lw):
-        from inference import _normalize
-        yf = self.predictions('yf')[..., ind_scene]
-        w_ = np.exp(_normalize(_lw, normalize=True))
-        frac_thawed = np.zeros((self.ygrid.shape[0],) + w_.shape[:-1])
-        # cannot vectorize because of memory issues
-        for jy in range(len(self.ygrid)):
-            valid = (self.ygrid[jy] < yf)[(np.newaxis,) * len(w_[:-1].shape) + (Ellipsis,)]
-            frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
-        return np.moveaxis(frac_thawed, 0, -1)
-
-    def _frac_thawed(self, ind_scene, n_jobs=-1):
-        def _ft(_lw):
-            return self.__frac_thawed(ind_scene, _lw)
-        return self._parallel(_ft, n_jobs=n_jobs)
-
-    def _expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
-        if etype == 'mean':
-            return self._moment(param=param, p=p, normalize=normalize)
-        elif etype in ('var', 'variance'):
-            return self._variance(param=param, p=p, normalize=normalize)
-        elif etype == 'quantile':
-            return self._quantile(kwargs['quantiles'], param=param)
-        elif param in ('frac_thawed'):
-            return self._frac_thawed(ind_scene=kwargs['ind_scene'])
-        else:
-            raise NotImplementedError(f"Expectation type {etype} not recognized.")
-
-    def expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
-        return self._expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
-
-    def export_expectation(
-            self, pathout, param='e', etype='mean', p=None, normalize=True, fn=None,
-            **kwargs):
-        res = self.expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
-        if fn is None: fn = f'{param}_{etype}.npy'
-        fnout = pathout / fn
-        np.save(fnout, res)
-
-    @property
-    def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
-            'blocksize': self.blocksize}
-        return dictout
-
-    def save(self, fnout):
-        from analysis import save_object
-        save_object(self._dict, fnout)
-
-    @classmethod
-    def from_file(cls, fn):
-        from analysis import load_object
-        dictin = load_object(fn)
-        ir = cls(**dictin)  # InversionResults
-        return ir
-
-class MulticlassInversionResults(InversionResults):
-
-    def __init__(self, predens, lw, ec, geospatial=None, blocksize=None):
-        super().__init__(predens, lw, geospatial=geospatial, blocksize=blocksize)
+    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None):
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
         self.ec = ec
@@ -307,34 +353,34 @@ class MulticlassInversionResults(InversionResults):
     @property
     def _dict(self):
         dictout = {
-            'geospatial': self.geospatial, 'lw': self.lw, 'predens': self.predens,
+            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
 
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         _lw = self.lw[ind, ...]
-        return InversionResults(self.predens[cn], _lw, blocksize=self.blocksize)
+        return InversionResultsIS(self.predens[cn], _lw, blocksize=self.blocksize)
 
-    def expectation(self, param='e', etype='mean', p=None, normalize=True, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, **kwargs):
         res = None
         if p is not None: raise ValueError('p input not supported')
         for cn in self.predens.classnames:
             ir, ind = self[cn], (self.ec.flatten() == cn)
-            res_cn = ir._expectation(param=param, etype=etype, p=None, normalize=normalize, **kwargs)
+            res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
             if res is None:
                 res = np.empty((np.product(self.lw.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
             res[ind, ...] = res_cn
         res = np.reshape(res, self.lw.shape[:-1] + res.shape[1:])
         return res
 
-class InversionResultsMmap(InversionResults):
+class InversionResultsISMmap(InversionResults):
 
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False):
-        InversionResults.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
+        InversionResultsIS.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
             self.lwmmap = lwmmap
-            self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+            self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
 
     @property
@@ -361,23 +407,24 @@ class InversionResultsMmap(InversionResults):
 
     @classmethod
     def from_file(cls, fn):
-        return cls(**InversionResultsMmap._dict_from_file(fn))
+        return cls(**InversionResultsISMmap._dict_from_file(fn))
 
-class MulticlassInversionResultsMmap(MulticlassInversionResults):
+class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
 
     def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False):
-        MulticlassInversionResults.__init__(
+        MulticlassInversionResultsIS.__init__(
             self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
+            lwmmap = lwmmap
             self.lwmmap = lwmmap
             if Path(lwmmap.filename).exists():
-                self.lw = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+                self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
 
     @property
     def _dict(self):
         dictout = {
-            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
+            'geospatial': self.geospatial, 'invres': self.lwmmap, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
 
@@ -392,17 +439,17 @@ class MulticlassInversionResultsMmap(MulticlassInversionResults):
         mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
         fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)
         ncum = 0
-        for jrow, _ind in enumerate(ind): # loop to reduce memory footprint
+        for jrow, _ind in enumerate(ind):  # loop to reduce memory footprint
             _n = ncum + np.count_nonzero(_ind)
             fp[ncum:_n, ...] = self.lw[jrow, _ind, ...]
             ncum = _n
         fp.flush()
         del fp
-        ir = InversionResultsMmap(
+        ir = InversionResultsISMmap(
             self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
         return ir
 
     @classmethod
     def from_file(cls, fn):
-        return cls(**InversionResultsMmap._dict_from_file(fn))
+        return cls(**InversionResultsISMmap._dict_from_file(fn))
 

@@ -85,7 +85,7 @@ class GaussianMixtureDistribution():
         return cls(means, cov, weights)
         
     def conditional(self, y_obs, C_obs=None, cond_thresh=1e-6, method_condition='unobserved'):
-        # conditions on the last P variables
+        # conditions on the last P variables, yielding new gaussian mixture model
         # y_obs: last P variables are assumed to be observed directly, disturbed by noise with cov. C_obs
         P = y_obs.shape[1]  # number of observations
         M = y_obs.shape[0]  # number of replicates
@@ -124,6 +124,7 @@ class GaussianMixtureDistribution():
 
     def _condition_component(
             self, k, y_obs, C_obs, V=None, ind_V=None, cond_thresh=1e-6, method_condition='full'):
+        # conditions on component k (posterior mean and variance) + new weight
         P = y_obs.shape[1]  # number of observations
         Q = self.means_.shape[1]  # dimension of prior RV considered
         q_y = Q - P
@@ -160,7 +161,6 @@ class GaussianMixtureDistribution():
             Sigma_p_k[ind_V['invalid'], ...] = np.nan
             logpi_p_k[ind_V['invalid'], ...] = np.nan                        
         elif method_condition in ('full', 'unobserved'):
-            # for checking; does not handle eigenvalues near or < 0 well
             y_k_prior = mu_k[q_y:]
             # only compute for indices up to q_y if unobserved
             sl = slice(None, None) if method_condition == 'full' else slice(None, q_y)
@@ -187,11 +187,13 @@ class GaussianMixtureDistribution():
 
 
     def mean(self, indices=None):
+        # marginal mean (just weighted mean)
         _mu = self.means if indices is None else self.means[..., indices]
         mean = np.einsum('i...k, i... -> ...k', _mu, self.weights)
         return mean
         
     def covariance(self, indices=None):
+        # marginal covariance matrix
         mean = self.mean(indices=indices)
         mu_dev = self.means - mean[np.newaxis, ...]
         Sigmas, pis = self.covariances, self.weights 

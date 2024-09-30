@@ -56,8 +56,8 @@ def process_icecut(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor,
-        InversionResults)
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
+        InversionResultsIS)
 
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
@@ -77,12 +77,12 @@ def process_icecut(year=2019, rmethod='hadamard'):
     data = {'s_obs': s_obs, 'K': K}
     for dname in data.keys():
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
     ir.save(pathout / 'ir.p')
-    ip.delete_weight_files(pathout)
-    ir = InversionResults.from_file(pathout / 'ir.p')
+    ip.delete_temporary(pathout)
+    ir = InversionResultsIS.from_file(pathout / 'ir.p')
 
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
@@ -116,7 +116,8 @@ def process_icecut_ecotype(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessor, MulticlassInversionResults)
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, 
+        MulticlassInversionResultsIS)
     from scripts.ecotypes import reclassify
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
@@ -140,12 +141,12 @@ def process_icecut_ecotype(year=2019, rmethod='hadamard'):
     data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
     for dname in data.keys():
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessor(predens, geospatial=geospatial_crop)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
     ir.save(pathout / 'ir.p')
-    ip.delete_weight_files(pathout)
-    ir = MulticlassInversionResults.from_file(pathout / 'ir.p')
+    ip.delete_temporary(pathout)
+    ir = MulticlassInversionResultsIS.from_file(pathout / 'ir.p')
 
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),

@@ -12,7 +12,7 @@ from rasterio.transform import Affine
 
 from analysis import (
     Geospatial, read_geotiff_geospatial, load_object, read_geotiff, K_from_K_vec, save_object,
-    InversionResultsMmap, MulticlassInversionResultsMmap, assemble_tril)
+    InversionResultsISMmap, MulticlassInversionResultsISMmap, assemble_tril)
 
 path0 = Path('/home/simon/Work/gie/processed/kivalina/index/')
 pathfig = Path('/home/simon/Work/gie/figures/index/')
@@ -375,9 +375,9 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
     axs = [fig.add_axes(rect) for rect in rects]
 
     # try:
-    #     ir = MulticlassInversionResultsMmap.from_file(pathres / 'ir.p')
+    #     ir = MulticlassInversionResultsISMmap.from_file(pathres / 'ir.p')
     # except:
-    #     ir = InversionResultsMmap.from_file(pathres / 'ir.p')
+    #     ir = InversionResultsISMmap.from_file(pathres / 'ir.p')
     # geospatial = ir.geospatial
     # ygrid = ir.ygrid
     # save_object(geospatial, pathres / 'geospatial.p')

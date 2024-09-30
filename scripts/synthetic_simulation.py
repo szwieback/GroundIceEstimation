@@ -10,10 +10,10 @@ import datetime
 
 from scripts.pathnames import paths
 from analysis import (
-    StefanPredictor, InversionSimulatorIS, PredictionEnsemble, load_object, enforce_directory)
+    StefanPredictor, InversionSimulatorIS, InversionSimulatorGM, PredictionEnsemble, load_object,
+    enforce_directory)
 from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+    StefanStratigraphySmoothingSpline, StratigraphyMultiple, StefanStratigraphyConstantE)
 
 def toolik_simulation(
         simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
@@ -98,10 +98,10 @@ def sagwon_covariance(fnK, var_atmo, wavelength=0.055, site=None, C_obs_multipli
     return C_obs
 
 def sagwon_simulation(
-        simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0):
-    fnforcing =  paths['forcing'] / 'sagwon/sagwon.csv'
+        simname, Nsim=500, replicates=250, N=25000, Nbatch=10, C_obs_multiplier=1.0, inversion=None):
+    fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     # fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
-    fnK = paths['stacks']/ 'Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
+    fnK = paths['stacks'] / 'Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
     pathout = paths['simulation'] / simname
     params_distribution = {
         'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
@@ -131,6 +131,10 @@ def sagwon_simulation(
     else:
         raise ValueError(f'Simulation {simname} not known')
 
+    variables = (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),)
+    if inversion is None: inversion = 'is'
+    ism = {'gm': InversionSimulatorGM, 'is': InversionSimulatorIS}[inversion]
+
     fninvsim = pathout / 'invsim.p'
     enforce_directory(fninvsim)
 
@@ -138,16 +142,21 @@ def sagwon_simulation(
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-    invsim = InversionSimulatorIS(predens=predens, predens_sim=predens_sim)
+    invsim = ism(predens=predens, predens_sim=predens_sim)
     invsim.register_observations(ind_scenes, C_obs)
-
+    invsim.register_variables(variables)
     invsim.export(fninvsim)
     invsim.inference(replicates=replicates, pathout=pathout)
-    invsim.export_metrics(pathout, param='e')
-    invsim.export_metrics(pathout, param='e', prior=True)
-    indranges = [(invsim.ind_scenes[-3], invsim.ind_scenes[-1])]
-    invsim.export_metrics(pathout, param='e', indranges=indranges)
-    invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
+    if inversion == 'gm':
+        metrics = [('mean',), ('variance',)]
+        invsim.export_metrics(
+            pathout, param=variables[0][0], indranges=variables[0][1]['indranges'], metrics_ind=metrics)
+    else:
+        invsim.export_metrics(pathout, param='e')
+        invsim.export_metrics(pathout, param='e', prior=True)
+        indranges = [(invsim.ind_scenes[-3], invsim.ind_scenes[-1])]
+        invsim.export_metrics(pathout, param='e', indranges=indranges)
+        invsim.export_metrics(pathout, param='e', indranges=indranges, prior=True)
 
 if __name__ == '__main__':
     N = 10000
@@ -161,8 +170,11 @@ if __name__ == '__main__':
                 # toolik_simulation(
                 #     f'{scenarion}_{accn}_{Nbatch}', N=N, Nsim=Nsim, replicates=replicates,
                 #     Nbatch=Nbatch, C_obs_multiplier=multipliers[accn])
+                # sagwon_simulation(
+                #     f'{scenarion}_{accn}_{Nbatch}_sagwon_indrange', N=N, Nsim=Nsim, Nbatch=Nbatch,
+                #     replicates=replicates, C_obs_multiplier=multipliers[accn])
                 sagwon_simulation(
-                    f'{scenarion}_{accn}_{Nbatch}_sagwon_indrange', N=N, Nsim=Nsim, Nbatch=Nbatch,
-                    replicates=replicates, C_obs_multiplier=multipliers[accn])
+                    f'{scenarion}_{accn}_{Nbatch}_sagwon_indrange_gm', N=N, Nsim=Nsim, Nbatch=Nbatch,
+                    replicates=replicates, C_obs_multiplier=multipliers[accn], inversion='gm')                
 
     # sagwon_simulation('spline_plot_sagwon', Nsim=100, N=N, replicates=5, Nbatch=1)

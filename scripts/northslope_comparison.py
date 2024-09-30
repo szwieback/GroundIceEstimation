@@ -294,10 +294,10 @@ def plot_comparison_2023(fnout=None, overwrite=False):
         fig.savefig(fnout)    
 
 def comparison_thaw_depth(site='happyvalley', year=2022, ind=-1):
-    from analysis import InversionResults, thaw_depth
+    from analysis import InversionResultsIS, thaw_depth
     path_res = Path(f'/home/simon/Work/gie/processed/Dalton_131_363/{site}/{year}/hadamard')
 
-    ir = InversionResults.from_file(path_res / 'ir.p')
+    ir = InversionResultsIS.from_file(path_res / 'ir.p')
     _rc_site = ir.geospatial.rowcol(xy_site[site])[:, 0]
     ir.lw = ir.lw[_rc_site[0], _rc_site[1],:][np.newaxis, ...]
     frac_thawed = ir.frac_thawed(ind_scene=ind)
