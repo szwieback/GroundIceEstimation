@@ -419,7 +419,7 @@ class InversionResults():
         raise NotImplementedError()
 
     def _mean(self, param='e', p=None, **kwargs):
-        self._moment(param=param, power=1, p=p, **kwargs)
+        return self._moment(param=param, power=1, p=p, **kwargs)
 
     def _invres_generator(self, block_size=None):
         if block_size is None:
@@ -476,11 +476,11 @@ class InversionResultsIS(InversionResults):
         mom = self._parallel(__moment, n_jobs=n_jobs)
         return mom
 
-    def _variance(self, param='e', p=None, normalize=True):
+    def _variance(self, param='e', p=None, normalize=True, **kwargs):
         # improvement needed to deal with numerical issues
         p = self.predictions(param=param, p=p)
-        var = (self._moment(param=None, p=p, power=2, normalize=normalize)
-               -self._moment(param=None, p=p, power=1, normalize=normalize) ** 2)
+        var = (self._moment(param=None, p=p, power=2, normalize=normalize, **kwargs)
+               -self._moment(param=None, p=p, power=1, normalize=normalize, **kwargs) ** 2)
         return var
 
     def _quantile(
@@ -570,8 +570,8 @@ class MulticlassInversionResultsIS(InversionResultsIS):
 
     def __getitem__(self, cn):
         ind = (self.ec == cn)
-        _lw = self.lw[ind, ...]
-        return InversionResultsIS(self.predens[cn], _lw, blocksize=self.blocksize)
+        _invres = self.invres[ind, ...]
+        return InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize)
 
     def expectation(self, param='e', etype='mean', p=None, **kwargs):
         res = None
@@ -580,9 +580,41 @@ class MulticlassInversionResultsIS(InversionResultsIS):
             ir, ind = self[cn], (self.ec.flatten() == cn)
             res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
             if res is None:
-                res = np.empty((np.product(self.lw.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
+                res = np.empty((np.product(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
             res[ind, ...] = res_cn
-        res = np.reshape(res, self.lw.shape[:-1] + res.shape[1:])
+        res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
+        return res
+
+class MulticlassInversionResultsGM(InversionResultsGM):
+
+    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, variables=None):
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables)
+        if not issubclass(type(predens), MulticlassPredictionEnsemble):
+            raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
+        self.ec = ec
+
+    @property
+    def _dict(self):
+        dictout = {
+            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
+            'blocksize': self.blocksize, 'ec': self.ec, 'variables': self.variables}
+        return dictout
+
+    def __getitem__(self, cn):
+        ind = (self.ec == cn)
+        _invres = self.invres[ind, ...]
+        return InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize)
+
+    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+        res = None
+        if p is not None: raise ValueError('p input not supported')
+        for cn in self.predens.classnames:
+            ir, ind = self[cn], (self.ec.flatten() == cn)
+            res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
+            if res is None:
+                res = np.empty((np.product(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
+            res[ind, ...] = res_cn
+        res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
         return res
 
 class InversionResultsGMMmap(InversionResultsGM):
@@ -605,7 +637,7 @@ class InversionResultsGMMmap(InversionResultsGM):
     def __del__(self):
         if self.temporary:
             try:
-                Path(self.lwmmap.filename).unlink()
+                Path(self.gmpmmap.filename).unlink()
             except:
                 pass
 

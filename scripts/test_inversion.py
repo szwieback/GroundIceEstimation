@@ -106,7 +106,7 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
-def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
+def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
     path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     pathout = paths['processed'] / f'happyvalley/{year}/ecotype_{rmethod}'
@@ -132,8 +132,8 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
-        MulticlassInversionResultsIS)
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionProcessorGM,
+        MulticlassInversionResultsIS, MulticlassInversionResultsGM)
     from scripts.ecotypes import reclassify
 
     fnunw = path0 / 'unwrapped.geo.tif'
@@ -154,34 +154,46 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
 
-    predictor = StefanPredictor()
-    strats = {sc: StratigraphyMultiple(
-        StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
-        for sc in multiclass_dist}
-    predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
-    predens.predict(dailytemp)
-    data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
-    for dname in data.keys():
-        data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    print(geospatial_crop.shape)
-    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
-    ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
-    ir.save(pathout / 'ir.p')
-    ip.delete_temporary(pathout)
+    if imethod == 'IS':
+        IP, IR = InversionProcessorIS, MulticlassInversionResultsIS
+        kwargs = {}
+    elif imethod == 'GM':
+        IP, IR = InversionProcessorGM, MulticlassInversionResultsGM
+        # IP, IR = InversionProcessorGM, InversionResultsGMMmap
+        kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
+                                ('yf', {'ind': [(ind_scenes[-1])]}))}
 
-    ir = MulticlassInversionResultsIS.from_file(pathout / 'ir.p')
+
+    # predictor = StefanPredictor()
+    # strats = {sc: StratigraphyMultiple(
+    #     StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
+    #     for sc in multiclass_dist}
+    # predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
+    # predens.predict(dailytemp)
+    # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
+    # for dname in data.keys():
+    #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
+    # print(geospatial_crop.shape)
+    # ip = IP(predens, geospatial=geospatial_crop)
+    # ir = ip.results(
+    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
+    # ir.save(pathout / 'ir.p')
+    # ip.delete_temporary(pathout)
+
+    ir = IR.from_file(pathout / 'ir.p')
     ir.blocksize = 64
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
         ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
         ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
+    expecs = [
+        ('e', 'mean'), ('e', 'var')]    
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], n_jobs=6, **kwargs)
 
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
-    process_happyvalley(imethod='GM', year=2023)
-    # process_happyvalley_ecotype(year=2023)
+    # process_happyvalley(imethod='GM', year=2023)
+    process_happyvalley_ecotype(year=2023)
 
