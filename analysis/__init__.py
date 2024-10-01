@@ -9,4 +9,4 @@ from analysis.interferometry import (
 from analysis.inversion import (
     InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, thaw_depth, 
     MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, InversionProcessorGM, 
-    InversionResultsGM)
+    InversionResultsGM, InversionResultsGMMmap)

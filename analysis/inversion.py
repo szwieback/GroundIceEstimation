@@ -273,13 +273,16 @@ class InversionProcessorGM(InversionProcessor):
         else:
             fnmmap = self._filename(pathout, 'gmpmmap')
             _gmp = np.load(self._filename(pathout, self.fname, 0))
-            shape = (_gmp.shape[0], np.sum(np.array(gmp).flatten()), _gmp.shape[2])
+            shape = s_obs.shape[1:] + _gmp.shape[-2:]
             fp = np.memmap(fnmmap, dtype=_gmp.dtype, mode='w+', shape=shape)
             rm, nrm = 0, 0
             for nbatch in range(Nbatch):
                 _gmp = np.load(self._filename(pathout, self.fname, nbatch))
                 nrm = rm + _gmp.shape[0]
-                fp[rm:nrm,:] = _gmp[:,:]
+                # reshaping is very awkward
+                fp.reshape((-1,) + _gmp.shape[1:])[rm:nrm, :, :] = _gmp[...] # should be a view
+                # check whether it worked
+                assert np.sum(np.abs(fp.reshape((-1,) + _gmp.shape[1:])[rm, ...] - _gmp[0, ...])) < 1e-14
                 rm = nrm
             fp.flush()
             outp = Mmap(fnmmap, _gmp.dtype, shape)
@@ -329,18 +332,16 @@ class InversionProcessorGM(InversionProcessor):
                 return InversionResultsGM(
                     self.predens, np.reshape(_gmp, shape), geospatial=self.geospatial,
                     variables=self.variables)
-            else:
-                return MulticlassInversionResultsGM(
-                    self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial)
+            # else:
+            #     return MulticlassInversionResultsGM(
+            #         self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial)
         else:
-            # these two should be equivalent, hence simply overwrite tuple
-            # lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=_lw.shape).reshape(shape)
-            # _lw = np.memmap(_lw.filename, dtype=_lw.dtype, mode='r', shape=shape)
             mmap = Mmap(_gmp.filename, _gmp.dtype, shape)
             if ec is None:
-                return InversionResultsGMMmap(self.predens, mmap, geospatial=self.geospatial)
-            else:
-                return MulticlassInversionResultsGMMmap(self.predens, mmap, ec, geospatial=self.geospatial)
+                return InversionResultsGMMmap(
+                    self.predens, mmap, geospatial=self.geospatial, variables=self.variables)
+            # else:
+            #     return MulticlassInversionResultsGMMmap(self.predens, mmap, ec, geospatial=self.geospatial)
 
 class InversionResults():
     # abstract class
@@ -584,8 +585,43 @@ class MulticlassInversionResultsIS(InversionResultsIS):
         res = np.reshape(res, self.lw.shape[:-1] + res.shape[1:])
         return res
 
-class InversionResultsISMmap(InversionResults):
+class InversionResultsGMMmap(InversionResultsGM):
 
+    def __init__(self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False):
+        InversionResultsGM.__init__(
+            self, predens, None, geospatial=geospatial, blocksize=blocksize, variables=variables)
+        if gmpmmap is not None:
+            self.gmpmmap = gmpmmap
+            self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
+        self.temporary = temporary
+
+    @property
+    def _dict(self):
+        dictout = {
+            'geospatial': self.geospatial, 'gmpmmap': self.gmpmmap, 'predens': self.predens,
+            'blocksize': self.blocksize, 'variables': self.variables}
+        return dictout
+
+    def __del__(self):
+        if self.temporary:
+            try:
+                Path(self.lwmmap.filename).unlink()
+            except:
+                pass
+
+    @staticmethod
+    def _dict_from_file(fn):
+        from analysis import load_object
+        dictin = load_object(fn)
+        if not Path(dictin['gmpmmap'].filename).exists:
+            dictin['gmpmmap'] = None
+        return dictin
+
+    @classmethod
+    def from_file(cls, fn):
+        return cls(**InversionResultsGMMmap._dict_from_file(fn))
+
+class InversionResultsISMmap(InversionResultsIS):
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False):
         InversionResultsIS.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:

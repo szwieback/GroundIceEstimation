@@ -56,7 +56,7 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
 
     from analysis import (
         read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
-        InversionResultsIS, InversionProcessorGM, InversionResultsGM)
+        InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap)
 
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
@@ -78,6 +78,7 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
         kwargs = {}
     elif imethod == 'GM':
         IP, IR = InversionProcessorGM, InversionResultsGM
+        IP, IR = InversionProcessorGM, InversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
                                 ('yf', {'ind': [(ind_scenes[-1])]}))}
 
@@ -92,12 +93,10 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
     ip = IP(predens, geospatial=geospatial_crop, blocksize=128, **kwargs)
     ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, overwrite=True)
+        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, memory=False, overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
-    print(ir.variables)
-
     # expecs = [
     #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
     #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
