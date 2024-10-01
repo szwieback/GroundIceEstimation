@@ -196,7 +196,7 @@ class GaussianMixtureDistribution():
         # marginal covariance matrix
         mean = self.mean(indices=indices)
         mu_dev = self.means - mean[np.newaxis, ...]
-        Sigmas, pis = self.covariances, self.weights 
+        Sigmas, pis = self.covariances[..., indices][..., indices], self.weights
         # from Mode-finding for mixtures of Gaussian distributions
         Sigma = np.einsum(
             'i...kl, i... -> ...kl', Sigmas + mu_dev[..., np.newaxis] * mu_dev[..., np.newaxis,:], pis)

@@ -15,12 +15,12 @@ from scripts.pathnames import paths
 
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
     'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
-ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
+ll, ur = (-148.8300, 69.1600), (-148.7800, 69.1640)
 
 def happyvalley_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
@@ -39,7 +39,7 @@ def happyvalley_forcing(fnforcing, year=2022):
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-def process_happyvalley(year=2019, rmethod='hadamard'):
+def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
     path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     pathout = paths['processed'] / f'happyvalley/{year}/{rmethod}'
@@ -56,16 +56,16 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
 
     from analysis import (
         read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
-        InversionResultsIS)
+        InversionResultsIS, InversionProcessorGM, InversionResultsGM)
 
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
-    
+
     K, geospatial_K = read_K(fnK)
     s_obs, geospatial = read_referenced_motion(
         fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
 
-    if year in (2019, 2022): # remove first acq because still a lot of snow
+    if year in (2019, 2022):  # remove first acq because still a lot of snow
         K = K[1:, 1:, ...]
         s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric_K(K, var_atmo)
@@ -73,26 +73,36 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
 
+    if imethod == 'IS':
+        IP, IR = InversionProcessorIS, InversionResultsIS
+        kwargs = {}
+    elif imethod == 'GM':
+        IP, IR = InversionProcessorGM, InversionResultsGM
+        kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
+                                ('yf', {'ind': [(ind_scenes[-1])]}))}
+
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-
+    
     data = {'s_obs': s_obs, 'K': K}
     for dname in data.keys():
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
+    ip = IP(predens, geospatial=geospatial_crop, blocksize=128, **kwargs)
     ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
+        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
-    ir = InversionResultsIS.from_file(pathout / 'ir.p')
+    ir = IR.from_file(pathout / 'ir.p')
+    print(ir.variables)
 
-    expecs = [
-        ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
-        ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-        ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
+    # expecs = [
+    #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
+    #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
+    #     ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
+    expecs = [('e_mean_period', 'mean'), ('e_mean_period', 'var'), ('yf', 'mean')]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
@@ -106,14 +116,14 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     fns_unw_offset = {2019: [(7, paths['stacks'] / 'stacks/Dalton_131_363/2019_unw_offset.gpkg')],
                       2022: [],
                       2023: []}[year]
-                      
+
     eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
-               1: (2, 21, 25, 26, 33, 34, 35)}        
+               1: (2, 21, 25, 26, 33, 34, 35)}
 
     params_distribution_0 = params_distribution.copy()
     params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
-                                     'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}    
-    multiclass_dist = {0: params_distribution_0, 1: params_distribution}                      
+                                     'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
+    multiclass_dist = {0: params_distribution_0, 1: params_distribution}
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
@@ -123,18 +133,18 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, 
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
         MulticlassInversionResultsIS)
     from scripts.ecotypes import reclassify
-    
+
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
-    
+
     K, geospatial_K = read_K(fnK)
     s_obs, geospatial = read_referenced_motion(
         fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
 
-    if year in (2019, 2022): # remove first acq because still a lot of snow
+    if year in (2019, 2022):  # remove first acq because still a lot of snow
         K = K[1:, 1:, ...]
         s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric_K(K, var_atmo)
@@ -144,10 +154,10 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     ec = reclassify(fnlc, eclasses, geospatial, fnout=fnec)
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
-    
+
     predictor = StefanPredictor()
     strats = {sc: StratigraphyMultiple(
-        StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch) 
+        StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
         for sc in multiclass_dist}
     predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
     predens.predict(dailytemp)
@@ -160,20 +170,19 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
         ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
-    
-    ir = MulticlassInversionResultsIS.from_file(pathout / 'ir.p')
 
+    ir = MulticlassInversionResultsIS.from_file(pathout / 'ir.p')
+    ir.blocksize = 64
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
         ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
         ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
-        ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
+        ir.export_expectation(pathout, param=expec[0], etype=expec[1], n_jobs=6, **kwargs)
 
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
-    # process_happyvalley(year=2022)
-    process_happyvalley_ecotype(year=2023)
-
+    process_happyvalley(imethod='GM', year=2023)
+    # process_happyvalley_ecotype(year=2023)
 

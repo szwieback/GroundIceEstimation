@@ -8,5 +8,5 @@ from analysis.interferometry import (
     distance_to_ref, add_nugget, length_conversion, phase_to_length)
 from analysis.inversion import (
     InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, thaw_depth, 
-    MulticlassInversionResultsIS,
-    MulticlassInversionResultsISMmap)
+    MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, InversionProcessorGM, 
+    InversionResultsGM)
