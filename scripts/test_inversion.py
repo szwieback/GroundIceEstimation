@@ -160,26 +160,26 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
         IP, IR = InversionProcessorIS, MulticlassInversionResultsISMmap
         kwargs = {}
     elif imethod == 'GM':
-        # IP, IR = InversionProcessorGM, MulticlassInversionResultsGMMmap
-        IP, IR = InversionProcessorGM, MulticlassInversionResultsGM
+        IP, IR = InversionProcessorGM, MulticlassInversionResultsGMMmap
+        # IP, IR = InversionProcessorGM, MulticlassInversionResultsGM
         kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
                                 ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
 
-    # predictor = StefanPredictor()
-    # strats = {sc: StratigraphyMultiple(
-    #     StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
-    #     for sc in multiclass_dist}
-    # predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
-    # predens.predict(dailytemp)
-    # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
-    # for dname in data.keys():
-    #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    # ip = IP(predens, geospatial=geospatial_crop, **kwargs)
-    # ir = ip.results(
-    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True, memory=True)
-    # ir.save(pathout / 'ir.p')
-    # ip.delete_temporary(pathout)
-    
+    predictor = StefanPredictor()
+    strats = {sc: StratigraphyMultiple(
+        StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
+        for sc in multiclass_dist}
+    predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
+    predens.predict(dailytemp)
+    data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
+    for dname in data.keys():
+        data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
+    ip = IP(predens, geospatial=geospatial_crop, **kwargs)
+    ir = ip.results(
+        ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True,
+        memory=False)
+    ir.save(pathout / 'ir.p')
+    ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
     ir.blocksize = 64
     expecs = [
@@ -196,4 +196,5 @@ if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(imethod='GM', year=2023)
     process_happyvalley_ecotype(imethod='GM', year=2023)
-
+    # multiclass mmap
+    # try them all out (different names; need to do better job with IS, IR and adding e_mean_range

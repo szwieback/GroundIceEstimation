@@ -406,7 +406,6 @@ class InversionResults():
             self, pathout, param='e', etype='mean', p=None, fn=None, **kwargs):
         res = self.expectation(param=param, etype=etype, p=p, **kwargs)
         if fn is None: fn = f'{param}_{etype}.npy'
-        print(fn, res.shape)
         fnout = pathout / fn
         np.save(fnout, res)
 
@@ -697,7 +696,6 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
         MulticlassInversionResultsIS.__init__(
             self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
         if lwmmap is not None:
-            lwmmap = lwmmap
             self.lwmmap = lwmmap
             if Path(lwmmap.filename).exists():
                 self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
@@ -710,9 +708,6 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
 
-    def _filename(self, path0, ftype, number=None, ext='npy'):
-        _fn = ftype if number is None else f'{ftype}_{number}'
-        return path0 / f'{_fn}.{ext}'
 
     def __getitem__(self, cn):
         ind = (self.ec == cn)
@@ -731,53 +726,26 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
             self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
         return ir
 
-    @classmethod
-    def from_file(cls, fn):
-        return cls(**InversionResultsISMmap._dict_from_file(fn))
 
-class MulticlassInversionResultsGMMmap(MulticlassInversionResultsIS):
+class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
 
-    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False):
-        raise
-        
-        MulticlassInversionResultsIS.__init__(
-            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
-        if lwmmap is not None:
-            lwmmap = lwmmap
-            self.lwmmap = lwmmap
-            if Path(lwmmap.filename).exists():
-                self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+    def __init__(
+            self, predens, gmpmmap, ec, geospatial=None, blocksize=None, temporary=False, variables=None):
+        MulticlassInversionResultsGM.__init__(
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, variables=variables)
+        if gmpmmap is not None:
+            self.gmpmmap = gmpmmap
+            if Path(gmpmmap.filename).exists():
+                self.invres = np.memmap(
+                    gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
 
     @property
     def _dict(self):
         dictout = {
-            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
-            'blocksize': self.blocksize, 'ec': self.ec}
+            'geospatial': self.geospatial, 'gmpmmap': self.gmpmmap, 'predens': self.predens,
+            'blocksize': self.blocksize, 'ec': self.ec, 'variables': self.variables}
         return dictout
 
-    def _filename(self, path0, ftype, number=None, ext='npy'):
-        _fn = ftype if number is None else f'{ftype}_{number}'
-        return path0 / f'{_fn}.{ext}'
-
     def __getitem__(self, cn):
-        raise
-        ind = (self.ec == cn)
-        shape = (np.count_nonzero(ind), self.lw.shape[-1])
-        fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
-        mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
-        fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)
-        ncum = 0
-        for jrow, _ind in enumerate(ind):  # loop to reduce memory footprint
-            _n = ncum + np.count_nonzero(_ind)
-            fp[ncum:_n, ...] = self.lw[jrow, _ind, ...]
-            ncum = _n
-        fp.flush()
-        del fp
-        ir = InversionResultsISMmap(
-            self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
-        return ir
-
-    @classmethod
-    def from_file(cls, fn):
-        return cls(**InversionResultsISMmap._dict_from_file(fn))
+        raise NotImplementedError() # not needed
