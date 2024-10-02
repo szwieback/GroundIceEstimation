@@ -217,7 +217,6 @@ class InversionProcessorGM(InversionProcessor):
             predens = self.predens[ec]
         if 'indranges' in param_dict:
             assert 'ind_scene' not in param_dict
-            # needs to be rewritten
             if f'{param}_mean_period' not in predens.results:
                 predens.predict_mean_period(param_dict['indranges'], param=param)
             p = predens.results[f'{param}_mean_period']
@@ -430,7 +429,6 @@ class InversionResults():
         raise NotImplementedError()
 
     def _mean(self, param='e', p=None, **kwargs):
-        print(self)
         return self._moment(param=param, power=1, p=p, **kwargs)
 
     def _invres_generator(self, block_size=None):
@@ -442,6 +440,10 @@ class InversionResults():
         ind = np.arange(self.invres.shape[0], step=max((1, step)))[1:]
         for _invres in np.array_split(self.invres, ind, axis=0):
             yield _invres  # view to avoid memory issues
+
+    def _filename(self, path0, ftype, number=None, ext='npy'):
+        _fn = ftype if number is None else f'{ftype}_{number}'
+        return path0 / f'{_fn}.{ext}'
 
 class InversionResultsIS(InversionResults):
 
@@ -518,16 +520,13 @@ class InversionResultsGM(InversionResults):
     def _indices_variables(self, param='e'):
         def l(v):
             _l = 1
-            if 'ind_ranges' in v[1]: _l = len(v[1]['ind_ranges'])
+            if 'indranges' in v[1]: _l = len(v[1]['indranges'])
             if 'ind_scene' in v[1]: _l = len(v[1]['ind_scene'])
             return _l
         n_variables = np.array([l(v) for v in self.variables])
-        _param = param
-        suffixes = ['_mean_period']
-        for suffix in suffixes:
-            if suffix in param:
-                _param = _param.replace(suffix, '')
-        ind_v = [v[0] for v in self.variables].index(_param)
+        _name_post = lambda v: v[0] if 'indranges' not in v[1] else v[0] + '_mean_period'
+        variables_post = [_name_post(v) for v in self.variables]
+        ind_v = variables_post.index(param)
         st = np.sum(n_variables[:ind_v])
         return np.arange(st, st + n_variables[ind_v], dtype=np.int64)
 

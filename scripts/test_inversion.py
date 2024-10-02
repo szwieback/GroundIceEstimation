@@ -39,10 +39,10 @@ def happyvalley_forcing(fnforcing, year=2022):
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
+def process_happyvalley(year=2019, imethod='IS', memory=True, rmethod='hadamard'):
     path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
-    pathout = paths['processed'] / f'happyvalley/{year}/{rmethod}'
+    pathout = paths['processed'] / f'happyvalley/{year}/{rmethod}_{imethod}_{memory}'
     fns_unw_offset = {2019: [(7, paths['stacks'] / f'/Dalton_131_363/2019_unw_offset.gpkg')],
                       2022: [],
                       2023: []}[year]
@@ -55,7 +55,7 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS,
+        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionResultsISMmap,
         InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap)
 
     fnunw = path0 / 'unwrapped.geo.tif'
@@ -72,14 +72,13 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
     assert geospatial == geospatial_K
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
-
+    indranges = [(ind_scenes[-4], ind_scenes[-1])]
     if imethod == 'IS':
-        IP, IR = InversionProcessorIS, InversionResultsIS
+        IP, IR = InversionProcessorIS, InversionResultsIS if memory else InversionResultsISMmap
         kwargs = {}
     elif imethod == 'GM':
-        IP, IR = InversionProcessorGM, InversionResultsGM
-        IP, IR = InversionProcessorGM, InversionResultsGMMmap
-        kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
+        IP, IR = InversionProcessorGM, InversionResultsGM if memory else InversionResultsGMMmap
+        kwargs = {'variables': (('e', {'indranges': indranges}),
                                 ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
 
     predictor = StefanPredictor()
@@ -87,13 +86,13 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
-    
+    predens.predict_mean_period(indranges)
     data = {'s_obs': s_obs, 'K': K}
     for dname in data.keys():
         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
     ip = IP(predens, geospatial=geospatial_crop, blocksize=128, **kwargs)
     ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, memory=False, overwrite=True)
+        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, memory=memory, overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
@@ -101,15 +100,15 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
     #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
     #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
     #     ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-    expecs = [('e_mean_period', 'mean'), ('e_mean_period', 'var'), ('yf', 'mean')]
+    expecs = [('e_mean_period', 'mean')]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
-def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
+def process_happyvalley_ecotype(year=2019, imethod='IS', memory=True, rmethod='hadamard'):
     path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
-    pathout = paths['processed'] / f'happyvalley/{year}/ecotype_{rmethod}'
+    pathout = paths['processed'] / f'happyvalley/{year}/ecotype_{rmethod}_{imethod}_{memory}'
     fnlc = paths['ancillary'] / 'TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
 
     fns_unw_offset = {2019: [(7, paths['stacks'] / 'stacks/Dalton_131_363/2019_unw_offset.gpkg')],
@@ -120,15 +119,15 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
                1: (2, 21, 25, 26, 33, 34, 35)}
 
     params_distribution_0 = params_distribution.copy()
-    params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
-                                     'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
+    # params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
+    #                                  'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
     multiclass_dist = {0: params_distribution_0, 1: params_distribution}
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
-    N = 100#00
+    N = 10000
     Nbatch = 1
 
     from analysis import (
@@ -154,47 +153,64 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
     ec = reclassify(fnlc, eclasses, geospatial, fnout=fnec)
 
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
-
+    indranges = [(ind_scenes[-4], ind_scenes[-1])]
     if imethod == 'IS':
-        # IP, IR = InversionProcessorIS, MulticlassInversionResultsIS
-        IP, IR = InversionProcessorIS, MulticlassInversionResultsISMmap
+        IP, IR = InversionProcessorIS, MulticlassInversionResultsIS if memory else MulticlassInversionResultsISMmap
         kwargs = {}
     elif imethod == 'GM':
-        IP, IR = InversionProcessorGM, MulticlassInversionResultsGMMmap
-        # IP, IR = InversionProcessorGM, MulticlassInversionResultsGM
-        kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
+        IP, IR = InversionProcessorGM, MulticlassInversionResultsGM if memory else MulticlassInversionResultsGMMmap
+        kwargs = {'variables': (('e', {'indranges': indranges}),
                                 ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
-
-    predictor = StefanPredictor()
-    strats = {sc: StratigraphyMultiple(
-        StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
-        for sc in multiclass_dist}
-    predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
-    predens.predict(dailytemp)
-    data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
-    for dname in data.keys():
-        data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    ip = IP(predens, geospatial=geospatial_crop, **kwargs)
-    ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True,
-        memory=False)
-    ir.save(pathout / 'ir.p')
-    ip.delete_temporary(pathout)
+    expecs = [('e_mean_period', 'mean')]
+        
+    # predictor = StefanPredictor()
+    # strats = {sc: StratigraphyMultiple(
+    #     StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
+    #     for sc in multiclass_dist}
+    # predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
+    # predens.predict(dailytemp)
+    # predens.predict_mean_period(indranges)    
+    # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
+    # for dname in data.keys():
+    #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
+    # ip = IP(predens, geospatial=geospatial_crop, **kwargs)
+    # ir = ip.results(
+    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True,
+    #     memory=memory)
+    # ir.save(pathout / 'ir.p')
+    # ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
-    ir.blocksize = 64
-    expecs = [
-        ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
-        ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-        ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-    expecs = [
-        ('e', 'mean'), ('e', 'var')]    
+
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], n_jobs=6, **kwargs)
 
+def compare(p0, bname, suffixl, fname):
+    res = {}
+    for suffix in suffixl:
+        fn = p0 / f'{bname}{suffix}' / fname
+        res[suffix] = np.load(fn)
+    for suffix in suffixl:
+        print(suffix, np.mean(np.abs(res[suffix] - res[suffixl[0]])))
+    
+
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(imethod='GM', year=2023)
-    process_happyvalley_ecotype(imethod='GM', year=2023)
-    # multiclass mmap
-    # try them all out (different names; need to do better job with IS, IR and adding e_mean_range
+    # memory = True
+    # imethod = 'IS'
+    # process_happyvalley(imethod=imethod, memory=memory, year=2023)
+    # for memory in (True, False):
+    #     for imethod in ('GM', 'IS'):
+    #         # process_happyvalley_ecotype(imethod=imethod, memory=memory, year=2023)
+    #         process_happyvalley(imethod=imethod, memory=memory, year=2023)
+
+    
+    from pathlib import Path
+    p0 = Path('/home/simon/Work/gie/processed/happyvalley/2023/')
+    bname = 'hadamard'
+    suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
+    fname = 'e_mean_period_mean.npy'
+    compare(p0, bname, suffixl, fname)
+    
+    # need to check why not parallel
