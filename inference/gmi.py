@@ -195,11 +195,13 @@ class GaussianMixtureDistribution():
     def covariance(self, indices=None):
         # marginal covariance matrix
         mean = self.mean(indices=indices)
-        mu_dev = self.means - mean[np.newaxis, ...]
-        Sigmas, pis = self.covariances[..., indices][..., indices], self.weights
+        mus = self.means if indices is None else self.means[..., indices]
+        mu_dev = mus - mean[np.newaxis, ...]
+        pis =  self.weights
+        Sigs = self.covariances[..., indices, :][..., indices] if indices is not None else self.covariances
         # from Mode-finding for mixtures of Gaussian distributions
         Sigma = np.einsum(
-            'i...kl, i... -> ...kl', Sigmas + mu_dev[..., np.newaxis] * mu_dev[..., np.newaxis,:], pis)
+            'i...kl, i... -> ...kl', Sigs + mu_dev[..., np.newaxis] * mu_dev[..., np.newaxis,:], pis)
         return Sigma
 
     def variance(self, indices=None):
