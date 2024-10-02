@@ -291,7 +291,7 @@ class InversionSimulatorGM(InversionSimulator):
     
     def register_variables(self, variables=None):
         if variables is None:
-            variables = (('yf', {'ind': [self.ind_scenes[-1]]}),
+            variables = (('yf', {'ind_scene': [self.ind_scenes[-1]]}),
                          ('e', {'indranges': [(self.ind_scenes[-4], self.ind_scenes[-1])]}))
         self.variables = variables
         
@@ -317,8 +317,8 @@ class InversionSimulatorGM(InversionSimulator):
             p = self.predens.results[f'{param}_mean_period']
         else:
             p = self.predens.results[param]
-            if 'ind' in param_dict:
-                p = p[:, param_dict['ind']]
+            if 'ind_scene' in param_dict:
+                p = p[:, param_dict['ind_scene']]
         return p
 
     @property

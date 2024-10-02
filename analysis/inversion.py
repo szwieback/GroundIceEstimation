@@ -34,7 +34,6 @@ class InversionProcessor():
     # abstract class
     # uses the same ensemble but different C_obs
     fname = 'fname'  # standard filename
-    intdims = 1  # internal dimensions
 
     def __init__(self, predens=None, geospatial=None, batch_size=1024, **kwargs):
         self.predens = predens
@@ -93,7 +92,6 @@ class InversionProcessor():
 
 class InversionProcessorIS(InversionProcessor):
     fname = 'lw'
-    intdims = 1
     def _logweights_single(self, ind_scenes, _s_obs, _C_obs, _ec=None, normalize=False):
         from inference import lw_mvnormal, psislw, _normalize
         try:
@@ -197,7 +195,6 @@ class InversionProcessorIS(InversionProcessor):
 
 class InversionProcessorGM(InversionProcessor):
     fname = 'gmp'
-    intdims = 2
     def __init__(self, predens=None, geospatial=None, batch_size=1024, **kwargs):
         super().__init__(predens=predens, geospatial=geospatial, batch_size=batch_size, **kwargs)
         self.K = kwargs['K'] if 'K' in kwargs else 3
@@ -219,19 +216,19 @@ class InversionProcessorGM(InversionProcessor):
         else:
             predens = self.predens[ec]
         if 'indranges' in param_dict:
-            assert 'ind' not in param_dict
+            assert 'ind_scene' not in param_dict
             # needs to be rewritten
             if f'{param}_mean_period' not in predens.results:
                 predens.predict_mean_period(param_dict['indranges'], param=param)
             p = predens.results[f'{param}_mean_period']
         else:
             p = predens.results[param]
-            if 'ind' in param_dict:
-                p = p[:, param_dict['ind']]
+            if 'ind_scene' in param_dict:
+                p = p[:, param_dict['ind_scene']]
         return p
 
     @property
-    def ecs(self):
+    def classnames(self):
         try:
             ecs = self.predens.classnames
         except:
@@ -239,11 +236,11 @@ class InversionProcessorGM(InversionProcessor):
         return ecs
 
     def marginal(self, ind_scenes):
-        ecs = self.ecs
-        if ecs is None:
+        classnames = self.classnames
+        if classnames is None:
             return self._marginal(ind_scenes, ec=None)
         else:
-            return {ec: self._marginal(ind_scenes, ec=ec) for ec in ecs}
+            return {ec: self._marginal(ind_scenes, ec=ec) for ec in classnames}
 
     def _marginal(self, ind_scenes, ec=None):
         from inference import GaussianMixtureDistribution
@@ -280,7 +277,7 @@ class InversionProcessorGM(InversionProcessor):
                 _gmp = np.load(self._filename(pathout, self.fname, nbatch))
                 nrm = rm + _gmp.shape[0]
                 # reshaping is very awkward
-                fp.reshape((-1,) + _gmp.shape[1:])[rm:nrm, :, :] = _gmp[...] # should be a view
+                fp.reshape((-1,) + _gmp.shape[1:])[rm:nrm,:,:] = _gmp[...]  # should be a view
                 # check whether it worked
                 assert np.sum(np.abs(fp.reshape((-1,) + _gmp.shape[1:])[rm, ...] - _gmp[0, ...])) < 1e-14
                 rm = nrm
@@ -288,9 +285,9 @@ class InversionProcessorGM(InversionProcessor):
             outp = Mmap(fnmmap, _gmp.dtype, shape)
         return outp
 
-    def _posterior_single(self, gmp, s_obs, C_obs):
+    def _posterior_single(self, gmm, s_obs, C_obs):
         if np.count_nonzero(np.isnan(s_obs)) > 0: raise ValueError("Cannot handle NaN")
-        gmp = gmp.conditional(s_obs, C_obs=C_obs, method_condition=self.method_condition)
+        gmp = gmm.conditional(s_obs, C_obs=C_obs, method_condition=self.method_condition)
         return np.moveaxis(gmp.to_array(), 0, -2)  # so k axis is at -2
 
     def _posterior_batch(
@@ -303,14 +300,25 @@ class InversionProcessorGM(InversionProcessor):
             _s_obs_batch = np.moveaxis(s_obs_flat[..., n0:n1], -1, 0).copy()
             _C_obs_batch = np.moveaxis(C_obs_flat[..., n0:n1], -1, 0).copy()
             _ec_batch = ec_flat[n0:n1].copy() if ec_flat is not None else None
-            assert _ec_batch is None
-            gmp = self._posterior_single(gmm, _s_obs_batch, _C_obs_batch)
+            if _ec_batch is not None:
+                gmp_arr = None
+                for cn in self.classnames:
+                    ind = np.nonzero(_ec_batch == cn)[0]
+                    if len(ind) > 0:
+                        _s_obs_batch_cn = _s_obs_batch[ind, ...]
+                        _C_obs_batch_cn = _C_obs_batch[ind, ...]
+                        gmp_arr_cn = self._posterior_single(gmm[cn], _s_obs_batch_cn, _C_obs_batch_cn)
+                    if gmp_arr is None:
+                        gmp_arr = np.zeros((n1-n0,) + gmp_arr_cn.shape[1:], dtype=gmp_arr_cn.dtype)
+                    gmp_arr[ind, ...] = gmp_arr_cn
+            else:
+                gmp_arr = self._posterior_single(gmm, _s_obs_batch, _C_obs_batch)  # array
             if _fn is not None:
                 enforce_directory(_fn)
-                np.save(_fn, gmp)
+                np.save(_fn, gmp_arr)
         else:
-            gmp = np.load(_fn)
-        outp = gmp if memory else gmp.shape[1]
+            gmp_arr = np.load(_fn)
+        outp = gmp_arr if memory else gmp_arr.shape[1]
         return outp
 
     def inference(
@@ -332,20 +340,23 @@ class InversionProcessorGM(InversionProcessor):
                 return InversionResultsGM(
                     self.predens, np.reshape(_gmp, shape), geospatial=self.geospatial,
                     variables=self.variables)
-            # else:
-            #     return MulticlassInversionResultsGM(
-            #         self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial)
+            else:
+                return MulticlassInversionResultsGM(
+                    self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial, 
+                    variables=self.variables)
         else:
             mmap = Mmap(_gmp.filename, _gmp.dtype, shape)
             if ec is None:
                 return InversionResultsGMMmap(
                     self.predens, mmap, geospatial=self.geospatial, variables=self.variables)
-            # else:
-            #     return MulticlassInversionResultsGMMmap(self.predens, mmap, ec, geospatial=self.geospatial)
+            else:
+                return MulticlassInversionResultsGMMmap(
+                    self.predens, mmap, ec, geospatial=self.geospatial, variables=self.variables)
 
 class InversionResults():
     # abstract class
     blocksize_default = 1024
+    intdims = 1  # internal dimensions
     def __init__(self, predens, invres, geospatial=None, blocksize=None):
         self.predens = predens
         self.invres = invres
@@ -395,6 +406,7 @@ class InversionResults():
             self, pathout, param='e', etype='mean', p=None, fn=None, **kwargs):
         res = self.expectation(param=param, etype=etype, p=p, **kwargs)
         if fn is None: fn = f'{param}_{etype}.npy'
+        print(fn, res.shape)
         fnout = pathout / fn
         np.save(fnout, res)
 
@@ -419,6 +431,7 @@ class InversionResults():
         raise NotImplementedError()
 
     def _mean(self, param='e', p=None, **kwargs):
+        print(self)
         return self._moment(param=param, power=1, p=p, **kwargs)
 
     def _invres_generator(self, block_size=None):
@@ -497,6 +510,7 @@ class InversionResultsIS(InversionResults):
         return np.reshape(postquant, self.lw.shape[0:-1] + postquant.shape[1:])
 
 class InversionResultsGM(InversionResults):
+    intdims = 2  # internal dimensions
 
     def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None):
         super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
@@ -506,7 +520,7 @@ class InversionResultsGM(InversionResults):
         def l(v):
             _l = 1
             if 'ind_ranges' in v[1]: _l = len(v[1]['ind_ranges'])
-            if 'ind' in v[1]: _l = len(v[1]['ind'])
+            if 'ind_scene' in v[1]: _l = len(v[1]['ind_scene'])
             return _l
         n_variables = np.array([l(v) for v in self.variables])
         _param = param
@@ -543,12 +557,12 @@ class InversionResultsGM(InversionResults):
                 axis=0)
             return res
 
-    def _mean(self, param='e', p=None):
+    def _mean(self, param='e', p=None, **kwargs):
         if p is not None: raise NotImplementedError()
         indices = self._indices_variables(param=param)
         return self.gmp.mean(indices)
 
-    def _variance(self, param='e', p=None):
+    def _variance(self, param='e', p=None, **kwargs):
         if p is not None: raise NotImplementedError()
         indices = self._indices_variables(param=param)
         return self.gmp.variance(indices)
@@ -603,19 +617,9 @@ class MulticlassInversionResultsGM(InversionResultsGM):
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         _invres = self.invres[ind, ...]
-        return InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize)
+        return InversionResultsGM(
+            self.predens[cn], _invres, blocksize=self.blocksize, variables=self.variables)
 
-    def expectation(self, param='e', etype='mean', p=None, **kwargs):
-        res = None
-        if p is not None: raise ValueError('p input not supported')
-        for cn in self.predens.classnames:
-            ir, ind = self[cn], (self.ec.flatten() == cn)
-            res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
-            if res is None:
-                res = np.empty((np.product(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
-            res[ind, ...] = res_cn
-        res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
-        return res
 
 class InversionResultsGMMmap(InversionResultsGM):
 
@@ -702,7 +706,7 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
     @property
     def _dict(self):
         dictout = {
-            'geospatial': self.geospatial, 'invres': self.lwmmap, 'predens': self.predens,
+            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
 
@@ -731,3 +735,49 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
     def from_file(cls, fn):
         return cls(**InversionResultsISMmap._dict_from_file(fn))
 
+class MulticlassInversionResultsGMMmap(MulticlassInversionResultsIS):
+
+    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False):
+        raise
+        
+        MulticlassInversionResultsIS.__init__(
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
+        if lwmmap is not None:
+            lwmmap = lwmmap
+            self.lwmmap = lwmmap
+            if Path(lwmmap.filename).exists():
+                self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
+        self.temporary = temporary
+
+    @property
+    def _dict(self):
+        dictout = {
+            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
+            'blocksize': self.blocksize, 'ec': self.ec}
+        return dictout
+
+    def _filename(self, path0, ftype, number=None, ext='npy'):
+        _fn = ftype if number is None else f'{ftype}_{number}'
+        return path0 / f'{_fn}.{ext}'
+
+    def __getitem__(self, cn):
+        raise
+        ind = (self.ec == cn)
+        shape = (np.count_nonzero(ind), self.lw.shape[-1])
+        fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
+        mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
+        fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)
+        ncum = 0
+        for jrow, _ind in enumerate(ind):  # loop to reduce memory footprint
+            _n = ncum + np.count_nonzero(_ind)
+            fp[ncum:_n, ...] = self.lw[jrow, _ind, ...]
+            ncum = _n
+        fp.flush()
+        del fp
+        ir = InversionResultsISMmap(
+            self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
+        return ir
+
+    @classmethod
+    def from_file(cls, fn):
+        return cls(**InversionResultsISMmap._dict_from_file(fn))

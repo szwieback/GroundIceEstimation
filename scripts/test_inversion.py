@@ -80,7 +80,7 @@ def process_happyvalley(year=2019, imethod='IS', rmethod='hadamard'):
         IP, IR = InversionProcessorGM, InversionResultsGM
         IP, IR = InversionProcessorGM, InversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
-                                ('yf', {'ind': [(ind_scenes[-1])]}))}
+                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
 
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
@@ -128,12 +128,13 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
     wavelength = 0.055
     var_atmo = (4e-3) ** 2
     xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
-    N = 10000
+    N = 100#00
     Nbatch = 1
 
     from analysis import (
         read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionProcessorGM,
-        MulticlassInversionResultsIS, MulticlassInversionResultsGM)
+        MulticlassInversionResultsIS, MulticlassInversionResultsGM, MulticlassInversionResultsISMmap,
+        MulticlassInversionResultsGMMmap)
     from scripts.ecotypes import reclassify
 
     fnunw = path0 / 'unwrapped.geo.tif'
@@ -155,14 +156,14 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
     dailytemp, ind_scenes = happyvalley_forcing(fnforcing, year=year)
 
     if imethod == 'IS':
-        IP, IR = InversionProcessorIS, MulticlassInversionResultsIS
+        # IP, IR = InversionProcessorIS, MulticlassInversionResultsIS
+        IP, IR = InversionProcessorIS, MulticlassInversionResultsISMmap
         kwargs = {}
     elif imethod == 'GM':
+        # IP, IR = InversionProcessorGM, MulticlassInversionResultsGMMmap
         IP, IR = InversionProcessorGM, MulticlassInversionResultsGM
-        # IP, IR = InversionProcessorGM, InversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': [(ind_scenes[-4], ind_scenes[-1])]}),
-                                ('yf', {'ind': [(ind_scenes[-1])]}))}
-
+                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
 
     # predictor = StefanPredictor()
     # strats = {sc: StratigraphyMultiple(
@@ -173,13 +174,12 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
     # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
     # for dname in data.keys():
     #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    # print(geospatial_crop.shape)
-    # ip = IP(predens, geospatial=geospatial_crop)
+    # ip = IP(predens, geospatial=geospatial_crop, **kwargs)
     # ir = ip.results(
-    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True)
+    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True, memory=True)
     # ir.save(pathout / 'ir.p')
     # ip.delete_temporary(pathout)
-
+    
     ir = IR.from_file(pathout / 'ir.p')
     ir.blocksize = 64
     expecs = [
@@ -195,5 +195,5 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', rmethod='hadamard'):
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(imethod='GM', year=2023)
-    process_happyvalley_ecotype(year=2023)
+    process_happyvalley_ecotype(imethod='GM', year=2023)
 
