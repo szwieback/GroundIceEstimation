@@ -100,7 +100,7 @@ def process_happyvalley(year=2019, imethod='IS', memory=True, rmethod='hadamard'
     #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
     #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
     #     ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-    expecs = [('e_mean_period', 'mean')]
+    expecs = [('e_mean_period', 'mean'), ('yf', 'mean')]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
@@ -195,22 +195,22 @@ def compare(p0, bname, suffixl, fname):
     
 
 if __name__ == '__main__':
-    # process_happyvalley(year=2019)
-    # process_happyvalley(imethod='GM', year=2023)
-    # memory = True
-    # imethod = 'IS'
+    memory = True
+    imethod = 'GM'
     # process_happyvalley(imethod=imethod, memory=memory, year=2023)
+    
     # for memory in (True, False):
     #     for imethod in ('GM', 'IS'):
     #         # process_happyvalley_ecotype(imethod=imethod, memory=memory, year=2023)
     #         process_happyvalley(imethod=imethod, memory=memory, year=2023)
 
     
-    from pathlib import Path
-    p0 = Path('/home/simon/Work/gie/processed/happyvalley/2023/')
-    bname = 'hadamard'
-    suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    fname = 'e_mean_period_mean.npy'
-    compare(p0, bname, suffixl, fname)
+    # from pathlib import Path
+    # p0 = Path('/home/simon/Work/gie/processed/happyvalley/2023/')
+    # bname = 'hadamard'
+    # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
+    # fname = 'e_mean_period_mean.npy'
+    # compare(p0, bname, suffixl, fname)
     
-    # need to check why not parallel
+    
+    

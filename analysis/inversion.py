@@ -414,7 +414,8 @@ class InversionResults():
         elif etype in ('var', 'variance'):
             return self._variance(param=param, p=p, **kwargs)
         elif etype == 'quantile':
-            return self._quantile(kwargs['quantiles'], param=param, **kwargs)
+            q = kwargs.pop('quantiles')
+            return self._quantile(q, param=param, **kwargs)
         elif param in ('frac_thawed'):
             return self._frac_thawed(ind_scene=kwargs['ind_scene'], **kwargs)
         else:
@@ -465,10 +466,10 @@ class InversionResultsIS(InversionResults):
                 axis=0)
             return res
 
-    def __frac_thawed(self, ind_scene, _lw):
+    def __frac_thawed(self, ind_scene, _lw, normalize=True):
         from inference import _normalize
         yf = self.predictions('yf')[..., ind_scene]
-        w_ = np.exp(_normalize(_lw, normalize=True))
+        w_ = np.exp(_normalize(_lw, normalize=normalize))
         frac_thawed = np.zeros((self.ygrid.shape[0],) + w_.shape[:-1])
         # cannot vectorize because of memory issues
         for jy in range(len(self.ygrid)):
@@ -476,9 +477,9 @@ class InversionResultsIS(InversionResults):
             frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
         return np.moveaxis(frac_thawed, 0, -1)
 
-    def _frac_thawed(self, ind_scene, n_jobs=-1):
+    def _frac_thawed(self, ind_scene, normalize=True, n_jobs=-1):
         def _ft(_lw):
-            return self.__frac_thawed(ind_scene, _lw)
+            return self.__frac_thawed(ind_scene, _lw, normalize=normalize)
         return self._parallel(_ft, n_jobs=n_jobs)
 
     def _moment(self, param='e', power=1, p=None, normalize=True, n_jobs=-1):
@@ -498,8 +499,8 @@ class InversionResultsIS(InversionResults):
         return var
 
     def _quantile(
-            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection',
-            n_jobs=-1):
+            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection', n_jobs=-1, 
+            **kwargs):
         from inference import quantile as quant
         p = self.predictions(param=param, p=p)
         def __quantile(_lw):

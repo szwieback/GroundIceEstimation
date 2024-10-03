@@ -232,27 +232,27 @@ if __name__ == '__main__':
 
     overwrite = True
     # loop over scenarios
-    # for scenario in scenarios:
-    #     pathout = pathout0 / scenario.name
-    #     pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
-    #     fnref_full = pathin / fnref
-    #     xy_ref = load_object(fnref_full)['regular']
-    #     if scenario.reference is not None:
-    #         xy_ref = xy_ref[:, scenario.reference]
-    #     process_index_kivalina(
-    #         TDD, geom, pathin, pathout, path0, xy_ref, wavelength=wavelength, N=N,
-    #         Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
-    #         extended_metrics=scenario.extended_metrics, overwrite=overwrite)
+    for scenario in scenarios:
+        pathout = pathout0 / scenario.name
+        pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
+        fnref_full = pathin / fnref
+        xy_ref = load_object(fnref_full)['regular']
+        if scenario.reference is not None:
+            xy_ref = xy_ref[:, scenario.reference]
+        process_index_kivalina(
+            TDD, geom, pathin, pathout, path0, xy_ref, wavelength=wavelength, N=N,
+            Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
+            extended_metrics=scenario.extended_metrics, overwrite=overwrite)
 
-    overwrite = True
-    scenario = scenarios[0]
-    pathout0 = path0 / 'processed' / 'kivalina' / 'index_ecotype'
-    pathout = pathout0 / scenario.name
-    pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
-    fnref_full = pathin / fnref
-    xy_ref = load_object(fnref_full)['regular']
-    process_index_kivalina_ecotype(
-        TDD, geom, pathin, pathout, path0, xy_ref, wavelength=wavelength, N=N,
-        Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
-        extended_metrics=scenario.extended_metrics, overwrite=overwrite)
+    # overwrite = True
+    # scenario = scenarios[0]
+    # pathout0 = path0 / 'processed' / 'kivalina' / 'index_ecotype'
+    # pathout = pathout0 / scenario.name
+    # pathin = pathin0 / str(scenario.year) / 'proc' / 'hadamard' / 'geocoded'
+    # fnref_full = pathin / fnref
+    # xy_ref = load_object(fnref_full)['regular']
+    # process_index_kivalina_ecotype(
+    #     TDD, geom, pathin, pathout, path0, xy_ref, wavelength=wavelength, N=N,
+    #     Nbatch=Nbatch, year=scenario.year, remove_last=scenario.remove_last,
+    #     extended_metrics=scenario.extended_metrics, overwrite=overwrite)
 
