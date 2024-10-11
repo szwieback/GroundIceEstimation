@@ -48,6 +48,10 @@ from scripts.plotting import cmap_e
 c_bad = '#444444'
 cmap = copy.copy(cmap_e)
 cmap.set_bad(color=c_bad)
+import colorcet as cc
+cmap_std = copy.copy(cc.cm['CET_L18'])
+cmap_std.set_bad(color='#aaaaaa')
+
 
 def _normalize(im):
     anc = np.nanpercentile(im, (2, 99), axis=(1, 2))
@@ -374,14 +378,14 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
              (left, bottom, width, height), (right - width, bottom, width, height)]
     axs = [fig.add_axes(rect) for rect in rects]
 
-    # try:
-    #     ir = MulticlassInversionResultsISMmap.from_file(pathres / 'ir.p')
-    # except:
-    #     ir = InversionResultsISMmap.from_file(pathres / 'ir.p')
-    # geospatial = ir.geospatial
-    # ygrid = ir.ygrid
-    # save_object(geospatial, pathres / 'geospatial.p')
-    # save_object(ygrid, pathres / 'ygrid.p')
+    try:
+        ir = MulticlassInversionResultsISMmap.from_file(pathres / 'ir.p')
+    except:
+        ir = InversionResultsISMmap.from_file(pathres / 'ir.p')
+    geospatial = ir.geospatial
+    ygrid = ir.ygrid
+    save_object(geospatial, pathres / 'geospatial.p')
+    save_object(ygrid, pathres / 'ygrid.p')
 
     geospatial = load_object(pathres / 'geospatial.p')
     ygrid = load_object(pathres / 'ygrid.p')
@@ -656,20 +660,21 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
     fig, axs = prepare_figure(
         nrows=2, ncols=2, figsize=(1.00, 0.47), top=0.920, bottom=0.020, right=0.88, left=0.010,
         hspace=0.10, wspace=0.06, remove_spines=False)
-
+    
     e_ref = _read_config(config_ref, indranges_names, geospatial_proc, path0)
     e_r = _read_config(config_r, indranges_names, geospatial_proc, path0)
     for jres, res in enumerate((e_ref, e_r)):
         axs[0, jres].imshow(
             res['mean'], cmap=cmap, vmin=e_lim[0], vmax=e_lim[1], interpolation='nearest')
         axs[1, jres].imshow(
-            np.sqrt(res['var']), cmap=cmap, vmin=std_lim[0], vmax=std_lim[1], interpolation='nearest')
-
+            np.sqrt(res['var']), cmap=cmap_std, vmin=std_lim[0], vmax=std_lim[1], interpolation='nearest')
+    cmaps = [cmap, cmap_std]
     ylab = 0.16
     for jax, ax in enumerate(axs.flatten()):
         ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
+        _c = '#dddddd' if jax <= 1 else '#666666'
         ax.text(
-            0.02, ylab, f'{ascii_lowercase[jax]})', ha='left', va='top', c='#dddddd', transform=ax.transAxes)
+            0.02, ylab, f'{ascii_lowercase[jax]})', ha='left', va='top', c=_c, transform=ax.transAxes)
     add_scalebar(
         axs[0, 0], geospatial_proc, length=5e3, label='5 km', color='#dddddd', y=0.21, dx=0.72, ylab=ylab)
     cax_extent = [1.04, 0.06, 0.06, 0.60]
@@ -679,7 +684,8 @@ def plot_atmosphere(config_ref, config_r, path0, indranges_names, fnout=None):
     axs[0, 1].scatter(rc_ref[1, 5], rc_ref[0, 5], c=c, s=s, linewidths=lw, edgecolors=ec)
     for jrow, lim in enumerate((e_lim, std_lim)):
         cax = axs[jrow, -1].inset_axes(cax_extent)
-        cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*lim, clip=True), cmap=cmap), cax=cax)
+        _cmap = cmaps[jrow]
+        cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(*lim, clip=True), cmap=_cmap), cax=cax)
         cbar.set_ticks([lim[0], lim[1]])
         cbar.solids.set_rasterized(True)
         cax.text(0.00, 1.31, cbarlabels[jrow], ha='left', va='baseline', transform=cax.transAxes)
@@ -907,16 +913,20 @@ if __name__ == '__main__':
     # plot_subset(
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
-    # plot_profile_time_series(path0, configs[0], scenario='2019', fnout=pathfig / 'profile.pdf')
+    
+    plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
+    
     # plot_regional(fnout=pathfig / 'regional.pdf')
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
-    # plot_index(configs[0], path0, fnls, fnout=pathfig / 'index.pdf')
-    plot_index(
-        configs[0], path0, fnls, transect=False, focus_region=False, reference=False, 
-        fnout=pathfig / 'index_pres.pdf')
+    # plot_index(
+    #     configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
+    #     fnout=pathfig / 'index.pdf')
+    # plot_index(
+    #     configs[0], path0, fnls, transect=False, focus_region=False, reference=False, 
+    #     fnout=pathfig / 'index_pres.pdf')
 
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)

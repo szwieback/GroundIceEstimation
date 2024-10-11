@@ -31,7 +31,7 @@ def sample_points(shape, N, max_distance=4, rng=None):
 
 if __name__ == '__main__':
     fncovariates = Path('/home/simon/Work/gie/ancillary/GEE/covariates.tif')
-    fnout = Path'/home/simon/Work/gie/ancillary/GEE/sample.csv')
+    fnout = Path('/home/simon/Work/gie/ancillary/GEE/sample.csv')
     
     ft = load_object(path0 / '2019r' / 'forcing_timing.p')
     indranges_names = ft['indranges_names']
