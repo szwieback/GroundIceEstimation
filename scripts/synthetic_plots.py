@@ -405,12 +405,74 @@ def plot_metrics_indrange(suffix=''):
         axs[0].text(xpos, jtickl, tickl, va='center', ha='right', transform=trans)
     plt.savefig(paths['figures'] / f'synthetic_metrics_indrange{suffix}.pdf')
 
+def plot_metrics_indrange_gm(suffix=''):
+    from string import ascii_lowercase
+    import matplotlib.transforms as transforms
+    fig, axs = prepare_figure(
+        ncols=2, sharey=True, sharex=False, figsize=(2.5, 0.9), figsizeunit='in',
+        top=0.97, left=0.24, right=0.95, bottom=0.35, wspace=0.38, hspace=0.46)
+    simname_base = 'spline_stdacc'
+    colscen = (colslist[1], colslist[0])
+    alphascen = (1.0, 1.0)
+    suffixes = (suffix, suffix + '_gm')
+    jindrange = 0
+    marker = 'o'
+    ms = 4
+    ylim = (-0.3, 1.3)
+    yticks = (0, 1,)
+    yticklabels = ('Sampling', 'G. Mixture',)
+    def _sharpness(m):
+        # s = np.nanmean(
+        #     m['quantile'][..., 1] - m['quantile'][..., 0], axis=0) / 2
+        s = np.nanmean(np.sqrt(m['variance']), axis=0)
+        return s
+    for jsn, suffix in enumerate(suffixes):
+        simname = simname_base + suffix
+        metrics = load_object(
+            paths['simulation'] / simname / 'metrics_e_indranges.p')
+        axs[0].plot(
+            np.nanmean(metrics['MAD'], axis=0)[jindrange], jsn,
+            linestyle='none', mfc=colscen[jsn], alpha=alphascen[jsn], marker=marker,
+            ms=ms, mec='none')
+        axs[1].plot(
+            _sharpness(metrics), jsn, linestyle='none', mfc=colscen[jsn], alpha=alphascen[jsn],
+            marker=marker, ms=ms, mec='none')
+    axs[0].set_xlim(0.00, 0.10)
+    axs[0].set_xticks((0.00, 0.05, 0.10))
+    axs[1].set_xlim(0.00, 0.10)
+    axs[1].set_xticks((0.00, 0.05, 0.10))
+    axs[0].set_ylim(ylim)
+
+    xlabels = ['MAD [$-$]', '$\\sigma_{\\mathrm{p}}$ [$-$]']
+    ypos = 1.08
+    xpos = -0.07
+    for jax, ax in enumerate(axs):
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_yticks(yticks)
+        # ax.text(
+        #     0.54, ypos, titles[jax], ha='center', va='baseline', c='k',
+        #     transform=ax.transAxes)
+        ax.text(
+            0.540, -0.495, xlabels[jax], ha='center', va='baseline', transform=ax.transAxes)
+        ax.text(
+            0.03, 0.07, ascii_lowercase[jax] + ')', ha='left', va='baseline',
+            transform=ax.transAxes)
+    axs[0].set_yticklabels(())
+    trans = transforms.blended_transform_factory(
+        axs[0].transAxes, axs[0].transData)
+    for jtickl, tickl in enumerate(yticklabels):
+        axs[0].text(xpos, jtickl, tickl, va='center', ha='right', transform=trans)
+    plt.savefig(paths['figures'] / f'synthetic_metrics_indrange{suffix}.pdf')
+
 if __name__ == '__main__':
-    plot_examples(show_quantile=True)
+    # plot_examples(show_quantile=True)
     # plot_examples_exploratory(show_quantile=False)
     # plot_metrics_indrange(suffix=f'_1_sagwon_indrange')
     # plot_scatter_indrange(suffix=f'_1_sagwon_indrange', subsample=1)
     # for Nbatch in (1, 10,):
     #     plot_metrics(suffix=f'_{Nbatch}_sagwon')
     #     # plot_metrics_indrange(suffix=f'_{Nbatch}')
+    Nbatch = 1
+    plot_metrics_indrange_gm(suffix=f'_{Nbatch}_sagwon_indrange')
 

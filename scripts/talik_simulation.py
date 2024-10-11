@@ -37,11 +37,27 @@ def talik_simulation(N=16, seed=2):
     predensf = PredictionEnsemble(stratf, predictor, geom=geom)
     predensf.predict(dailytemp)
 
-    return predens, predensf
+    distb = {
+        'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.3, 'high_above': 0.9, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.3, 'low_horizon': 0.1, 'organic_above': 0.1,
+                 'mineral_above': 0.05, 'mineral_below': 0.3, 'organic_below': 0.05},
+        'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0},
+        'talik': {'low_depth': 0.2, 'high_depth': 0.4, 'probability': 0.0, 'high_thickness': 0.5,
+                  'low_thickness': 0.2, 'frozen_fraction': 0.1}}
+    stratb = StefanStratigraphySmoothingSplineTalik(seed=seed, N=N, dist=distb, ancillary=anc)
+    stratb.draw_stratigraphy()
+    predensb = PredictionEnsemble(stratb, predictor, geom=geom)
+    predensb.predict(dailytemp)    
+
+    predensdict = {'talik': predens, 'frozen': predensf, 'baseline': predensb}
+
+    return predensdict
 
 def talik_synthetic(
         simname, Nsim=64, replicates=16, N=50000):
-    fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
+    fnK = paths['stacks']/'Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
 
     pathout = paths['simulation'] / simname
 
@@ -50,10 +66,15 @@ def talik_synthetic(
     fninvsim = pathout / 'invsim.p'
     enforce_directory(fninvsim)
 
-    predens, predensf = talik_simulation(N=N)
-    predens_sim, predensf_sim = talik_simulation(N=Nsim, seed=654)
-    _predens = predensf if '_frozen' in simname else predens
-    invsim = InversionSimulatorIS(predens=_predens, predens_sim=predens_sim)
+    predens_dict = talik_simulation(N=N)
+    predens_sim_dict = talik_simulation(N=Nsim, seed=654)
+    if 'frozen' in simname:
+        _predens = predens_dict['frozen']
+    elif 'baseline' in simname:
+        _predens = predens_dict['baseline']
+    else:
+        _predens = predens_dict['talik']
+    invsim = InversionSimulatorIS(predens=_predens, predens_sim=predens_sim_dict['talik'])
     invsim.register_observations(ind_scenes, C_obs)
 
     invsim.export(fninvsim)
@@ -135,15 +156,15 @@ def plot_synthetic_twin(ymax=0.8, suffix=''):
         top=0.80, left=0.13, right=0.98, bottom=0.08, wspace=0.30, hspace=0.46,
         remove_spines=False)
 
-    simnames = ('talik', 'talik_frozen')
+    simnames = ('talik', 'talik_baseline')#, 'talik_frozen')
     colscen = {
-        'talik_frozen':colslist[1], 'talik':colslist[0], 'prior': colslist[3]}
+        'talik_frozen':colslist[1], 'talik':colslist[0], 'talik_baseline': colslist[2], 'prior': colslist[3]}
     alphascen = {
-        'talik_frozen':0.8,  'talik': 1.0, 'prior': 0.6}
+        'talik_frozen':0.8,  'talik': 1.0, 'talik_baseline': 1.0, 'prior': 0.6}
     lwscen = {
-        'talik_frozen':0.6,  'talik':1.2, 'prior': 0.3}
+        'talik_frozen':0.6,  'talik':1.2, 'talik_baseline': 0.6, 'prior': 0.3}
     labels = {
-        'talik_frozen':'neglect talik', 'talik':'include talik'}
+        'talik_frozen':'energy sink', 'talik':'include talik', 'talik_baseline': 'ignore talik'}
 
     for sim in simnames:
         simname = sim + suffix
@@ -182,7 +203,7 @@ def plot_synthetic_twin(ymax=0.8, suffix=''):
         handles.append(l)
     axs[0].legend(
         handles=handles, loc='lower center', frameon=False,
-        fancybox=False, ncol=3, bbox_to_anchor=(0.700, -0.186, 1.200, 0.100),
+        fancybox=False, ncol=3, bbox_to_anchor=(0.600, -0.186, 1.200, 0.100),
         handlelength=1.0, handletextpad=0.5)
     plt.savefig(paths['figures'] / f'synthetic_talik.pdf')
 
@@ -244,13 +265,13 @@ def plot_synthetic_metrics_indrange(suffix=''):
     fig, axs = prepare_figure(
         ncols=3, sharey=True, sharex=False, figsize=(3.5, 0.9), figsizeunit='in',
         top=0.87, left=0.18, right=0.98, bottom=0.34, wspace=0.38, hspace=0.46)
-    simnames = ('talik', 'talik_frozen')
+    simnames = ('talik', 'talik_baseline')
     colscen = {
-        'talik_frozen':colslist[1], 'talik':colslist[0], 'prior': colslist[3]}
+        'talik_baseline':colslist[2], 'talik':colslist[0], 'prior': colslist[3]}
     alphascen = {
-        'talik_frozen':0.8,  'talik': 1.0, 'prior': 0.6}
+        'talik_baseline':0.8, 'talik': 1.0, 'prior': 0.6}
     labels = {
-        'talik_frozen':'neglect talik', 'talik':'include talik'}
+        'talik_baseline':'ignore talik', 'talik':'include talik'}
 
     jindrange = 0
     marker = 'o'
@@ -325,8 +346,8 @@ if __name__ == '__main__':
     pfig = paths['figures']
     # talik_synthetic('talik')
     # talik_synthetic('talik_frozen') # inversion ensemble frozen
+    # talik_synthetic('talik_baseline') # inversion ensemble with baseline ice content
 
-    # predens, predensf = talik_simulation()
     # plot_single(predens, predensf, fnout=pfig / 'talik_single.pdf')
     # plot_ensemble(predens, predensf, fnout=pfig / 'talik_ens.pdf')
 
