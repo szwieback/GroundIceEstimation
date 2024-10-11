@@ -672,17 +672,17 @@ class InversionResultsISMmap(InversionResultsIS):
         return dictout
 
     def __del__(self):
-        if self.temporary:
-            try:
+        try:
+            if self.temporary:
                 Path(self.lwmmap.filename).unlink()
-            except:
-                pass
+        except:
+            pass
 
     @staticmethod
     def _dict_from_file(fn):
         from analysis import load_object
         dictin = load_object(fn)
-        if not Path(dictin['lwmmap'].filename).exists:
+        if not Path(dictin['lwmmap'].filename).exists():
             dictin['lwmmap'] = None
         return dictin
 

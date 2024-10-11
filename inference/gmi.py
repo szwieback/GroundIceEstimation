@@ -4,7 +4,6 @@ Created on Feb 29, 2020
 @author: simon
 '''
 import numpy as np
-from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 from inference.isi import _sqr_eigen, _nondata_terms_mvnormal, invert_nonzero, sumlogs
@@ -51,6 +50,7 @@ class GaussianMixtureDistribution():
     
     @classmethod
     def from_samples(cls, samples, K=2, random_state=None, n_init=8):
+        from sklearn.mixture import GaussianMixture
         if random_state is None: random_state = 999
         gm = GaussianMixture(
             random_state=random_state, n_components=K, covariance_type='full', n_init=n_init,
