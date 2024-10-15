@@ -10,15 +10,16 @@ import socket
 hostname = socket.gethostname()
 
 if hostname == 'Vienna':
-    path0 = Path('/10TBstorage/Work/gie/')
+    path00 = Path('/10TBstorage/Work/')
 elif hostname == 'homer':
-    path0 = Path('/home2/Work/gie')
+    path00 = Path('/home2/Work')
 else:
-    path0 = Path.home() / 'Work/gie/'
+    path00 = Path.home() / 'Work/'
 
+path0 = path00 / 'gie'
 
 paths = {'simulation': path0 / 'simulation',
-         'stacks': path0 / 'stacks',
+         'stacks': path00 / 'stacks',
          'processed': path0 /  'processed',
          'forcing': path0 /  'forcing',
          'figures': path0 /  'figures',

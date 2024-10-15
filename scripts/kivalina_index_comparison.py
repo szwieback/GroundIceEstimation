@@ -901,12 +901,12 @@ if __name__ == '__main__':
         ('2019r', 'TDD900_lastday')]
     config_labels = ['extra scene', 'later $\\bar{e}$', '2018', 'baseline']
 
-    # pathout = Path('/home/simon/Work/gie/shared/index/')
-    # for config in configs:
-    #     print(config[1])
-    #     export_index(
-    #         path0, config, fnoutdict={ftype: pathout / f'{config[0]}_{config[1]}' / f'{ftype}.tif'
-    #                                   for ftype in ('mean', 'var')})
+    pathout = Path('/home/simon/Work/gie/shared/index/')
+    for config in configs:
+        print(config[1])
+        export_index(
+            path0, config, fnoutdict={ftype: pathout / f'{config[0]}_{config[1]}' / f'{ftype}.tif'
+                                      for ftype in ('mean', 'var')})
 
     # violin_plot(configs[-1], fncores=fncores, fnout=pathfig / 'violin.pdf')
     # fntmp = pathfig / 'kde.p'
@@ -914,7 +914,7 @@ if __name__ == '__main__':
     #     configs, indranges_names, path0, config_labels=config_labels, fntmp=fntmp,
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
     
-    plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
+    # plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
     
     # plot_regional(fnout=pathfig / 'regional.pdf')
 

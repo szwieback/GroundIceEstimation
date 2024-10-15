@@ -22,14 +22,21 @@ params_distribution = {
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
 ll, ur = (-148.8625, 69.1376), (-148.7590, 69.1640)
 
+fns_unw_offset = {2019: [(7, paths['stacks'] / f'/Dalton_131_363/2019_unw_offset.gpkg')],
+                  2022: [],
+                  2023: [],
+                  2024: []}
+
 def happyvalley_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0 = {2023: '2023-05-31', 2022: '2022-06-06', 2019: '2019-05-18'}[year]
-    d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2019: '2019-09-17'}[year]
+    d0 = {2024: '2024-06-09', 2023: '2023-05-31', 2022: '2022-06-06', 2019: '2019-05-18'}[year]
+    d1 = {2024: '2024-09-16', 2023: '2023-09-22', 2022: '2022-09-16', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
-    datesstr = {2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
+    datesstr = {2024: ('20240611', '20240623', '20240705', '20240717', '20240729', '20240810', '20240822',
+                       '20240903', '20240915'),
+                2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
                        '20230816', '20230828', '20230909'),
                 2022: ('20220610', '20220622', '20220704', '20220716', '20220728',
                        '20220809', '20220821', '20220902', '20220914'),
@@ -43,9 +50,7 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     pathout = paths['processed'] / f'happyvalley/{year}/{rmethod}'
-    fns_unw_offset = {2019: [(7, paths['stacks'] / f'/Dalton_131_363/2019_unw_offset.gpkg')],
-                      2022: [],
-                      2023: []}[year]
+
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
@@ -63,9 +68,9 @@ def process_happyvalley(year=2019, rmethod='hadamard'):
     
     K, geospatial_K = read_K(fnK)
     s_obs, geospatial = read_referenced_motion(
-        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
+        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset[year])
 
-    if year in (2019, 2022): # remove first acq because still a lot of snow
+    if year in (2019, 2022, 2024): # remove first acq because still a lot of snow
         K = K[1:, 1:, ...]
         s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric_K(K, var_atmo)
@@ -103,9 +108,6 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     pathout = paths['processed'] / f'happyvalley/{year}/ecotype_{rmethod}'
     fnlc = paths['ancillary'] / 'TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
 
-    fns_unw_offset = {2019: [(7, paths['stacks'] / 'stacks/Dalton_131_363/2019_unw_offset.gpkg')],
-                      2022: [],
-                      2023: []}[year]
                       
     eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
                1: (2, 21, 25, 26, 33, 34, 35)}        
@@ -132,9 +134,9 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
     
     K, geospatial_K = read_K(fnK)
     s_obs, geospatial = read_referenced_motion(
-        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
+        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset[year])
 
-    if year in (2019, 2022): # remove first acq because still a lot of snow
+    if year in (2019, 2022, 2024): # remove first acq because still a lot of snow
         K = K[1:, 1:, ...]
         s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric_K(K, var_atmo)
@@ -174,6 +176,6 @@ def process_happyvalley_ecotype(year=2019, rmethod='hadamard'):
 if __name__ == '__main__':
     # process_happyvalley(year=2019)
     # process_happyvalley(year=2022)
-    process_happyvalley_ecotype(year=2023)
+    process_happyvalley(year=2024)
 
 
