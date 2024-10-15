@@ -417,7 +417,8 @@ class InversionResults():
             q = kwargs.pop('quantiles')
             return self._quantile(q, param=param, **kwargs)
         elif param in ('frac_thawed'):
-            return self._frac_thawed(ind_scene=kwargs['ind_scene'], **kwargs)
+            ind_scene = kwargs.pop('ind_scene')
+            return self._frac_thawed(ind_scene=ind_scene, **kwargs)
         else:
             raise NotImplementedError(f"Expectation type {etype} not recognized.")
 
