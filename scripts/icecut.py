@@ -24,12 +24,14 @@ ll, ur = (-148.8415, 69.0360), (-148.7216, 69.0493)
 
 def icecut_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
-    d0 = {2023: '2023-05-25', 2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
-    d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
+    d0 = {2024: '2024-06-09', 2023: '2023-05-25', 2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
+    d1 = {2024: '2024-09-16', 2023: '2023-09-22', 2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesstr = {
+        2024: ('20240611', '20240623', '20240705', '20240717', '20240729', '20240810', '20240822',
+               '20240903', '20240915'),
         2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
                '20230816', '20230828', '20230909'),
         2022: ('20220529', '20220610', '20220622', '20220704', '20220716', '20220728',
@@ -62,8 +64,11 @@ def process_icecut(year=2019, rmethod='hadamard'):
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
-    K = add_atmospheric_K(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
+    if year in (2024,): # remove first acq because still a lot of snow
+        K = K[1:, 1:, ...]
+        s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]    
+    K = add_atmospheric_K(K, var_atmo)
     assert geospatial == geospatial_K
 
     dailytemp, ind_scenes = icecut_forcing(fnforcing, year=year)
@@ -122,8 +127,12 @@ def process_icecut_ecotype(year=2019, rmethod='hadamard'):
     fnunw = path0 / 'unwrapped.geo.tif'
     fnK = path0 / 'K_vec.geo.tif'
     K, geospatial_K = read_K(fnK)
-    K = add_atmospheric_K(K, var_atmo)
     s_obs, geospatial = read_referenced_motion(fnunw, xy=xy_ref, wavelength=wavelength)
+    if year in (2024,): # remove first acq because still a lot of snow
+        K = K[1:, 1:, ...]
+        s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]    
+    
+    K = add_atmospheric_K(K, var_atmo)
     assert geospatial == geospatial_K
 
     fnec = pathout / 'ec.tif'
@@ -157,7 +166,7 @@ def process_icecut_ecotype(year=2019, rmethod='hadamard'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    # process_icecut(year=2022)
+    process_icecut(year=2024)
     # process_icecut(year=2019)
-    for year in (2023, 2022):
-        process_icecut_ecotype(year=year)
+    # for year in (2023, 2022):
+    #     process_icecut_ecotype(year=year)

@@ -6,9 +6,8 @@ Created on Oct 5, 2022
 
 import numpy as np
 from pathlib import Path
-
-from analysis import load_object, save_object, InversionResultsIS, read_K, MulticlassInversionResultsIS
-from scripts.kivalina_analysis import resample_dem
+from scripts.plot_profile import read_results
+from analysis import read_K
 
 site = np.array((-148.8437, 69.1548))[:, np.newaxis]
 
@@ -29,35 +28,7 @@ def invalid_mask(K, thresh, geospatial_K, geospatial, ind1=0, ind2=-1, wavelengt
     # invalid = binary_dilation(binary_opening(binary_closing(K_last_crop > thresh ** 2, s1), s1), s1)
     return invalid
 
-def read_results(pathres, fnimraw=None, fndemraw=None, upscale=8, overwrite=True):
-    fngeospatial = pathres / 'geospatial.p'
-    fnygrid = pathres / 'ygrid.p'
-    if not fngeospatial.exists() or not fnygrid.exists() or overwrite:
-        try:
-            ir = InversionResultsIS.from_file(pathres / 'ir.p')
-        except:
-            ir = MulticlassInversionResultsIS.from_file(pathres / 'ir.p')
-        geospatial = ir.geospatial
-        ygrid = ir.ygrid
-        save_object(geospatial, fngeospatial)
-        save_object(ygrid, fnygrid)
-    else:
-        geospatial = load_object(pathres / 'geospatial.p')
-        ygrid = load_object(fnygrid)
-    res = {'ygrid': ygrid, 'geospatial': geospatial}
-    res['e_mean'] = np.load(pathres / 'e_mean.npy')
-    res['e_quantile'] = np.load(pathres / 'e_quantile.npy')
-    res['frac_thawed'] = np.load(pathres / 'frac_thawed_None.npy')
 
-    if fnimraw is not None:
-        fnimres = pathres / 'optical.tif'
-        res['optical'] = resample_dem(
-            geospatial, fnimraw, fnimres, upscale=upscale, overwrite=overwrite)
-    if fndemraw is not None:
-        fndemres = pathres / 'dem.tif'
-        res['dem'] = resample_dem(
-            geospatial, fndemraw, fndemres, upscale=upscale, overwrite=overwrite)
-    return res
 
 def happyvalley_map_profiles(fnout=None, overwrite=True):
     import matplotlib.pyplot as plt
@@ -399,10 +370,10 @@ if __name__ == '__main__':
     from scripts.pathnames import paths
     fnplot = paths['figures'] / 'happyvalley.pdf'
     # happyvalley_map_profiles(fnout=fnplot, overwrite=False)
-    for method in ('hadamard', 'ecotype_hadamard'):
-        print(method)
-        fnplot = paths['figures'] / f'happyvalley23_{method}.pdf'
-        happyvalley_map_profiles_2023(method=method, fnout=fnplot, overwrite=False)
+    # for method in ('hadamard', 'ecotype_hadamard'):
+    #     print(method)
+    #     fnplot = paths['figures'] / f'happyvalley23_{method}.pdf'
+    #     happyvalley_map_profiles_2023(method=method, fnout=fnplot, overwrite=False)
     fnplot = paths['figures'] / 'happyvalley_subs.pdf'
     # happyvalley_map_subsidence(fnplot, overwrite=False)
 
