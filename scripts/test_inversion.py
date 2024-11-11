@@ -193,7 +193,20 @@ def compare(p0, bname, suffixl, fname):
     for suffix in suffixl:
         print(suffix, np.mean(np.abs(res[suffix] - res[suffixl[0]])))
     
-
+def plot(p0, bname, suffixt, fname):
+    import matplotlib.pyplot as plt
+    from scripts.plotting import prepare_figure, cmap_e
+    res = []
+    for suffix in suffixt:
+        fn = p0 / f'{bname}{suffix}' / fname
+        res.append(np.load(fn)[..., 0])
+    fig, axs = prepare_figure(nrows=2, remove_spines=False)
+    for jax, r in enumerate(res):
+        axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.4)
+        axs[jax].set_xticks([])
+        axs[jax].set_yticks([])
+    plt.show()
+    
 if __name__ == '__main__':
     memory = True
     imethod = 'GM'
@@ -205,12 +218,13 @@ if __name__ == '__main__':
     #         process_happyvalley(imethod=imethod, memory=memory, year=2023)
 
     
-    # from pathlib import Path
-    # p0 = Path('/home/simon/Work/gie/processed/happyvalley/2023/')
-    # bname = 'hadamard'
-    # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    # fname = 'e_mean_period_mean.npy'
+    from pathlib import Path
+    p0 = Path('/home/simon/Work/gie/processed/happyvalley/2023/')
+    bname = 'hadamard'
+    suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
+    fname = 'e_mean_period_mean.npy'
     # compare(p0, bname, suffixl, fname)
+    plot(p0, bname, ('_IS_True', '_GM_True'), fname)
     
     
     
