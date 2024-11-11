@@ -9,6 +9,7 @@ import numpy as np
 import pickle
 import zlib
 import rasterio
+from collections.abc import Iterable   
 
 class Geospatial():
     def __init__(self, transform, crs, shape=None):
@@ -45,7 +46,7 @@ class Geospatial():
     def rowcol(self, xy, crs=None):
         # xy: lonlat for WGS84
         # an use different crs
-        if isinstance(xy, np.ndarray):
+        if isinstance(xy, np.ndarray) and len(xy.shape) >= 2:
             if crs is None:
                 r, c = rasterio.transform.rowcol(self.transform, xy[0,:], xy[1,:])
                 return np.stack((r, c), axis=0)
@@ -55,6 +56,8 @@ class Geospatial():
                 pts = [Point(x, y) for x, y in xy.T]
                 gdf = gpd.GeoDataFrame(geometry=pts, crs=crs).to_crs(self.crs)
                 return self.rowcol(gdf)
+        elif isinstance(xy, Iterable) or (isinstance(xy, np.ndarray) and len(xy.shape) == 1):
+            return self.rowcol(np.array(xy)[:, np.newaxis], crs=crs)[:, 0]
         else:
             try:
                 # treat it as a GeoDataFrame?
@@ -107,16 +110,19 @@ class Geospatial():
         c = (min(rc_ll[1], rc_ur[1]), max(rc_ll[1], rc_ur[1]))
         return r, c
 
+    def cropped(self, ll, ur):
+        r, c = self._rc_bbox(ll, ur)
+        window = rasterio.windows.Window(c[0], r[0], c[1] - c[0], r[1] - r[0])
+        transform = rasterio.windows.transform(window, self.transform)
+        shape = (r[1] - r[0], c[1] - c[0])
+        geospatial_out = Geospatial(transform=transform, crs=self.crs, shape=shape)
+        return geospatial_out
+        
     def crop(self, arr, ll=None, ur=None):
         if ll is None and ur is None:
             return arr, self
         r, c = self._rc_bbox(ll, ur)
-        window = rasterio.windows.Window(c[0], r[0], c[1] - c[0], r[1] - r[0])
-
-        transform = rasterio.windows.transform(window, self.transform)
-
-        shape = (r[1] - r[0], c[1] - c[0])
-        geospatial_out = Geospatial(transform=transform, crs=self.crs, shape=shape)
+        geospatial_out = self.cropped(ll, ur)
         arr_out = arr[..., r[0]:r[1], c[0]:c[1]]
         return arr_out, geospatial_out
 
