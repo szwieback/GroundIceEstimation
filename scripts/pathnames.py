@@ -17,9 +17,10 @@ else:
     path00 = Path.home() / 'Work/'
 
 path0 = path00 / 'gie'
+pstacks = path00 / 'stacks' if hostname in ('Vienna', 'Homer') else path0 / 'stacks'
 
 paths = {'simulation': path0 / 'simulation',
-         'stacks': path00 / 'stacks',
+         'stacks': pstacks,
          'processed': path0 /  'processed',
          'forcing': path0 /  'forcing',
          'figures': path0 /  'figures',

@@ -1,0 +1,102 @@
+'''
+Created on Nov 4, 2024
+
+@author: simon
+'''
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import datetime
+from collections import namedtuple
+
+from forcing import load_forcing_merra_subset, parse_dates
+from analysis import (save_object, load_object, read_K, read_geotiff_geospatial,
+    RationalQuadraticSepDiagCovMV, add_nugget, length_conversion, spatial_referencing, 
+    StefanPredictor, PredictionEnsemble, assemble_tril, InversionResultsISMmap)
+from simulation import (
+    StefanStratigraphySmoothingSpline, StratigraphyMultiple)
+from scripts.pokerflats import read_InSAR
+from scripts.pathnames import paths
+
+wavelength = 0.055
+geom = {'ia': 40.91 / 180 * np.pi}
+
+Scenario = namedtuple('Scenario', ['name', 'year', 'remove_last', 'reference', 'extended_metrics'])
+
+params_distribution = {
+    'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
+    'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+             'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
+    'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
+
+ll, ur = None, None
+
+datesstr = {2019:
+            ('20190608', '20190620', '20190702', '20190714', '20190726',
+             '20190807', '20190819', '20190831', '20190912',)}
+xy_ref = np.array([-160.0435, 70.6361])[:, np.newaxis]
+var_atmo = (4e-3) ** 2
+fns_unw_offset = {}
+
+
+def wainwright_forcing(folder_forcing, year, remove_last=False):
+    df = load_forcing_merra_subset(folder_forcing)
+    d0 = {2019: '2019-06-07'}[year]
+    d1 = {2019: '2019-09-14'}[year]
+    datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
+    d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
+    ind_scenes = [int((d - d0_).days) for d in datesdisp]
+    if remove_last: ind_scenes = ind_scenes[:-1]
+    dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=d0, end=d1)]
+    dailytemp[dailytemp < 0] = 0
+    return dailytemp, ind_scenes
+
+
+def process_wainwright(year=2019, rmethod='hadamard'):
+    from analysis import (InversionProcessorIS)    
+    path0 = paths['stacks'] / f'Wainwright/{year}/proc/{rmethod}/geocoded'
+    folder_forcing = paths['forcing'] / 'wainwright'
+    pathout = paths['processed'] / f'wainwright/{year}/{rmethod}'
+    N = 10000
+    Nbatch = 1
+
+    s_obs, K, geospatial = read_InSAR(
+        path0, wavelength, xy_ref=xy_ref, fns_unw_offset=fns_unw_offset.get(year, []), var_atmo=var_atmo,
+        fill_nan=True)
+    dailytemp, ind_scenes = wainwright_forcing(folder_forcing, year=year)
+    indranges = [(ind_scenes[-4] + 2, ind_scenes[-1])] # from Aug 5
+
+    predictor = StefanPredictor()
+    
+    Strat = StefanStratigraphySmoothingSpline
+    strat = StratigraphyMultiple(Strat(N=N, dist=params_distribution), Nbatch=Nbatch)
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    predens.predict(dailytemp)
+    predens.predict_mean_period(indranges)
+
+    data = {'s_obs': s_obs, 'K': K}
+    for dname in data.keys():
+        data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
+    ip = InversionProcessorIS(predens, geospatial=geospatial_crop)
+    ir = ip.results(
+        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True, memory=False)
+    ir.save(pathout / 'ir.p')
+    ip.delete_temporary(pathout)
+    ir = InversionResultsISMmap.from_file(pathout / 'ir.p')
+    #('e', 'quantile', {'quantiles': (0.1, 0.9)})
+    expecs = [
+        ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
+        ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
+        ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
+        ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
+    for expec in expecs:
+        kwargs = expec[2] if len(expec) == 3 else {}
+        ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
+
+if __name__ == '__main__':
+    process_wainwright(year=2019)
+
+
+
