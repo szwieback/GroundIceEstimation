@@ -438,7 +438,7 @@ class InversionResults():
             block_size = self.blocksize
         iss = self.invres.shape
         # maybe reshape to make this more general
-        step = block_size if len(iss) == 2 else np.product(iss[1:-self.intdims]) // block_size
+        step = block_size if len(iss) == 2 else np.prod(iss[1:-self.intdims]) // block_size
         ind = np.arange(self.invres.shape[0], step=max((1, step)))[1:]
         for _invres in np.array_split(self.invres, ind, axis=0):
             yield _invres  # view to avoid memory issues
@@ -594,7 +594,7 @@ class MulticlassInversionResultsIS(InversionResultsIS):
             ir, ind = self[cn], (self.ec.flatten() == cn)
             res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
             if res is None:
-                res = np.empty((np.product(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
+                res = np.empty((np.prod(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
             res[ind, ...] = res_cn
         res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
         return res
