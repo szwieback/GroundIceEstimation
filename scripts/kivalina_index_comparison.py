@@ -23,7 +23,10 @@ fndem = Path('/home/simon/Work/Kivalina/TDM90/Kivalina/DEM.tif')
 fnforcing = Path('/home/simon/Work/Kivalina/forcing/T2MMEAN.csv')
 fnpred = Path('/home/simon/Work/gie/ancillary/GEE/e_pred.tif')
 
+# transect
 profile = ((-164.4236, 67.8357), (-164.3395, 67.7895))
+steps = 1024
+step_ts = (272, 940)
 
 crs = CRS.from_epsg(3572)
 posting = 50
@@ -364,8 +367,6 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
     from string import ascii_lowercase
     pathres = path0 / scenario
     year = int(config[0])
-    steps = 1024
-    step_ts = (272, 940)  # (268)(245, 980)
 
     fig = plt.figure()
     initialize_matplotlib()
@@ -754,9 +755,14 @@ def plot_index(
     if transect:
         from scripts.plotting import add_arrow_line
         rc_profile = geospatial_proc.rowcol(np.array(profile).T, crs='EPSG:4326')
+        c = '#f35092'
         add_arrow_line(
-            axs[1], rc_profile, c='#f35092', hwidth=12, hlength=18, pos_frac=[0.75, 0.30], label='T',
-            dlabel=(-10, 30))
+            axs[1], rc_profile, c=c, hwidth=9, hlength=15, pos_frac=[0.45], label='T',
+            dlabel=(7, 35))        
+        for step in step_ts:
+            lamb = step / steps
+            rc = (1 - lamb) * rc_profile[:, 0] + lamb * rc_profile[:, 1]
+            axs[1].plot(rc[1], rc[0], ms=2, mfc=c, mec='none', linestyle='none', marker='o')
 
     for jax, ax in enumerate(axs.flatten()):
         ax.tick_params(labelleft=False, labelbottom=False, left=False, bottom=False)
@@ -901,12 +907,12 @@ if __name__ == '__main__':
         ('2019r', 'TDD900_lastday')]
     config_labels = ['extra scene', 'later $\\bar{e}$', '2018', 'baseline']
 
-    pathout = Path('/home/simon/Work/gie/shared/index/')
-    for config in configs:
-        print(config[1])
-        export_index(
-            path0, config, fnoutdict={ftype: pathout / f'{config[0]}_{config[1]}' / f'{ftype}.tif'
-                                      for ftype in ('mean', 'var')})
+    # pathout = Path('/home/simon/Work/gie/shared/index/')
+    # for config in configs:
+    #     print(config[1])
+    #     export_index(
+    #         path0, config, fnoutdict={ftype: pathout / f'{config[0]}_{config[1]}' / f'{ftype}.tif'
+    #                                   for ftype in ('mean', 'var')})
 
     # violin_plot(configs[-1], fncores=fncores, fnout=pathfig / 'violin.pdf')
     # fntmp = pathfig / 'kde.p'
@@ -917,13 +923,18 @@ if __name__ == '__main__':
     # plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
     
     # plot_regional(fnout=pathfig / 'regional.pdf')
+    # TDDdict, cumdict = TDD_kivalina(fnforcing)
+    # print(np.mean([cumdict[y][1][-1] for y in range(1989, 2020)]))
+    # print(np.count_nonzero([cumdict[y][1][-1] > 900 for y in range(1989, 2020)]))
+    # print([y for y in cumdict])
+    # print([y for y in range(1989, 2020)])
 
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
-    # plot_index(
-    #     configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
-    #     fnout=pathfig / 'index.pdf')
+    plot_index(
+        configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
+        fnout=pathfig / 'index.pdf')
     # plot_index(
     #     configs[0], path0, fnls, transect=False, focus_region=False, reference=False, 
     #     fnout=pathfig / 'index_pres.pdf')

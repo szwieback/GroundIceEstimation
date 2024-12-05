@@ -44,6 +44,7 @@ class Geospatial():
         return (np.arange(self.shape[0]), np.arange(self.shape[1]))
 
     def rowcol(self, xy, crs=None):
+        import geopandas as gpd
         # xy: lonlat for WGS84
         # an use different crs
         if isinstance(xy, np.ndarray) and len(xy.shape) >= 2:
@@ -52,19 +53,16 @@ class Geospatial():
                 return np.stack((r, c), axis=0)
             else:
                 from shapely.geometry import Point
-                import geopandas as gpd
                 pts = [Point(x, y) for x, y in xy.T]
                 gdf = gpd.GeoDataFrame(geometry=pts, crs=crs).to_crs(self.crs)
                 return self.rowcol(gdf)
+        elif isinstance(xy, gpd.GeoDataFrame):
+            _xy = np.array([(x.x, x.y) for x in xy['geometry']]).T
+            return self.rowcol(_xy)
         elif isinstance(xy, Iterable) or (isinstance(xy, np.ndarray) and len(xy.shape) == 1):
             return self.rowcol(np.array(xy)[:, np.newaxis], crs=crs)[:, 0]
         else:
-            try:
-                # treat it as a GeoDataFrame?
-                _xy = np.array([(x.x, x.y) for x in xy['geometry']]).T
-                return self.rowcol(_xy)
-            except:
-                raise ValueError(f"xy data type not recognized")
+            raise ValueError(f"xy data type not recognized")
 
     def xy(self, rc):
         r, c = rc[0,:], rc[1,:]

@@ -86,6 +86,7 @@ def plot_profile(
     from analysis import thaw_depth
     xy_start, xy_end = xy_tup
     pi = ProfileInterpolator(geospatial, xy_start, xy_end, steps=steps)
+    print(pi._rowcol_endpoints)
     profile = pi.interpolate(im)
     if ymax is not None:
         profile = profile[:,:_get_index(ygrid, ymax) + 1]
@@ -165,6 +166,15 @@ class ProfileInterpolator():
                        np.linspace(self.xy_start[1], self.xy_end[1], num=self.steps)))
         return xy
     
+    @property
+    def _rc(self):
+        # rc = self._rowcol_endpoints
+        # rc_steps = np.stack(
+        #     [np.linspace(rc[ji, 0], rc[ji, 1], num=self.steps) for ji in range(2)], axis=1)
+        # return rc_steps
+        xy = self._xy
+        return self.geospatial.rowcol(xy)
+    
     def _interpolator(self, arr):
         from scipy.interpolate import RegularGridInterpolator
         rowcol_grids = self.geospatial.rowcol_grids
@@ -172,10 +182,8 @@ class ProfileInterpolator():
 
     def interpolate(self, arr):
         _ip = self._interpolator(arr)
-        rc = self._rowcol_endpoints
-        rc_steps = np.stack(
-            [np.linspace(rc[ji, 0], rc[ji, 1], num=self.steps) for ji in range(2)], axis=1)
-        return _ip(rc_steps)
+        rc_steps = self._rc
+        return _ip(rc_steps.T)
 
     @property
     def distance(self):
