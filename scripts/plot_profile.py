@@ -55,7 +55,10 @@ def read_results(pathres, IR=None, fnimraw=None, fndemraw=None, upscale=8, overw
         ygrid = load_object(fnygrid)
     res = {'ygrid': ygrid, 'geospatial': geospatial}
     res['e_mean'] = np.load(pathres / 'e_mean.npy')
-    # res['e_quantile'] = np.load(pathres / 'e_quantile.npy')
+    try:
+        res['e_quantile'] = np.load(pathres / 'e_quantile.npy')
+    except:
+        pass
     res['frac_thawed'] = np.load(pathres / 'frac_thawed_None.npy')
     try:
         res['e_mean_period_mean'] = np.load(pathres / 'e_mean_period_mean.npy')

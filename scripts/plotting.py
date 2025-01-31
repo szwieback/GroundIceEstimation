@@ -99,7 +99,8 @@ def plot_profile(
         td = thaw_depth(profile_frac, ygrid, return_indices=True)
     if yf is not None:
         profile_yf = pi.interpolate(yf)
-    ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto', alpha=alpha)
+    ax.imshow(
+        profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto', alpha=alpha, interpolation='bicubic')
     if ymax is not None:
         ax.set_ylim((_get_index(ygrid, ymax), 0))
     if c_td is None: c_td = '#ffffff'
@@ -135,7 +136,7 @@ def plot_profile_index(
     pi = ProfileInterpolator(geospatial, xy_start, xy_end, steps=steps)
     profile = pi.interpolate(im)
     vmin, vmax = (0.0, 1.0) if vlim is None else (vlim[0], vlim[1])
-    ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto')
+    ax.imshow(profile.T, vmin=vmin, vmax=vmax, cmap=cmap, aspect='auto', interpolation='bicubic')
     if xticks is not None:
         ax.set_xticks(_get_index(pi.distance_steps, xticks))
         ax.set_xticklabels(xticks)

@@ -353,7 +353,7 @@ def _read_timeseries_kivalina(year=2019, remove_last=False, overwrite=False):
         res = load_object(fntmp)
     return res
 
-def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
+def plot_profile_time_series(path0, config, scenario='2019r', fnout=None, dpi=450):
     from scripts.plotting import (
         initialize_matplotlib, colslist, ProfileInterpolator, plot_profile, plot_profile_index)
     import matplotlib.pyplot as plt
@@ -477,7 +477,7 @@ def plot_profile_time_series(path0, config, scenario='2019r', fnout=None):
     if fnout is None:
         plt.show()
     else:
-        fig.savefig(fnout)
+        fig.savefig(fnout, dpi=dpi)
 
 def plot_regional(fnout=None):
     from scripts.plotting import add_scalebar, colslist, initialize_matplotlib
@@ -708,7 +708,8 @@ def export_index(path0, config, fnoutdict):
         print(fnoutdict[ftype])
 
 def plot_index(
-        config, path0, fnls, fnout=None, _cmap=None, transect=True, focus_region=False, reference=False):
+        config, path0, fnls, fnout=None, _cmap=None, transect=True, focus_region=False, reference=False,
+        cores=True, dpi=450):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
     from matplotlib import cm
     from matplotlib.colors import Normalize
@@ -732,10 +733,11 @@ def plot_index(
     import geopandas as gpd
     gdf = gpd.read_file(fncores).to_crs(geospatial_proc.crs)
     gdf = gdf[gdf['include'] == 1]
-    rc_cores = geospatial_proc.rowcol(gdf)
-    s_core, c_core = 2, '#ffdf1d'
-    axs[1].scatter(
-        rc_cores[1,:], rc_cores[0,:], c=c_core, s=2, edgecolors='none')
+    if cores:
+        rc_cores = geospatial_proc.rowcol(gdf)
+        s_core, c_core = 2, '#ffdf1d'
+        axs[1].scatter(
+            rc_cores[1,:], rc_cores[0,:], c=c_core, s=2, edgecolors='none')
     # show focus region
     if focus_region:
         gss = geospatial_subset.shape
@@ -784,17 +786,18 @@ def plot_index(
         ylab=cax_top - cax_height)
 
     # legend: cores
-    lax = axs[1].inset_axes((0, cax_top - cax_height, 1.00, cax_height))
-    lax.scatter(
-        cax_left, 0.50, s=s_core * 2, c=c_core, transform=lax.transAxes, linewidths=0.3,
-        edgecolors=colslist[0])
-    ax.text(0.08, 0.40, 'cores', ha='left', va='center', transform=lax.transAxes)
-    lax.axis('off')
+    if cores:
+        lax = axs[1].inset_axes((0, cax_top - cax_height, 1.00, cax_height))
+        lax.scatter(
+            cax_left, 0.50, s=s_core * 2, c=c_core, transform=lax.transAxes, linewidths=0.3,
+            edgecolors=colslist[0])
+        ax.text(0.08, 0.40, 'cores', ha='left', va='center', transform=lax.transAxes)
+        lax.axis('off')
     if fnout is None:
         import matplotlib.pyplot as plt
         plt.show()
     else:
-        fig.savefig(fnout, dpi=450)
+        fig.savefig(fnout, dpi=dpi)
 
 def plot_graphical_abstract(config, path0, fnout=None, _cmap=None):
     from scripts.plotting import prepare_figure, add_scalebar, colslist
@@ -921,7 +924,8 @@ if __name__ == '__main__':
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
     
     # plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
-    
+    plot_profile_time_series(
+        path0, configs[0], scenario='2019r', fnout=pathfig / 'profile_video.pdf', dpi=4800)
     # plot_regional(fnout=pathfig / 'regional.pdf')
     # TDDdict, cumdict = TDD_kivalina(fnforcing)
     # print(np.mean([cumdict[y][1][-1] for y in range(1989, 2020)]))
@@ -932,12 +936,12 @@ if __name__ == '__main__':
     # plot_atmosphere(
     #     configs[0], ('2019rs', 'TDD900_lastday'), path0, indranges_names,
     #     fnout=pathfig / 'atmos.pdf')
-    plot_index(
-        configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
-        fnout=pathfig / 'index.pdf')
     # plot_index(
-    #     configs[0], path0, fnls, transect=False, focus_region=False, reference=False, 
-    #     fnout=pathfig / 'index_pres.pdf')
+    #     configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
+    #     fnout=pathfig / 'index.pdf')
+    # plot_index(
+        # configs[0], path0, fnls, transect=True, focus_region=False, reference=False, cores=False, 
+        # fnout=pathfig / 'index_video2.pdf', dpi=4800)
 
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)

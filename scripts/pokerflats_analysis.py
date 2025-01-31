@@ -9,16 +9,19 @@ from pathlib import Path
 from scripts.happyvalley_analysis import read_results
 from analysis import InversionResultsIS
 from scripts.pathnames import paths
-from scripts.pokerflats import geom, datesstr, read_InSAR, xy_ref, wavelength, fns_unw_offset, var_atmo, InSAR_site
+from scripts.pokerflats import geom, datesstr, read_InSAR, xy_ref, wavelength, fns_unw_offset, var_atmo
+from scripts.plot_profile import InSAR_site
 thresh = 4.3e-3
 
 p0 = paths['processed'] / 'pokerflats'
 
 sites = {'tower': (-147.4874, 65.1239), 'clearing': (-147.47948, 65.12625)}
 
-
-def path_results(year, method='hadamard'):
-    pathres = p0 / f'{year}/{method}'
+def path_results(year, method='hadamard', tmethod=None):
+    if tmethod is None:
+        pathres = p0 / f'{year}/{method}'
+    else:
+        pathres = p0 / f'{year}/{method}_{tmethod}'
     return pathres
 
 def plot_map_subsidence(year, fnout=None):
@@ -26,7 +29,7 @@ def plot_map_subsidence(year, fnout=None):
     import datetime
     from scripts.plotting import (
         prepare_figure, cmap_e, cmap_s, _get_index, add_scalebar)
-    pstack = paths['stacks'] / 'Fairbanks_131_373'/ f'{year}'
+    pstack = paths['stacks'] / 'Fairbanks_131_373' / f'{year}'
 
     dates = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     doys = [d.timetuple().tm_yday for d in dates]
@@ -84,13 +87,13 @@ def plot_map_subsidence(year, fnout=None):
     else:
         plt.savefig(fnout, dpi=450)
 
-def plot_site(sitename, year, method='hadamard', fnout=None):
+def plot_site(sitename, year, method='hadamard', tmethod=None, fnout=None):
     import datetime
     import matplotlib.dates as mdates
     from scripts.plotting import prepare_figure, colslist
     import matplotlib.pyplot as plt
-    
-    res0 = read_results(path_results(year, method=method), overwrite=False)
+
+    res0 = read_results(path_results(year, method=method, tmethod=tmethod), overwrite=False)
     geospatial = res0['geospatial']
     xy_site = sites[sitename]
     rc = geospatial.rowcol(xy_site)
@@ -99,6 +102,10 @@ def plot_site(sitename, year, method='hadamard', fnout=None):
     e_mean = res0['e_mean'][rc[0], rc[1], ...]
     e_q = res0['e_quantile'][rc[0], rc[1], ...]
     frac_thawed = res0['frac_thawed'][rc[0], rc[1], ...]
+    e_period_mean = res0['e_mean_period_mean'][rc[0], rc[1], 0]
+    e_period_quantile = res0['e_mean_period_quantile'][rc[0], rc[1], 0,:]
+    print(e_period_mean)
+    print(e_period_quantile)
     ax = axs[0]
     c, lw_q = colslist[0], 0.5
     alpha = (frac_thawed) ** 3
@@ -114,20 +121,26 @@ def plot_site(sitename, year, method='hadamard', fnout=None):
             e_q[jdepth:jdepth + 2, 1], ygrid[jdepth:jdepth + 2], lw=lw_q,
             c=c, alpha=alpha[jdepth])
     axs[0].set_ylim((0.9, 0.0))
-    
+    depth_period, height_period = 0.85, 0.10
+    width_period = 0.05
+    alpha_period, c_period = 1.0, colslist[2]
+    from matplotlib.patches import Rectangle
+    ax.add_patch(Rectangle((e_period_mean - width_period / 2, depth_period - height_period / 2), width_period, height_period, alpha=alpha_period, zorder=0, color=c_period))
+    ax.plot(e_period_quantile, (depth_period,) * 2, c=c_period, alpha=alpha_period)
+    ax.text(e_period_quantile[0] - 0.05, depth_period, '$\\bar{e}$', c=c_period, alpha=alpha_period, ha='left', va='center')
     ax = axs[1]
-    pstack = paths['stacks'] / 'Fairbanks_131_373'/ f'{year}'        
+    pstack = paths['stacks'] / 'Fairbanks_131_373' / f'{year}'
     s_obs, K, geospatial = read_InSAR(
         pstack, wavelength, xy_ref=xy_ref, fns_unw_offset=fns_unw_offset.get(year, []), var_atmo=var_atmo)
     dates = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     s_obs_site, sd_site = InSAR_site(
         s_obs, K, geospatial, xy_site, geom, vertical=True, vertical_sign_flip=True)
     ax.errorbar(dates, s_obs_site, yerr=sd_site, color='none', ecolor=c, alpha=0.5, lw=0.5)
-    ax.plot(dates, s_obs_site, c=c) 
+    ax.plot(dates, s_obs_site, c=c)
     ax.axhline(0, c='#eeeeee', lw=0.5)
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-    ax.set_ylim((-0.06, 0.01))    
+    ax.set_ylim((-0.06, 0.01))
     labels = (['excess ice $e$ [-]', 'deformation $s$ [m]'])
     for lab, ax in zip(labels, axs):
         ax.text(-0.28, 0.50, lab, ha='left', va='center', rotation=90, transform=ax.transAxes)
@@ -135,7 +148,6 @@ def plot_site(sitename, year, method='hadamard', fnout=None):
         plt.show()
     else:
         fig.savefig(fnout)
-    
 
 # plot profile; then repeat with talik and with late-season index (for both)
 
@@ -143,9 +155,9 @@ def plot_site(sitename, year, method='hadamard', fnout=None):
 
 if __name__ == '__main__':
     year = 2024
-    method = 'hadamard'
-
+    rmethod = 'hadamard'
+    tmethod = 'talik'
     # plot_map_subsidence(2024)
-    
-    sitename = 'clearing'
-    plot_site(sitename, year, method)
+
+    sitename = 'tower'
+    plot_site(sitename, year, rmethod, tmethod=tmethod)

@@ -20,7 +20,7 @@ dist = {
     'soil': {'high_horizon': 0.40, 'low_horizon': 0.25, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.3, 'organic_below': 0.05},
     'n_factor': {'high': 0.95, 'low': 0.85, 'alphabeta': 2.0},
-    'talik': {'low_depth': 0.3, 'high_depth': 0.4, 'probability': 0.5, 'high_thickness': 0.3,
+    'talik': {'low_depth': 0.3, 'high_depth': 0.5, 'probability': 0.5, 'high_thickness': 0.5,
               'low_thickness': 0.0, 'frozen_fraction': 0.1}}
 ll, ur = None, None
 
@@ -90,5 +90,5 @@ def process_pokerflats(year=2024, rmethod='hadamard', tmethod='none'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    for tmethod in ('talik', 'none'):
+    for tmethod in ('talik',): #'none'
         process_pokerflats(year=2024, tmethod=tmethod)
