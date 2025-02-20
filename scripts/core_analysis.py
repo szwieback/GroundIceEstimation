@@ -21,53 +21,65 @@ def fns(site, year):
             'IC': 'FSA_Dalton_IC_2023_20231019.xlsx', 'HV': 'FSA_Dalton_HV_2023_20231018.xlsx'}
         fns = {
             'IC': 'FSA_Dalton_IC_2023_20240312.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
+    elif year == 2024:
+        fns = {'Tower': 'FSA_PF_Tower_2024_20250124.xlsx'}
     else:
         raise ValueError
-    return fns[site]
+    version = '2022' if year in (2022, 2023) else '2024'
+    return (fns[site], version)
 
-def extract_core(df, method=None):
+def extract_core(df, method=None, row_max=1024):
     data = []
     row = 1
-    while row is not None:
+    while row is not None and row < row_max:
         try:
             entry = df.loc[row]
-            depth = entry['Depth']
-            assert depth > 0
-            drange = (entry['Start'], entry['End'])
-            facies = entry['Facies'].lower()
-            if facies in ('ice', 'ICE'):
-                e = 1.0
-            elif facies == 'missing':
-                e = None
-            else:
-                V_frozen = entry['Volume'] * 1e-6  # to m3
-                m_ew = entry['Excess water wt'] * 1e-3  # kg
-                V_ew = m_ew / rho_water
-                V_ei = (rho_water / rho_ice) * V_ew
-                V_thawed = entry['Container only soil'] * 1e-6 # m3
-                V_thawedtotal = entry['Container w/water'] * 1e-6 #m3
-                V_water = entry['Container only water'] * 1e-6 #m3             
-                if method is None or method == 'supernatant':
-                    if V_frozen > 0:
-                        e = V_ei / V_frozen
-                    else:
-                        e = None
-                elif method == 'thawed':   # Morse                 
-                    e = V_ei / (V_ei + V_thawedtotal) if V_thawed > 0 else 0.0
-                elif method == 'difference':
-                    e = (V_frozen - V_thawed) / V_frozen if V_thawed > 0 else 0.0
-                elif method == 'watervolume':
-                    e = (rho_water / rho_ice) * V_water / V_frozen
-                else:
-                    raise ValueError(f"Excess ice method {method} not recognized")
-                if e is None or not np.isfinite(e):
-                    e = None
-                if e is not None and e < 0.0:
-                    e = 0.0
-            data.append(ESeg(drange, e))
-            row = row + 1
         except:
-            row = None
+            row, entry = None, None
+        if row is not None:
+            try:
+                depth = entry['Depth']
+                assert depth > 0
+                drange = (entry['Start'], entry['End'])
+                facies = entry['Facies'].lower()
+                cryostructure = str(entry['Cryostructure']).lower()
+                if facies in ('ice', 'ICE'):
+                    e = 1.0
+                elif 'unfrozen' in cryostructure or 'thawed' in cryostructure:
+                    e = 0.0
+                elif 'missing' in facies or 'discar' in facies:
+                    e = None
+                elif len(facies) < 1:
+                    e = None
+                else:
+                    V_frozen = entry['Volume'] * 1e-6  # to m3
+                    m_ew = entry['Excess water wt'] * 1e-3  # kg
+                    V_ew = m_ew / rho_water
+                    V_ei = (rho_water / rho_ice) * V_ew
+                    V_thawed = entry['Container only soil'] * 1e-6 # m3
+                    V_thawedtotal = entry['Container w/water'] * 1e-6 #m3
+                    V_water = entry['Container only water'] * 1e-6 #m3             
+                    if method is None or method == 'supernatant':
+                        if V_frozen > 0:
+                            e = V_ei / V_frozen
+                        else:
+                            e = None
+                    elif method == 'thawed':   # Morse                 
+                        e = V_ei / (V_ei + V_thawedtotal) if V_thawed > 0 else 0.0
+                    elif method == 'difference':
+                        e = (V_frozen - V_thawed) / V_frozen if V_thawed > 0 else 0.0
+                    elif method == 'watervolume':
+                        e = (rho_water / rho_ice) * V_water / V_frozen
+                    else:
+                        raise ValueError(f"Excess ice method {method} not recognized")
+                    if e is None or not np.isfinite(e):
+                        e = None
+                    if e is not None and e < 0.0:
+                        e = 0.0
+                data.append(ESeg(drange, e))
+                row = row + 1
+            except:
+                row = row + 1
     return data
 
 def interpolate_core(data, delta_y=1, depth=150):  # in cm
@@ -77,7 +89,7 @@ def interpolate_core(data, delta_y=1, depth=150):  # in cm
     e_grid[:] = np.nan
     for eseg in data:
         if eseg.e is not None:
-            e_grid[eseg.drange[0]:eseg.drange[1]] = eseg.e
+            e_grid[int(eseg.drange[0]):int(eseg.drange[1])] = eseg.e
     return e_grid
 
 def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
@@ -86,8 +98,10 @@ def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
     d_mean_bs = np.nanmean(d_bs, axis=1)
     return np.nanpercentile(d_mean_bs, percentiles, axis=0)
 
-def read_site(fn, method=None):
-    df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl')
+def read_site(fn, method, version='2022'):
+    headers = {'2022': 0, '2024': 1}
+    df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl', header=headers[version])
+    df_dict = {k: df_dict[k] for k in df_dict if '_' in k and '00' not in k}
     data_dict = {core: extract_core(df_dict[core], method=method) for core in df_dict}
     e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
     return e_grid
@@ -173,17 +187,26 @@ def plot_inset(fnout):
 if __name__ == '__main__':
     from scripts.pathnames import paths
     year = 2023
-    fns_abs = {site: paths['cores'] / fns(site, year) for site in sitenames}
+    fns_abs = {site: paths['cores'] / fns(site, year)[0] for site in sitenames}
     
     # for site in sitenames:
     #     plot_site(
     #         fns_abs[site], ylim=(75, 0), method='watervolume', 
     #         fnout=paths['figures'] / f'cores_{site}_{year}.pdf'))
 
-    df_dict = pd.read_excel(fns_abs['IC'], sheet_name=None, engine='openpyxl')
+    # df_dict = pd.read_excel(fns_abs['IC'], sheet_name=None, engine='openpyxl')
     # data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
     # print(extract_core(df_dict['IC_G']))
     # e_grid = read_site(fns_abs['HV'])
     # print(np.nanstd(e_grid, axis=0))
+    
+    # need to match missing to taliks; check excess water for moss
+    year = 2024
+    fn, version = fns('Tower', year)
+    method = 'watervolume'
+    e_grid = read_site(paths['cores'] / fn, method=method, version=version)
+    # print(extract_core(df_dict[core], method=method))
+    
+    
     
     

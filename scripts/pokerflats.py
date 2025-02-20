@@ -90,5 +90,5 @@ def process_pokerflats(year=2024, rmethod='hadamard', tmethod='none'):
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
 
 if __name__ == '__main__':
-    for tmethod in ('talik',): #'none'
+    for tmethod in ('talik', 'none'):
         process_pokerflats(year=2024, tmethod=tmethod)
