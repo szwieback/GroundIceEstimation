@@ -136,7 +136,7 @@ def plot_core(ax, site, year, method=None, c='#000000'):
     from scripts.pathnames import paths
     from scripts.core_analysis import read_site, bootstrap_percentiles, fns
     site_abbr = {'happyvalley': 'HV', 'icecut': 'IC'}
-    fns_abs = paths['cores'] / fns(site_abbr[site], year)
+    fns_abs = paths['cores'] / fns(site_abbr[site], year)[0]
     y_grid_core = np.arange(150) / 100  # hard-coded for now
 
     e_grid = read_site(fns_abs, method=method)
@@ -212,6 +212,78 @@ def plot_comparison(fnout=None, overwrite=False):
     doy_ticks = (152, 182, 213, 244)
     axs[1, 2].set_xticks(doy_ticks)
     axs[1, 2].set_xticklabels(('Jun', 'Jul', 'Aug', 'Sep'))
+    if fnout is None:
+        import matplotlib.pyplot as plt
+        plt.show()
+    else:
+        fig.savefig(fnout)
+
+def plot_comparison_presentation(fnout=None, overwrite=False):
+    from scripts.plotting import prepare_figure, colslist
+    from string import ascii_lowercase
+    sites = ('icecut', 'happyvalley')
+    years = (2019,)
+    year_core = 2022
+    res = {}
+    for site in sites:
+        res[site] = {}
+        for year in years:
+            res[site][year] = InSAR_results(site, year, overwrite=overwrite)
+
+    yyticks = (0.0, 0.2, 0.4, 0.6)
+    syticks = (0.0, 0.02, 0.04)
+    fig, axs = prepare_figure(
+        nrows=2, ncols=2, sharey=False, figsize=(1.10, 0.65), hspace=0.20, wspace=0.55,
+        left=0.184, bottom=0.150, top=0.930, right=0.940)
+    for jsite, site in enumerate(sites):
+        axs[jsite, 1].axhline(0, lw=0.2, c='#cccccc')
+        axs[jsite, 0].text(
+            -0.50, 0.50, site_labels[site], ha='right', va='center',
+            transform=axs[jsite, 0].transAxes, c='k', rotation=90)
+        for jyear, year in enumerate(years):
+            print(year, site)
+            plot_retrieval(axs[jsite, jyear], res[site][year], c=colslist[2])
+            plot_core(axs[jsite, jyear], site, year_core, c=colslist[0])
+            plot_subsidence(axs[jsite, 1], res[site][year], c=colslist[2])
+            axs[jsite, jyear].text(
+                -0.29, 0.50, 'depth $y$ [cm]', ha='right', va='center',
+                transform=axs[jsite, jyear].transAxes, rotation=90)
+            axs[jsite, jyear].set_yticks(yyticks)
+            axs[jsite, jyear].set_yticklabels((100 * np.array(yyticks)).astype(np.int16))
+            axs[jsite, jyear].set_xticks((0.0, 0.3, 0.6))
+        axs[jsite, 1].set_ylim((0.05, -0.02))
+        axs[jsite, 1].set_yticks(syticks)
+        axs[jsite, 1].set_yticklabels((100 * np.array(syticks)).astype(np.int16))
+        axs[jsite, 1].text(
+            -0.26, 0.50, '$s(t)$ [cm]', ha='right', va='center',
+            transform=axs[jsite, 1].transAxes, rotation=90)
+    xlab = ('excess ice $e$ [-]',  'date')
+    coltitles = ('ice profile', 'subsidence')
+    for jcol, lab in enumerate(xlab):
+        axs[-1, jcol].text(
+            0.50, -0.39, lab, ha='center', va='baseline', transform=axs[-1, jcol].transAxes)
+        axs[0, jcol].text(
+            0.50, 1.07, coltitles[jcol], ha='center', va='baseline', c='k',
+            transform=axs[0, jcol].transAxes)
+    for jax, ax in enumerate(axs.flatten()):
+        xxlab = 0.98 if jax % 3 != 2 else 0.12
+        # ax.text(
+        #     xxlab, 0.03, f'{ascii_lowercase[jax]})', ha='right', va='baseline',
+        #     transform=ax.transAxes)
+    xyearlab = 1.03
+    # axs[0, 2].text(
+    #     xyearlab, 0.32, '2022', ha='left', transform=axs[0, 2].transAxes, c=colslist[0])
+    # axs[0, 2].text(
+    #     xyearlab, 0.06, '2019', ha='left', transform=axs[0, 2].transAxes, c=colslist[1])
+    axs[0, 0].text(
+        0.30, 0.80, 'InSAR', ha='left', transform=axs[0, 0].transAxes, c=colslist[2])
+    axs[0, 0].text(
+        0.71, 0.06, 'cores', ha='left', transform=axs[0, 0].transAxes, c=colslist[0])
+    axs[0, 0].text(
+        0.90, 0.28, '$y_\\mathrm{f}$', ha='left', transform=axs[0, 0].transAxes, c='#cccccc')
+    doy_ticks = (152, 182, 213, 244)
+    axs[1, 1].set_xticks(doy_ticks)
+    axs[1, 1].set_xticklabels(('Jun', 'Jul', 'Aug', 'Sep'))
     if fnout is None:
         import matplotlib.pyplot as plt
         plt.show()
@@ -310,8 +382,9 @@ if __name__ == '__main__':
     fnout = paths['figures'] / f'northslope_comparison.pdf'
     # plot_comparison(fnout=fnout, overwrite=False)
     fnout = paths['figures'] / f'northslope_comparison23.pdf'
-    plot_comparison_2023(fnout=fnout, overwrite=False)
-
+    # plot_comparison_2023(fnout=fnout, overwrite=False)
+    fnout = paths['figures'] / f'northslope_comparison_pres.pdf'
+    plot_comparison_presentation(fnout, overwrite=False)
     from forcing import parse_dates
     # hv calm: 2019-08-12: 0.46
     dates = {

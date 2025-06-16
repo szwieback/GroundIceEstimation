@@ -246,7 +246,7 @@ def plot_kivalina_ICOP(fnout=None, overwrite=False):
     cores = read_core_data(fngpkg, geospatial)
 
     cmap = cmap_e
-    elim = (0.0, 0.5)
+    elim = (0.0, 0.6)
     xticks_im = (25, 65, 105, 145)
     yticks_im = (10, 50, 90)
     ys = [(0.55, 0.65)]
@@ -275,7 +275,7 @@ def plot_kivalina_ICOP(fnout=None, overwrite=False):
         mec=colslist[0], mfc=colslist[0], zorder=9)
 
     for jp, profile in enumerate(profiles):
-        pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1])
+        pi = ProfileInterpolator(geospatial.upscaled(upscale), profile[0], profile[1], steps=512)
         rc = pi._rowcol_endpoints
         label = f'T'
         add_arrow_line(

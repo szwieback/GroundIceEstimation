@@ -101,7 +101,7 @@ def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
 def read_site(fn, method, version='2022'):
     headers = {'2022': 0, '2024': 1}
     df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl', header=headers[version])
-    df_dict = {k: df_dict[k] for k in df_dict if '_' in k and '00' not in k}
+    # df_dict = {k: df_dict[k] for k in df_dict if '_' in k and '00' not in k}
     data_dict = {core: extract_core(df_dict[core], method=method) for core in df_dict}
     e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
     return e_grid

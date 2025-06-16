@@ -924,8 +924,8 @@ if __name__ == '__main__':
     #     fnout=pathfig / 'subset.pdf', overwrite=False)
     
     # plot_profile_time_series(path0, configs[0], scenario='2019r', fnout=pathfig / 'profile.pdf')
-    plot_profile_time_series(
-        path0, configs[0], scenario='2019r', fnout=pathfig / 'profile_video.pdf', dpi=4800)
+    # plot_profile_time_series(
+    #     path0, configs[0], scenario='2019r', fnout=pathfig / 'profile_video.pdf', dpi=4800)
     # plot_regional(fnout=pathfig / 'regional.pdf')
     # TDDdict, cumdict = TDD_kivalina(fnforcing)
     # print(np.mean([cumdict[y][1][-1] for y in range(1989, 2020)]))
@@ -939,9 +939,9 @@ if __name__ == '__main__':
     # plot_index(
     #     configs[0], path0, fnls, focus_region=True, reference=True, transect=True, 
     #     fnout=pathfig / 'index.pdf')
-    # plot_index(
-        # configs[0], path0, fnls, transect=True, focus_region=False, reference=False, cores=False, 
-        # fnout=pathfig / 'index_video2.pdf', dpi=4800)
+    plot_index(
+        configs[0], path0, fnls, transect=False, focus_region=False, reference=False, cores=False, 
+        fnout=pathfig / 'index_handbook.pdf', dpi=600)
 
     # plot_rf_map(configs[0], fnpred, fnls, path0, indranges_names, fnout=pathfig / 'RFmap.pdf')
     # plot_index_cbars(configs[0], path0, fnls)
