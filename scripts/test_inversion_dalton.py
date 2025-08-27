@@ -38,40 +38,22 @@ def dalton_forcing(fnforcing, year=2022):
     datesstr = {2019: ('20190602', '20190614', '20190626', '20190708', '20190720', '20190801',
                        '20190825', '20190906', '20190918'),
                 2023: ('20230605', '20230617', '20230629', '20230723', '20230711',
-                       '20230804', '20230828', '20230909', '20230921'),
-                # 2022: ('20220610', '20220622', '20220704', '20220716', '20220728',
-                #        '20220809', '20220821', '20220902', '20220914'),
-                # 2019: ('20190602', '20190614', '20190626', '20190708', '20190720',
-                #        '20190801', '20190813', '20190825', '20190906')
-                }
+                       '20230804', '20230828', '20230909', '20230921')}
     datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-def process_dalton(year=2019, imethod='IS', memory=True, rmethod='hadamard', K_value=1):
-    from pathlib import Path
-    # path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
-    # fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
-    fnforcing = '/export/data/Data/meteoro/sagwon/proc/sagwon.csv'
+def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, overwrite=False):
+    fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     site_name = 'dalton'
-    sensor = 's1'
-    sarpath = 'P131D'
     if imethod == 'IS':
-        pathout = Path(
-            f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}/{rmethod}_{imethod}_{memory}')
+        pathout = paths['processed'] / f'{site_name}/{year}/{rmethod}_{imethod}'
     else:
-        pathout = Path(
-            f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}/{rmethod}_{imethod}_{memory}_K{K_value}')
+        pathout = paths['processed'] / f'{site_name}/{year}/{rmethod}_{imethod}_K{K_value}'
 
-    if rmethod == 'hadamard':
-        path0 = Path(
-            f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/stackpro/{year}/proc/hadamard/geocoded')
-        fnunw = path0 / 'unwrapped.lonlat.tif'
-        fnK = path0 / 'K_vec.lonlat.tif'
-    else:
-        path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
-        fnunw = path0 / 'ph_history.tif'
-        fnK = path0 / 'ph_history_cov.tif'
+    pathdefo = paths['stacks'] / f'{site_name}/{year}'
+    fnunw = pathdefo / 'ph_history.tif'
+    fnK = pathdefo / 'ph_history_cov.tif'
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
@@ -81,23 +63,36 @@ def process_dalton(year=2019, imethod='IS', memory=True, rmethod='hadamard', K_v
     Nbatch = 1
 
     from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, read_motion,
-        InversionProcessorIS, InversionResultsISMmap,
+        read_K, add_atmospheric_K, read_motion, RationalQuadraticSepDiagCovMV, add_nugget,
+        read_geotiff_geospatial, assemble_tril,
+        spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
         InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap)
 
-    # fnunw = path0 / 'unwrapped.geo.tif'
-    # fnK = path0 / 'K_vec.geo.tif'
+    # K, geospatial_K = read_K(fnK)
+    # s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
+    # K = add_atmospheric_K(K, var_atmo)
+    # assert geospatial == geospatial_K
 
+    from scripts.kivalina_calibration import caldict
+    unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     K, geospatial_K = read_K(fnK)
-    # s_obs, geospatial = read_referenced_motion(
-    #     fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
-    s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
+    
+    P = K.shape[0] + 1
+    var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
+    # initialize covariancemodel
+    covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
+    # apply nugget
+    K = add_nugget(K, caldict['nugget_speckle'])
 
-    # if year in (2009, 2029):  # remove first acq because still a lot of snow
-    #     K = K[1:, 1:, ...]
-    #     s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
-    K = add_atmospheric_K(K, var_atmo)
-    assert geospatial == geospatial_K
+    xy_ref = np.array([
+                    [430013.0,7679097.7], [428394.3,7672731.8], [428334.9,7667939.1], [428870.3,7660699.2],
+                    [427754.0,7655680.9]]).T
+    
+
+    fndist = pathout / 'distance_cal.p'
+    unw_cor, K_cor = spatial_referencing(
+        unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
+    s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
 
     dailytemp, ind_scenes = dalton_forcing(fnforcing, year=year)
 
@@ -118,13 +113,9 @@ def process_dalton(year=2019, imethod='IS', memory=True, rmethod='hadamard', K_v
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
     predens.predict_mean_period(indranges)
-    data = {'s_obs': s_obs, 'K': K}
-    print(s_obs.shape, K.shape)
-    # for dname in data.keys():
-    #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    # ip = IP(predens, geospatial=geospatial_crop, blocksize=128, **kwargs)
+    data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))}
 
-    ip = IP(predens, geospatial=geospatial, blocksize=128, **kwargs)
+    ip = IP(predens, geospatial=geospatial_K, blocksize=128, **kwargs)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, memory=memory, overwrite=True)
     ir.save(pathout / 'ir.p')
@@ -227,106 +218,99 @@ def compare(p0, bname, suffixl, fname):
     for suffix in suffixl:
         print(suffix, np.nanmean(np.abs(res[suffix] - res[suffixl[0]])))
     
-def plot(p0, bname, suffixt, fname, K):
-    import matplotlib.pyplot as plt
-    from scripts.plotting import prepare_figure, cmap_e
-    res = []
-    for suffix in suffixt:
-        fn = p0 / f'{bname}{suffix}' / fname
-        res.append(np.load(fn)[..., 0])
-    # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-    r, c = 2, 2
-    fig_size = (5, 7.5)
-    fig, axs = plt.subplots(r, c, figsize=fig_size)
-    axs = axs.flatten()
-    for jax, r in enumerate(res):
-        im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-        axs[jax].set_xticks([])
-        axs[jax].set_yticks([])
-        axs[jax].set_title(suffixt[jax], loc='left')
-    cbar = fig.colorbar(im, ax=axs)
-    fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
-    plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-    plt.show()
-
-def plot_comparison(p0, bname, suffixt, fname, K):
-    import matplotlib.pyplot as plt
-    from analysis import read_motion
-    from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
-    upscale = 32
-    initialize_matplotlib()
-    path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
-    fnunw = path0 / 'ph_history.tif'
-    arr, geospatial = read_motion(fnunw)
-
-    res = []
-    for suffix in suffixt:
-        fn = p0 / f'{bname}{suffix}' / fname
-        res.append(np.load(fn)[..., 0])
-
-    # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-    r, c = 2, 2
-    fig_size = (5, 7.5)
-    fig, axs = plt.subplots(r, c, figsize=fig_size)
-    axs = axs.flatten()
-    for jax, r in enumerate(res):
-        im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-        axs[jax].set_xticks([])
-        axs[jax].set_yticks([])
-        axs[jax].set_title(suffixt[jax], loc='left')
-
-    add_scalebar(axs[-2], geospatial.upscaled(upscale), length=5000, label='5 km')
-    cbar = fig.colorbar(im, ax=axs)
-    fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
-    plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-    plt.show()
-
-def plot_comparison_all(p0, bname, suffixt, fname, K):
-    import matplotlib.pyplot as plt
-    from analysis import read_motion
-    from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
-    upscale = 32
-    initialize_matplotlib()
-    path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
-    fnunw = path0 / 'ph_history.tif'
-    arr, geospatial = read_motion(fnunw)
-
-    res = []
-    for suffix in suffixt:
-        fn = p0 / f'{bname}{suffix}' / fname
-        res.append(np.load(fn)[..., 0])
-    mask = ~np.isnan(res[0])
-    res_masked = [np.where(mask, arr, np.nan) for arr in res]
-    # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-    r, c = 1, 6
-    fig_size = (8.5, 2.5)
-    fig, axs = plt.subplots(r, c, figsize=fig_size)
-    axs = axs.flatten()
-    title = ['IS', 'GM_K1', 'GM_K2', 'GM_K3', 'GM_K4', 'GM_K5']
-    for jax, r in enumerate(res_masked):
-        im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-        axs[jax].set_xticks([])
-        axs[jax].set_yticks([])
-        axs[jax].set_title(title[jax], loc='center')
-
-    add_scalebar(axs[0], geospatial.upscaled(upscale), length=5000, label='5 km')
-    cax = fig.add_axes((0.92, 0.15, 0.02, 0.7))
-    cbar = fig.colorbar(im, cax=cax)
-    # cbar = fig.colorbar(im, ax=axs, shrink=0.7)
-    fout_fig = os.path.join(fig_path, f'beyasian/fig_dts_{sensor}_{year}_K{K}.png')
-    plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-    plt.show()
+# def plot(p0, bname, suffixt, fname, K):
+#     import matplotlib.pyplot as plt
+#     from scripts.plotting import prepare_figure, cmap_e
+#     res = []
+#     for suffix in suffixt:
+#         fn = p0 / f'{bname}{suffix}' / fname
+#         res.append(np.load(fn)[..., 0])
+#     # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
+#     r, c = 2, 2
+#     fig_size = (5, 7.5)
+#     fig, axs = plt.subplots(r, c, figsize=fig_size)
+#     axs = axs.flatten()
+#     for jax, r in enumerate(res):
+#         im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
+#         axs[jax].set_xticks([])
+#         axs[jax].set_yticks([])
+#         axs[jax].set_title(suffixt[jax], loc='left')
+#     cbar = fig.colorbar(im, ax=axs)
+#     fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
+#     plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
+#     plt.show()
+#
+# def plot_comparison(p0, bname, suffixt, fname, K):
+#     import matplotlib.pyplot as plt
+#     from analysis import read_motion
+#     from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
+#     upscale = 32
+#     initialize_matplotlib()
+#     path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
+#     fnunw = path0 / 'ph_history.tif'
+#     arr, geospatial = read_motion(fnunw)
+#
+#     res = []
+#     for suffix in suffixt:
+#         fn = p0 / f'{bname}{suffix}' / fname
+#         res.append(np.load(fn)[..., 0])
+#
+#     # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
+#     r, c = 2, 2
+#     fig_size = (5, 7.5)
+#     fig, axs = plt.subplots(r, c, figsize=fig_size)
+#     axs = axs.flatten()
+#     for jax, r in enumerate(res):
+#         im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
+#         axs[jax].set_xticks([])
+#         axs[jax].set_yticks([])
+#         axs[jax].set_title(suffixt[jax], loc='left')
+#
+#     add_scalebar(axs[-2], geospatial.upscaled(upscale), length=5000, label='5 km')
+#     cbar = fig.colorbar(im, ax=axs)
+#     fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
+#     plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
+#     plt.show()
+#
+# def plot_comparison_all(p0, bname, suffixt, fname, K):
+    # import matplotlib.pyplot as plt
+    # from analysis import read_motion
+    # from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
+    # upscale = 32
+    # initialize_matplotlib()
+    # path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
+    # fnunw = path0 / 'ph_history.tif'
+    # arr, geospatial = read_motion(fnunw)
+    #
+    # res = []
+    # for suffix in suffixt:
+    #     fn = p0 / f'{bname}{suffix}' / fname
+    #     res.append(np.load(fn)[..., 0])
+    # mask = ~np.isnan(res[0])
+    # res_masked = [np.where(mask, arr, np.nan) for arr in res]
+    # # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
+    # r, c = 1, 6
+    # fig_size = (8.5, 2.5)
+    # fig, axs = plt.subplots(r, c, figsize=fig_size)
+    # axs = axs.flatten()
+    # title = ['IS', 'GM_K1', 'GM_K2', 'GM_K3', 'GM_K4', 'GM_K5']
+    # for jax, r in enumerate(res_masked):
+    #     im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
+    #     axs[jax].set_xticks([])
+    #     axs[jax].set_yticks([])
+    #     axs[jax].set_title(title[jax], loc='center')
+    #
+    # add_scalebar(axs[0], geospatial.upscaled(upscale), length=5000, label='5 km')
+    # cax = fig.add_axes((0.92, 0.15, 0.02, 0.7))
+    # cbar = fig.colorbar(im, cax=cax)
+    # # cbar = fig.colorbar(im, ax=axs, shrink=0.7)
+    # fout_fig = os.path.join(fig_path, f'beyasian/fig_dts_{sensor}_{year}_K{K}.png')
+    # plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
+    # plt.show()
 
 if __name__ == '__main__':
-    site_name = 'dalton'
-    sensor = 's1'
-    sarpath = 'P131D'
-    year = 2019
-    fig_path = f'/home/jchen20/Dropbox/figures/stacks/{site_name}'
-    # K_value = 1
-
+    
     # memory = True
-    rmethod = 'mintpy'
     #
     # imethod = 'GM'
     # # imethod = 'IS'
@@ -344,12 +328,13 @@ if __name__ == '__main__':
     # fname = 'e_mean_period_mean.npy'
     # plot_comparison_all(p0, rmethod, suffixl, fname, 5)
     # exit()
-
+    year = 2023
     do_gmi = True
     do_isi = False
+    rmethod = 'mintpy'
     if do_gmi:
         imethod = 'GM'
-        for K_value in range(1, 6):
+        for K_value in (2,):#range(1, 6):
             for memory in [False]:
                 start_is = time.time()
                 # process_dalton_ecotype(imethod=imethod, memory=memory, year=2023)
@@ -365,13 +350,13 @@ if __name__ == '__main__':
         end_is = time.time()
         t = end_is - start_is
         print(f"Runtime for {imethod} method: {t:.2f} seconds")
-    p0 = Path(
-        f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
-    # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in [False]]
-    suffixl = ['_IS_False', '_GM_False_K1', '_GM_False_K2', '_GM_False_K3', '_GM_False_K4', '_GM_False_K5']
-    fname = 'e_mean_period_mean.npy'
-    plot_comparison_all(p0, rmethod, suffixl, fname, 5)
+    # p0 = Path(
+    #     f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
+    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
+    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in [False]]
+    # suffixl = ['_IS_False', '_GM_False_K1', '_GM_False_K2', '_GM_False_K3', '_GM_False_K4', '_GM_False_K5']
+    # fname = 'e_mean_period_mean.npy'
+    # plot_comparison_all(p0, rmethod, suffixl, fname, 5)
 
 
     
