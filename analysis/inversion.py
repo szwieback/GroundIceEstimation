@@ -4,7 +4,7 @@ Created on Sep 14, 2022
 @author: simon
 '''
 
-from analysis import enforce_directory, MulticlassPredictionEnsemble
+from analysis import enforce_directory, MulticlassPredictionEnsemble, ioput
 
 import numpy as np
 from pathlib import Path
@@ -50,6 +50,8 @@ class InversionProcessor():
             return None
         else:
             _fn = ftype if number is None else f'{ftype}_{number}'
+            # print(ext, number)
+            # raise
             return path0 / f'{_fn}.{ext}'
 
     def _overwrite(self, fn, overwrite=False):
@@ -285,7 +287,11 @@ class InversionProcessorGM(InversionProcessor):
         return outp
 
     def _posterior_single(self, gmm, s_obs, C_obs):
-        if np.count_nonzero(np.isnan(s_obs)) > 0: raise ValueError("Cannot handle NaN")
+        if np.count_nonzero(np.isnan(s_obs)) > 0:
+            # print("NaN in s_obs:", np.isnan(s_obs).sum(), s_obs.shape)
+            s_obs = np.nan_to_num(s_obs, nan=0.0)
+            # raise ValueError("Cannot handle NaN")
+
         gmp = gmm.conditional(s_obs, C_obs=C_obs, method_condition=self.method_condition)
         return np.moveaxis(gmp.to_array(), 0, -2)  # so k axis is at -2
 
@@ -407,6 +413,29 @@ class InversionResults():
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = pathout / fn
         np.save(fnout, res)
+
+    def export_expectation_h5(
+            self, pathout, attrs, param='e', etype='mean', p=None, fn=None,
+            dt_strlist=None, depth_list=None, **kwargs):
+        res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+        dataset_name = f'{param}_{etype}'
+        if fn is None: fn = f'{dataset_name}.h5'
+        fnout = pathout / fn
+        print(f'{dataset_name}: {res.shape}')
+        if dataset_name in ('e_mean_period_var', 'e_mean_period_mean'):
+            if res.ndim == 3 and res.shape[2] == 1:
+                res = res[:, :, 0]
+            ioput.save_hdf5(res, attrs, dataset_name, fnout)
+        elif dataset_name == 'e_mean_period_quantile':
+            if res.ndim == 4 and res.shape[2] == 1:
+                res = res[:, :, 0, :]
+            ioput.save_hdf5(res, attrs, dataset_name, fnout)
+        elif dataset_name in ('e_mean', 'e_var', 'frac_thawed_None'):
+            layer_name = 'depth_mm'
+            ioput.save_hdf5(res, attrs, dataset_name, fnout, layer_name=layer_name, layer_info=depth_list)
+        elif dataset_name in ('yf_mean'):
+            layer_name = 'dates'
+            ioput.save_hdf5(res, attrs, dataset_name, fnout, layer_name=layer_name, layer_info=dt_strlist)
 
     def _expectation(self, param='e', etype='mean', p=None, **kwargs):
         if etype == 'mean':

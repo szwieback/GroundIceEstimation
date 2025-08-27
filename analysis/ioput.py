@@ -8,7 +8,10 @@ from pathlib  import Path
 import numpy as np
 import pickle
 import zlib
+import h5py
 import rasterio
+from rasterio.crs import CRS
+from rasterio.transform import Affine
 from collections.abc import Iterable   
 
 class Geospatial():
@@ -242,6 +245,33 @@ def read_referenced_motion(
     m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
     return m, geospatial
 
+
+def read_motion(
+        fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
+    unw = read_geotiff(fnunw)
+    # if xy.shape[1] > 1:
+    #     raise NotImplementedError('Only one reference point')
+    def unw_to_motion(unw, wavelength=0.055, flip_sign=True):
+        unw *= wavelength / (4 * np.pi)
+        if flip_sign: unw *= -1
+        return unw
+    geospatial = Geospatial.from_file(fnunw)
+    if len(fns_unw_offset) >= 1:
+        import geopandas as gpd
+        from rasterio import features
+        for scene, fn in fns_unw_offset:
+            offset = gpd.read_file(fn).to_crs(geospatial.crs)
+            geom = [(shps, offs) for shps, offs in zip(offset.geometry, offset['offset'])]
+            rasterized = features.rasterize(
+                geom, out_shape=geospatial.shape, fill=0, out=None,
+                transform=geospatial.transform, default_value=0, dtype=np.int64)
+            unw[scene:, ...] += rasterized * 2 * np.pi
+    if xy is not None:
+        rc = geospatial.rowcol(xy)
+        unw_ref = unw[:, rc[0, 0], rc[1, 0]]
+        unw -= unw_ref[:, np.newaxis, np.newaxis]
+    m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
+    return m, geospatial
 def K_from_K_vec(K_vec):
     return np.moveaxis(assemble_tril(np.moveaxis(K_vec, 0, -1)), (0, 1), (-2, -1))
 
@@ -269,4 +299,169 @@ def load_object(filename):
     with open(filename, 'rb') as f:
         obj = pickle.loads(zlib.decompress(f.read()))
     return obj
+
+
+def get_tif_attrs(crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
+    if not isinstance(transform, Affine):
+        raise ValueError('transform must be a rasterio.transform.Affine')
+
+    attrs = {
+        'WIDTH': int(width),
+        'LENGTH': int(length),
+        'X_FIRST': float(transform.c),
+        'Y_FIRST': float(transform.f),
+        'X_STEP': float(transform.a),
+        'Y_STEP': float(transform.e),
+        'DATA_TYPE': dtype,
+        'NoDataValue': float(nodata) if np.isfinite(nodata) else np.nan,
+    }
+
+    if isinstance(crs, CRS) and crs:
+        epsg = crs.to_epsg()
+        print(f'EPSG:{epsg}')
+        if epsg is not None:
+            attrs['EPSG'] = int(epsg)
+            if 32601 <= epsg <= 32660:
+                attrs['UTM_ZONE'] = f'{epsg - 32600}N'
+            elif 32701 <= epsg <= 32760:
+                attrs['UTM_ZONE'] = f'{epsg - 32700}S'
+        attrs['CRS_WKT'] = crs.to_wkt()
+        attrs['UNIT'] = 'degrees' if crs.is_geographic else 'meters'
+
+    if band_description is not None:
+        attrs['BAND_DESCRIPTIONS'] = band_description
+    return attrs
+
+
+def tif_attrs(fin_tif):
+    with rasterio.open(fin_tif) as src:
+        h, w = src.height, src.width
+        transform = src.transform
+        crs = src.crs if src.crs else None
+        nodata = src.nodata if src.nodata is not None else np.nan
+        dtype = str(np.dtype(src.dtypes[0]).name)
+        band_desc = [x if x is not None else '' for x in src.descriptions] if any(src.descriptions) else None
+        return get_tif_attrs(crs, transform, w, h, band_description=band_desc, nodata=nodata, dtype=dtype)
+
+
+def save_hdf5(data, attrs, data_name, fnout_h5, layer_name=None, layer_info=None):
+    arr = np.asarray(data, dtype=np.dtype(attrs.get('DATA_TYPE', 'float32')))
+    # data_name = 'timeseries'
+    with h5py.File(fnout_h5, 'w') as f:
+        if arr.ndim == 2:
+            h, w = arr.shape
+            f.create_dataset(
+                data_name,
+                data=arr,
+                dtype=arr.dtype,
+                chunks=(min(512, h), min(512, w)),
+                compression='lzf'
+            )
+        elif arr.ndim == 3:
+            b, h, w = arr.shape
+            f.create_dataset(
+                data_name,
+                data=arr,
+                dtype=arr.dtype,
+                chunks=(1, min(512, h), min(512, w)),
+                compression='lzf'
+            )
+        else:
+            raise ValueError('data must be 2D (H,W) or 3D (B,H,W)')
+
+        for k, v in attrs.items():
+            if k != 'BAND_DESCRIPTIONS':
+                f.attrs[k] = v
+        if layer_info is not None:
+            dt = h5py.string_dtype()
+            ds = f.create_dataset(layer_name, (len(layer_info),), dtype=dt)
+            ds[:] = np.array(layer_info, dtype=object)
+        # if 'BAND_DESCRIPTIONS' in attrs:
+        #     labels = list(attrs['BAND_DESCRIPTIONS'])
+        #     # dt = h5py.string_dtype(encoding='utf-8')
+        #     dt = h5py.string_dtype()
+        #     ds = f.create_dataset('dates', (len(labels),), dtype=dt)
+        #     ds[:] = np.array(labels, dtype=object)
+
+def geotiff2hdf5(fin_tif, fnout_h5, data_name='data'):
+    attrs = tif_attrs(fin_tif)          # or tif_attrs(...) if that's your helper
+    with rasterio.open(fin_tif) as src:
+        b, h, w = src.count, attrs['LENGTH'], attrs['WIDTH']
+        dtype = np.dtype(attrs['DATA_TYPE'])
+        if b == 1:
+            data = src.read(1, out_dtype=dtype)
+        else:
+            data = np.empty((b, h, w), dtype=dtype)
+            for i in range(1, b + 1):
+                data[i - 1] = src.read(i, out_dtype=dtype)
+    save_hdf5(data, attrs, data_name, fnout_h5)
+
+def hdf52geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
+    with h5py.File(fin_h5, 'r') as f:
+        # if dataset is None:
+        #     keys = [k for k in f.keys() if isinstance(f[k], h5py.Dataset) and k.lower() != 'dates']
+        #     if not keys:
+        #         raise ValueError('No data dataset found in HDF5.')
+        #     dataset = keys[0]
+        arr = f[dataset][()]
+        arr = np.moveaxis(arr, 2, 0)
+        attrs = f.attrs
+
+        if arr.ndim == 2:
+            count, height, width = 1, arr.shape[0], arr.shape[1]
+        elif arr.ndim == 3:
+            count, height, width = arr.shape[0], arr.shape[1], arr.shape[2]
+        else:
+            raise ValueError(f'Unsupported array shape: {arr.shape}')
+
+        transform = Affine(float(attrs['X_STEP']), 0.0, float(attrs['X_FIRST']),
+                           0.0, float(attrs['Y_STEP']), float(attrs['Y_FIRST']))
+
+        crs = None
+        epsg = attrs.get('EPSG', None)
+        if epsg is not None:
+            try: crs = CRS.from_epsg(int(epsg))
+            except Exception: crs = None
+        if crs is None:
+            wkt = attrs.get('CRS_WKT', None) or attrs.get('crs_wkt', None)
+            if wkt:
+                try: crs = CRS.from_wkt(wkt)
+                except Exception: crs = None
+
+        nod = attrs.get('NoDataValue', np.nan)
+        nodata = None if (isinstance(nod, float) and not np.isfinite(nod)) else float(nod)
+
+        dtype = str(arr.dtype)
+        profile = {
+            'driver': 'GTiff',
+            'height': int(height),
+            'width': int(width),
+            'count': int(count),
+            'dtype': dtype,
+            'transform': transform,
+            'crs': crs,
+            'compress': 'LZW',
+            'tiled': True
+        }
+        if nodata is not None:
+            profile['nodata'] = nodata
+
+        with rasterio.open(fout_tif, 'w', **profile) as dst:
+            if count == 1 and arr.ndim == 2:
+                dst.write(arr, 1)
+            else:
+                dst.write(arr)
+
+            labels = None
+            if layer_name in f and isinstance(f[layer_name], h5py.Dataset):
+                dset = f[layer_name][()]
+                labels = [x.decode() if isinstance(x, (bytes, bytearray)) else str(x) for x in dset]
+            elif 'BAND_DESCRIPTIONS' in attrs:
+                bd = attrs['BAND_DESCRIPTIONS']
+                if isinstance(bd, (list, tuple, np.ndarray)):
+                    labels = [x.decode() if isinstance(x, (bytes, bytearray)) else str(x) for x in bd]
+
+            if labels and len(labels) == count:
+                for i, lab in enumerate(labels, start=1):
+                    dst.set_band_description(i, lab)
 
