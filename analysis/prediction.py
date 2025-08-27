@@ -84,13 +84,33 @@ class PredictionEnsemble():
 
     def predict_mean_period(self, indranges, param='e'):
         if isinstance(param, str):
-            self._predict_mean_period(indranges, param=param)            
+            self._predict_mean_period(indranges, param=param)
         else:
             for _p in param: self.predict_mean_period(indranges, _p)
 
     def _predict_mean_period(self, indranges, param='e'):
         mp = self._mean_period(self.results, indranges, param=param)
         self.results[f'{param}_mean_period'] = mp
+
+    def predict_mean_depth(self, depthranges, param='e'):
+        if isinstance(param, str):
+            self._predict_mean_depth(depthranges, param=param)
+        else:
+            for _p in param: self.predict_mean_depth(depthranges, _p)
+
+    def _predict_mean_depth(self, depthranges, param='e'):
+        md = self._mean_depth(self.results, depthranges, param=param)
+        self.results[f'{param}_mean_depth'] = md
+
+    def _mean_depth(self, results, depthranges, param='e'):
+        ygrid = self.ygrid
+        p = results[param]
+        p_mean = []
+        for depthrange in depthranges:
+            p_ = 0
+            p_ = p[:, np.logical_and(ygrid >=depthrange[0], ygrid < depthrange[1])]
+            p_mean.append(np.nanmean(p_, axis=1))
+        return np.stack(p_mean, axis=-1)
 
     def _mean_period(self, results, indranges, param='e'):
         ygrid = self.ygrid
@@ -162,7 +182,7 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
     @property
     def classnames(self):
         return tuple(self.strats.keys())
-    
+
     def __getitem__(self, cn):
         if cn not in self.classnames: raise ValueError(f'Class name {cn} not found')
         results = None if self.results is None else self.results[cn]
@@ -176,7 +196,7 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
             assert s0.depth == s.depth
             assert s0.dy == s.dy
             assert s0.N == s.N
-            
+
     @property
     def depth(self):
         return self.strats[self.classnames[0]].depth
@@ -192,8 +212,14 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
     def _predict_mean_period(self, indranges, param='e'):
         for sc in self.strats:
             results = self.results[sc]
-            mp = self._mean_period(results, indranges, param=param)        
+            mp = self._mean_period(results, indranges, param=param)
             self.results[sc][f'{param}_mean_period'] = mp
+
+    def _predict_mean_depth(self, depthranges, param='e'):
+        for sc in self.strats:
+            results = self.results[sc]
+            mp = self._mean_depth(results, depthranges, param=param)
+            self.results[sc][f'{param}_mean_depth'] = mp
 
     def predict(self, forcing, n_jobs=-8, **kwargs):
         self.results = {}
@@ -210,4 +236,29 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
         pred = self._extract_predictions(
             results, indices, field=field, C_obs=C_obs, rng=rng, reference_only=reference_only)
         return pred
+
+if __name__ == '__main__':
+    ind_scenes = (5, 25, 45, 65, 85)
+    dailytemp = np.ones(90) * 5.2
+    params_distribution = {
+        'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
+        'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+        'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
+        'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+                 'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
+        'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
+    N, Nbatch = 10000, 1
+    indranges = [(ind_scenes[-2], ind_scenes[-1])]
+    depthranges = [(0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5)]
+    geom = {'ia': 38.40 / 180 * np.pi}
+
+    from simulation import (
+        StefanStratigraphySmoothingSpline, StratigraphyMultiple)
+    predictor = StefanPredictor()
+    strat = StratigraphyMultiple(
+        StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    predens.predict(dailytemp)
+    predens.predict_mean_depth(depthranges)
+    predens.predict_mean_period(indranges)
 

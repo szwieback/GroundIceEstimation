@@ -222,6 +222,11 @@ class InversionProcessorGM(InversionProcessor):
             if f'{param}_mean_period' not in predens.results:
                 predens.predict_mean_period(param_dict['indranges'], param=param)
             p = predens.results[f'{param}_mean_period']
+        elif 'depthranges' in param_dict:
+            assert 'ind_scene' not in param_dict
+            if f'{param}_mean_depth' not in predens.results:
+                predens.predict_mean_depth(param_dict['depthranges'], param=param)
+            p = predens.results[f'{param}_mean_depth']            
         else:
             p = predens.results[param]
             if 'ind_scene' in param_dict:
@@ -436,6 +441,8 @@ class InversionResults():
         elif dataset_name in ('yf_mean'):
             layer_name = 'dates'
             ioput.save_hdf5(res, attrs, dataset_name, fnout, layer_name=layer_name, layer_info=dt_strlist)
+        else:
+            raise NotImplementedError(f"Data type {dataset_name} H5 output not implemented")
 
     def _expectation(self, param='e', etype='mean', p=None, **kwargs):
         if etype == 'mean':
@@ -552,10 +559,18 @@ class InversionResultsGM(InversionResults):
         def l(v):
             _l = 1
             if 'indranges' in v[1]: _l = len(v[1]['indranges'])
+            if 'depthranges' in v[1]: _l = len(v[1]['depthranges'])
             if 'ind_scene' in v[1]: _l = len(v[1]['ind_scene'])
             return _l
         n_variables = np.array([l(v) for v in self.variables])
-        _name_post = lambda v: v[0] if 'indranges' not in v[1] else v[0] + '_mean_period'
+        def _name_post(v):
+            if 'indranges' in v[1]: 
+                np = v[0] + '_mean_period'
+            elif 'depthranges' in v[1]:
+                np = v[0] + '_mean_depth'
+            else:
+                np = v[0]
+            return np
         variables_post = [_name_post(v) for v in self.variables]
         ind_v = variables_post.index(param)
         st = np.sum(n_variables[:ind_v])

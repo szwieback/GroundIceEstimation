@@ -43,7 +43,8 @@ def dalton_forcing(fnforcing, year=2022):
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     return dailytemp, ind_scenes
 
-def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, overwrite=False):
+def process_dalton(
+        xy_ref, year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, overwrite=False):
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     site_name = 'dalton'
     if imethod == 'IS':
@@ -57,8 +58,6 @@ def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_val
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
-    var_atmo = (4e-3) ** 2
-    # xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
     N = 10000
     Nbatch = 1
 
@@ -76,18 +75,13 @@ def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_val
     from scripts.kivalina_calibration import caldict
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     K, geospatial_K = read_K(fnK)
-    
+
     P = K.shape[0] + 1
     var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
     # initialize covariancemodel
     covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
     # apply nugget
     K = add_nugget(K, caldict['nugget_speckle'])
-
-    xy_ref = np.array([
-                    [430013.0,7679097.7], [428394.3,7672731.8], [428334.9,7667939.1], [428870.3,7660699.2],
-                    [427754.0,7655680.9]]).T
-    
 
     fndist = pathout / 'distance_cal.p'
     unw_cor, K_cor = spatial_referencing(
@@ -97,6 +91,7 @@ def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_val
     dailytemp, ind_scenes = dalton_forcing(fnforcing, year=year)
 
     indranges = [(ind_scenes[-4], ind_scenes[-1])]
+    depthranges = [(0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5)]
     if imethod == 'IS':
         IP, IR = InversionProcessorIS, InversionResultsIS if memory else InversionResultsISMmap
         kwargs = {}
@@ -104,14 +99,16 @@ def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_val
         IP, IR = InversionProcessorGM, InversionResultsGM if memory else InversionResultsGMMmap
         kwargs = {'K': K_value,
             'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}),
-                                )}
+                          ('e', {'depthranges': depthranges}),
+                          ('yf', {'ind_scene': [(ind_scenes[-1])]}),
+                          )}
 
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
         StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)
+    predens.predict_mean_depth(depthranges)
     predens.predict_mean_period(indranges)
     data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))}
 
@@ -121,11 +118,8 @@ def process_dalton(year=2019, imethod='IS', rmethod='mintpy', memory=True, K_val
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
-    # expecs = [
-    #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
-    #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-    #     ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-    expecs = [('e_mean_period', 'mean'), ('yf', 'mean')]
+    expecs = [('e_mean_period', 'mean'), ('yf', 'mean'), ('e_mean_depth', 'mean'),
+              ('e_mean_period', 'var'), ('e_mean_depth', 'var')]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
@@ -187,14 +181,14 @@ def process_dalton_ecotype(year=2019, imethod='IS', memory=True, rmethod='hadama
         kwargs = {'variables': (('e', {'indranges': indranges}),
                                 ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
     expecs = [('e_mean_period', 'mean')]
-        
+
     # predictor = StefanPredictor()
     # strats = {sc: StratigraphyMultiple(
     #     StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
     #     for sc in multiclass_dist}
     # predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
     # predens.predict(dailytemp)
-    # predens.predict_mean_period(indranges)    
+    # predens.predict_mean_period(indranges)
     # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
     # for dname in data.keys():
     #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
@@ -217,7 +211,7 @@ def compare(p0, bname, suffixl, fname):
         res[suffix] = np.load(fn)
     for suffix in suffixl:
         print(suffix, np.nanmean(np.abs(res[suffix] - res[suffixl[0]])))
-    
+
 # def plot(p0, bname, suffixt, fname, K):
 #     import matplotlib.pyplot as plt
 #     from scripts.plotting import prepare_figure, cmap_e
@@ -309,7 +303,7 @@ def compare(p0, bname, suffixl, fname):
     # plt.show()
 
 if __name__ == '__main__':
-    
+
     # memory = True
     #
     # imethod = 'GM'
@@ -332,16 +326,22 @@ if __name__ == '__main__':
     do_gmi = True
     do_isi = False
     rmethod = 'mintpy'
+
+    xy_ref = np.array([
+                    [430013.0, 7679097.7], [428394.3, 7672731.8], [428334.9, 7667939.1], 
+                    [428870.3, 7660699.2], [427754.0, 7655680.9]]).T
+
     if do_gmi:
         imethod = 'GM'
-        for K_value in (2,):#range(1, 6):
+        for K_value in (1, 2, 3, 5):  # range(1, 6):
             for memory in [False]:
                 start_is = time.time()
                 # process_dalton_ecotype(imethod=imethod, memory=memory, year=2023)
-                process_dalton(imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value)
+                process_dalton(
+                    xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value)
                 end_is = time.time()
                 t = end_is - start_is
-                print(f"Runtime for {imethod} method: {t:.2f} seconds")
+                print(f"Runtime for {imethod} method, K={K_value}: {t:.2f} seconds")
     if do_isi:
         imethod = 'IS'
         start_is = time.time()
@@ -358,14 +358,9 @@ if __name__ == '__main__':
     # fname = 'e_mean_period_mean.npy'
     # plot_comparison_all(p0, rmethod, suffixl, fname, 5)
 
-
-    
-
     # bname = 'hadamard'
     # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
     # fname = 'e_mean_period_mean.npy'
     # # compare(p0, bname, suffixl, fname)
     # plot(p0, bname, ('_IS_True', '_GM_True'), fname)
-    
-    
-    
+
