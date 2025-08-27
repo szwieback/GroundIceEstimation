@@ -8,7 +8,7 @@ import numpy as np
 
 from scripts.plot_profile import read_results, read_InSAR
 from analysis import InversionResultsISMmap, save_geotiff, read_geotiff_geospatial
-from scripts.wainwright import wavelength, xy_ref, var_atmo
+from scripts.wainwright import wavelength, xy_ref, var_atmo, geom
 
 pathres = Path('/home/simon/Work/gie/processed/wainwright/2019/hadamard/')
 pathstack = Path('/home/simon/Work/gie/stacks/Wainwright/2019/hadamard/geocoded/')
@@ -34,7 +34,13 @@ e_index[np.logical_or(np.isnan(K_ind), K_ind > var_thresh)] = np.nan
 e_index[C_ind < C_thresh] = np.nan
 e_index_q[:, np.isnan(e_index)[0, ...]] = np.nan
 
-save_geotiff(e_index, geospatial_out, fnout=pathres / 'geocoded' / 'e_mean_period.tif')
-save_geotiff(e_index_q, geospatial_out, fnout=pathres / 'geocoded' / 'e_mean_period_quantile.tif')
-s = s_obs[-5, ...] - s_obs[-1, ...]
-save_geotiff(s[np.newaxis, ...], geospatial_K, fnout=pathres / 'geocoded' / 'res.tif')
+# save_geotiff(e_index, geospatial_out, fnout=pathres / 'geocoded' / 'e_mean_period.tif')
+# save_geotiff(e_index_q, geospatial_out, fnout=pathres / 'geocoded' / 'e_mean_period_quantile.tif')
+# s = s_obs[-5, ...] - s_obs[-1, ...]
+# save_geotiff(s[np.newaxis, ...], geospatial_K, fnout=pathres / 'geocoded' / 'res.tif')
+
+
+s_vert = s_obs / np.cos(geom['ia'])
+s_vert_final_cm = s_vert[[-1], ...] * 100
+
+save_geotiff(s_vert_final_cm, geospatial_out, fnout=pathres / 'geocoded' / 'subsidence_cm.tif')
