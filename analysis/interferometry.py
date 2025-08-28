@@ -84,7 +84,6 @@ def distance_to_ref(
     s_ref_proj = s_ref.to_crs(crs_dist)
     x_ref_proj, y_ref_proj = np.array(s_ref_proj.x), np.array(s_ref_proj.y)
     if fndist is None or overwrite or not fndist.exists():
-        print('reprocessing')
         xy_raster = geospatial.xy_raster
         if njobs not in [0, 1, None]:
             from joblib import Parallel, delayed

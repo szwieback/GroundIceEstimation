@@ -11,8 +11,13 @@ import pandas as pd
 import datetime
 import time
 
-from pathlib import Path
-from analysis import StefanPredictor, PredictionEnsemble, MulticlassPredictionEnsemble
+from analysis import (
+    StefanPredictor, PredictionEnsemble, MulticlassPredictionEnsemble, read_K,
+    RationalQuadraticSepDiagCovMV, add_nugget, read_geotiff_geospatial, assemble_tril,
+    spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
+    InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap,
+    MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, MulticlassInversionResultsGM,
+    MulticlassInversionResultsGMMmap)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -25,7 +30,14 @@ params_distribution = {
     'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
-# ll, ur = (-148.8300, 69.1600), (-148.7800, 69.1640)
+
+eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
+           1: (2, 21, 25, 26, 33, 34, 35)}
+
+params_distribution_0 = params_distribution.copy()
+params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
+                                 'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
+multiclass_dist = {0: params_distribution_0, 1: params_distribution}
 
 def dalton_forcing(fnforcing, year=2022):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
@@ -44,13 +56,15 @@ def dalton_forcing(fnforcing, year=2022):
     return dailytemp, ind_scenes
 
 def process_dalton(
-        xy_ref, year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, overwrite=False):
+        xy_ref, ecotype=False, year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, 
+        overwrite=True):
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     site_name = 'dalton'
+    ecotypename = 'singleensemble' if not ecotype else 'ecotype'
     if imethod == 'IS':
-        pathout = paths['processed'] / f'{site_name}/{year}/{rmethod}_{imethod}'
+        pathout = paths['processed'] / f'{site_name}/{year}/{ecotypename}/{rmethod}_{imethod}'
     else:
-        pathout = paths['processed'] / f'{site_name}/{year}/{rmethod}_{imethod}_K{K_value}'
+        pathout = paths['processed'] / f'{site_name}/{year}/{ecotypename}/{rmethod}_{imethod}_K{K_value}'
 
     pathdefo = paths['stacks'] / f'{site_name}/{year}'
     fnunw = pathdefo / 'ph_history.tif'
@@ -61,26 +75,13 @@ def process_dalton(
     N = 10000
     Nbatch = 1
 
-    from analysis import (
-        read_K, add_atmospheric_K, read_motion, RationalQuadraticSepDiagCovMV, add_nugget,
-        read_geotiff_geospatial, assemble_tril,
-        spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
-        InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap)
-
-    # K, geospatial_K = read_K(fnK)
-    # s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
-    # K = add_atmospheric_K(K, var_atmo)
-    # assert geospatial == geospatial_K
-
     from scripts.kivalina_calibration import caldict
     unw, geospatial_unw = read_geotiff_geospatial(fnunw)
     K, geospatial_K = read_K(fnK)
 
     P = K.shape[0] + 1
     var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
-    # initialize covariancemodel
     covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
-    # apply nugget
     K = add_nugget(K, caldict['nugget_speckle'])
 
     fndist = pathout / 'distance_cal.p'
@@ -88,15 +89,32 @@ def process_dalton(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, overwrite=overwrite)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
 
+    if ecotype:
+        from scripts.ecotypes import reclassify
+        fnlc = paths['ancillary'] / 'TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
+        fnec = pathout / 'ec.tif'
+        ec = reclassify(fnlc, eclasses, geospatial_K, fnout=fnec, overwrite=overwrite)
+    else:
+        ec = None
+        
     dailytemp, ind_scenes = dalton_forcing(fnforcing, year=year)
 
     indranges = [(ind_scenes[-4], ind_scenes[-1])]
     depthranges = [(0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5)]
+
     if imethod == 'IS':
-        IP, IR = InversionProcessorIS, InversionResultsIS if memory else InversionResultsISMmap
+        IP = InversionProcessorIS
+        if not ecotype:
+            IR = InversionResultsIS if memory else InversionResultsISMmap
+        else:
+            IR = MulticlassInversionResultsIS if memory else MulticlassInversionResultsISMmap
         kwargs = {}
     elif imethod == 'GM':
-        IP, IR = InversionProcessorGM, InversionResultsGM if memory else InversionResultsGMMmap
+        IP = InversionProcessorGM
+        if not ecotype:
+            IR = InversionResultsGM if memory else InversionResultsGMMmap
+        else:
+            IR = MulticlassInversionResultsGM if memory else MulticlassInversionResultsGMMmap
         kwargs = {'K': K_value,
             'variables': (('e', {'indranges': indranges}),
                           ('e', {'depthranges': depthranges}),
@@ -104,9 +122,17 @@ def process_dalton(
                           )}
 
     predictor = StefanPredictor()
-    strat = StratigraphyMultiple(
-        StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
-    predens = PredictionEnsemble(strat, predictor, geom=geom)
+    if ecotype:
+        strats = {sc: StratigraphyMultiple(
+            StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
+            for sc in multiclass_dist}
+        predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
+    else:   
+        strat = StratigraphyMultiple(
+            StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
+        predens = PredictionEnsemble(strat, predictor, geom=geom)
+    
+    
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
     predens.predict_mean_period(indranges)
@@ -114,12 +140,15 @@ def process_dalton(
 
     ip = IP(predens, geospatial=geospatial_K, blocksize=128, **kwargs)
     ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=1, memory=memory, overwrite=True)
+        ind_scenes, data['s_obs'], data['K'], ec=ec, pathout=pathout, n_jobs=-1, memory=memory, 
+        overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
+    qdict = {'quantiles': (0.1, 0.9)}
     expecs = [('e_mean_period', 'mean'), ('yf', 'mean'), ('e_mean_depth', 'mean'),
-              ('e_mean_period', 'var'), ('e_mean_depth', 'var')]
+              ('e_mean_period', 'var'), ('e_mean_depth', 'var'), ('e_mean_period', 'quantile', qdict),
+              ('e_mean_depth', 'quantile', qdict)]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
@@ -133,14 +162,6 @@ def process_dalton_ecotype(year=2019, imethod='IS', memory=True, rmethod='hadama
     fns_unw_offset = {2019: [(7, paths['stacks'] / 'stacks/Dalton_131_363/2019_unw_offset.gpkg')],
                       2022: [],
                       2023: []}[year]
-
-    eclasses = {0: (1, 3, 11, 12, 13, 14, 15, 18, 23, 32, 41, 43, 44, 45, 46, 47, 48, 112, -99),
-               1: (2, 21, 25, 26, 33, 34, 35)}
-
-    params_distribution_0 = params_distribution.copy()
-    # params_distribution_0['soil'] = {'high_horizon': 0.05, 'low_horizon': 0.00, 'organic_above': 0.1,
-    #                                  'mineral_above': 0.3, 'mineral_below': 0.40, 'organic_below': 0.00}
-    multiclass_dist = {0: params_distribution_0, 1: params_distribution}
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
@@ -326,30 +347,31 @@ if __name__ == '__main__':
     do_gmi = True
     do_isi = False
     rmethod = 'mintpy'
-
+    memory = False
     xy_ref = np.array([
-                    [430013.0, 7679097.7], [428394.3, 7672731.8], [428334.9, 7667939.1], 
+                    [430013.0, 7679097.7], [428394.3, 7672731.8], [428334.9, 7667939.1],
                     [428870.3, 7660699.2], [427754.0, 7655680.9]]).T
-
-    if do_gmi:
-        imethod = 'GM'
-        for K_value in (1, 2, 3, 5):  # range(1, 6):
-            for memory in [False]:
+    for ecotype in (False, True):            
+        if do_gmi:
+            imethod = 'GM'
+            for K_value in (1, 2, 3, 5):
                 start_is = time.time()
-                # process_dalton_ecotype(imethod=imethod, memory=memory, year=2023)
                 process_dalton(
-                    xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value)
+                    xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value, 
+                    ecotype=ecotype)
                 end_is = time.time()
                 t = end_is - start_is
                 print(f"Runtime for {imethod} method, K={K_value}: {t:.2f} seconds")
-    if do_isi:
-        imethod = 'IS'
-        start_is = time.time()
-        # process_dalton_ecotype(imethod=imethod, memory=memory, year=2023)
-        process_dalton(imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value)
-        end_is = time.time()
-        t = end_is - start_is
-        print(f"Runtime for {imethod} method: {t:.2f} seconds")
+                
+        if do_isi:
+            imethod = 'IS'
+            start_is = time.time()
+            process_dalton(
+                xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, ecotype=ecotype)
+            end_is = time.time()
+            t = end_is - start_is
+            print(f"Runtime for {imethod} method: {t:.2f} seconds")
+        
     # p0 = Path(
     #     f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
     # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]

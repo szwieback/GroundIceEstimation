@@ -610,6 +610,11 @@ class InversionResultsGM(InversionResults):
         if p is not None: raise NotImplementedError()
         indices = self._indices_variables(param=param)
         return self.gmp.variance(indices)
+    
+    def _quantile(self, quantiles, param='e', p=None, **kwargs):
+        if p is not None: raise NotImplementedError()
+        indices = self._indices_variables(param=param)
+        return self.gmp.quantile(quantiles, indices, **kwargs)
 
 class MulticlassInversionResultsIS(InversionResultsIS):
 

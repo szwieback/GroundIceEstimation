@@ -247,7 +247,7 @@ if __name__ == '__main__':
         'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
                  'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
         'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
-    N, Nbatch = 10000, 1
+    N, Nbatch = 1000, 1
     indranges = [(ind_scenes[-2], ind_scenes[-1])]
     depthranges = [(0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5)]
     geom = {'ia': 38.40 / 180 * np.pi}
@@ -261,4 +261,5 @@ if __name__ == '__main__':
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
     predens.predict_mean_period(indranges)
+    
 
