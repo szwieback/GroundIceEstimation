@@ -8,7 +8,6 @@ from pathlib  import Path
 import numpy as np
 import pickle
 import zlib
-import h5py
 import rasterio
 from rasterio.crs import CRS
 from rasterio.transform import Affine
@@ -347,6 +346,7 @@ def tif_attrs(fin_tif):
 def save_hdf5(data, attrs, data_name, fnout_h5, layer_name=None, layer_info=None):
     arr = np.asarray(data, dtype=np.dtype(attrs.get('DATA_TYPE', 'float32')))
     # data_name = 'timeseries'
+    import h5py
     with h5py.File(fnout_h5, 'w') as f:
         if arr.ndim == 2:
             h, w = arr.shape
@@ -396,7 +396,8 @@ def geotiff2hdf5(fin_tif, fnout_h5, data_name='data'):
                 data[i - 1] = src.read(i, out_dtype=dtype)
     save_hdf5(data, attrs, data_name, fnout_h5)
 
-def hdf52geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
+def hdf5_to_geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
+    import h5py
     with h5py.File(fin_h5, 'r') as f:
         # if dataset is None:
         #     keys = [k for k in f.keys() if isinstance(f[k], h5py.Dataset) and k.lower() != 'dates']

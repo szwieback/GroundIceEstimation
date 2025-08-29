@@ -292,13 +292,15 @@ class InversionProcessorGM(InversionProcessor):
         return outp
 
     def _posterior_single(self, gmm, s_obs, C_obs):
-        if np.count_nonzero(np.isnan(s_obs)) > 0:
-            # print("NaN in s_obs:", np.isnan(s_obs).sum(), s_obs.shape)
-            s_obs = np.nan_to_num(s_obs, nan=0.0)
-            # raise ValueError("Cannot handle NaN")
-
+        N_nan = np.count_nonzero(np.isnan(s_obs))
+        if N_nan > 0:
+            ind_invalid = np.any(np.isnan(s_obs), axis=1)
+            s_obs[ind_invalid, :] = 0.0
         gmp = gmm.conditional(s_obs, C_obs=C_obs, method_condition=self.method_condition)
-        return np.moveaxis(gmp.to_array(), 0, -2)  # so k axis is at -2
+        gmp_array = gmp.to_array()
+        if N_nan > 0:
+            gmp_array[:, ind_invalid, :] = np.nan
+        return np.moveaxis(gmp_array, 0, -2)  # so k axis is at -2
 
     def _posterior_batch(
             self, nbatch, gmm, s_obs_flat, C_obs_flat, ec_flat=None, pathout=None, memory=True,
@@ -762,6 +764,7 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         shape = (np.count_nonzero(ind), self.lw.shape[-1])
+        print(ind.shape, shape, self.lw.shape)
         fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
         mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
         fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)

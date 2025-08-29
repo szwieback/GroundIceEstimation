@@ -30,11 +30,11 @@ class InversionSimulator():
     def register_observations(self, ind_scenes, C_obs):
         self.ind_scenes = ind_scenes
         self.C_obs = C_obs
-        
+
     def register_variables(self, variables=None):
         # not needed for IS but needed for GM
         self.variables = variables
-        
+
     @property
     def predictions_scenes(self):
         s_pred = self.predens.extract_predictions(
@@ -97,6 +97,20 @@ class InversionSimulator():
         yf = self.prescribed('yf')
         ref_mean = self._mean_period(ref, indranges, yf)
         return ref_mean
+    
+    def prescribed_mean_depth(self, depthranges, param='e'):
+        ref = self.prescribed(param)
+        ref_mean = self._mean_depth(ref, depthranges)
+        return ref_mean
+
+    def _mean_depth(self, p, depthranges):
+        ygrid = self.ygrid
+        p_mean = []
+        for depthrange in depthranges:
+            p_ = 0
+            p_ = p[:, np.logical_and(ygrid >=depthrange[0], ygrid < depthrange[1])]
+            p_mean.append(np.nanmean(p_, axis=1))
+        return np.stack(p_mean, axis=-1)        
 
     def _mean_period(self, p, indranges, yf):
         # need to re-organize this to avoid redundancy
@@ -127,8 +141,15 @@ class InversionSimulator():
         rstr = '' if r is None else f'_{r}'
         return pathout / f'metrics{suffix_}{rstr}.p'
 
-    def _suffix(self, param, indranges, prior):
-        suffix = (param,) if indranges is None else (param, 'indranges')
+    def _suffix(self, param, indranges, depthranges, prior):
+        if indranges is None and depthranges is None:
+            suffix = (param,) 
+        elif indranges is not None:
+            suffix = (param, 'indranges')
+            assert depthranges is None
+        elif depthranges is not None:
+            suffix = (param, 'depthranges')
+            assert indranges is None
         if prior: suffix = suffix + ('prior',)
         return suffix
 
@@ -141,19 +162,20 @@ class InversionSimulator():
         raise NotImplementedError()
 
     def export_metrics(
-            self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None,
+            self, pathout, param='e', metrics_ind=None, metrics=None, indranges=None, depthranges=None,
             prior=False, n_jobs=-1):
         def _export(r):
             sie = self.results(pathout, replicates=(r,), prior=prior)
-            suffix = self._suffix(param, indranges, prior)
+            suffix = self._suffix(param, indranges, depthranges, prior)
             fnout = self.filename_metrics(pathout, r, suffix=suffix)
-            sie.export_metrics(fnout, param=param, metrics=metrics_ind, indranges=indranges)
+            sie.export_metrics(
+                fnout, param=param, metrics=metrics_ind, indranges=indranges, depthranges=depthranges)
         from joblib import Parallel, delayed
         rgen = self._replicate_generator(pathout, replicates=self._replicates(prior))
         Parallel(n_jobs=n_jobs)(delayed(_export)(r) for r in rgen)
         self._assemble_metrics(
             pathout, param='e', metrics=metrics, delete_temp=True, indranges=indranges,
-            prior=prior)
+            depthranges=depthranges, prior=prior)
 
     def _validation_metric(self, metrics_dict, metric):
         if metric[0] == 'RMSE':
@@ -197,11 +219,11 @@ class InversionSimulator():
         return [0] if prior else None
 
     def _assemble_metrics(
-            self, pathout, param='e', metrics=None, delete_temp=False, indranges=None,
+            self, pathout, param='e', metrics=None, delete_temp=False, indranges=None, depthranges=None,
             prior=False):
         res = {}
         meta = {}
-        suffix = self._suffix(param, indranges, prior)
+        suffix = self._suffix(param, indranges, depthranges, prior)
         for r in self._replicate_generator(pathout, replicates=self._replicates(prior)):
             fnr = self.filename_metrics(pathout, r, suffix=suffix)
             res_r = load_object(fnr)
@@ -215,11 +237,16 @@ class InversionSimulator():
             res[metric] = np.concatenate(res[metric], axis=0)
         res['meta'] = meta
         res['ygrid'] = self.ygrid
-        if indranges is not None:
+        if indranges is not None and depthranges is None:
             res['indranges'] = indranges
             res['sim'] = self.prescribed_mean_period(indranges, param=param)
-        else:
+        elif indranges is None and depthranges is not None:
+            res['depthranges'] = depthranges
+            res['sim'] = self.prescribed_mean_depth(depthranges, param=param)    
+        elif indranges is None and depthranges is None:
             res['sim'] = self.prescribed(param=param)
+        else:
+            raise ValueError("Cannot provide indranges and depthranges")
 
         res_metrics = self._validation_metrics(res, metrics=metrics)
         res.update(res_metrics)
@@ -288,13 +315,13 @@ class InversionSimulatorGM(InversionSimulator):
         super().__init__(predens=predens, predens_sim=predens_sim, rng=rng)
         self.K = K
         self.method_condition = method_condition
-    
+
     def register_variables(self, variables=None):
         if variables is None:
             variables = (('yf', {'ind_scene': [self.ind_scenes[-1]]}),
                          ('e', {'indranges': [(self.ind_scenes[-4], self.ind_scenes[-1])]}))
         self.variables = variables
-        
+
     def _posterior(self, sim_obs, pred_scenes, unobserved):
         from inference import GaussianMixtureDistribution
         samples = np.concatenate((unobserved, pred_scenes), axis=-1)
@@ -315,15 +342,15 @@ class InversionSimulatorGM(InversionSimulator):
             assert 'ind' not in param_dict
             self.predens.predict_mean_period(param_dict['indranges'], param=param)
             p = self.predens.results[f'{param}_mean_period']
+        elif 'depthranges' in param_dict:
+            self.predens.predict_mean_depth(param_dict['depthranges'], param=param)
+            p = self.predens.results[f'{param}_mean_depth']
         else:
             p = self.predens.results[param]
             if 'ind_scene' in param_dict:
                 p = p[:, param_dict['ind_scene']]
         return p
 
-    @property
-    def _default_validation_metrics(self):
-        return [('RMSE',), ('bias',), ('MAD',), ('variance',)]
 
     def posterior(self, replicates=10, pathout=None, n_jobs=-1):
         if pathout is None:
@@ -348,7 +375,7 @@ class InversionSimulatorGM(InversionSimulator):
             gm_array_r = load_object(self.filename_sim(pathout, r))
             gm_array_list.append(gm_array_r)
             simobs.append(load_object(self.filename_simobs(pathout, r)))
-        gm_arr, simobs = np.stack(gm_array_list, axis=1), np.array(simobs) # axis 0 needs to be components
+        gm_arr, simobs = np.stack(gm_array_list, axis=1), np.array(simobs)  # axis 0 needs to be components
         if prior:
             raise NotImplementedError("Prior not implemented for Gaussian Mixtures")
         return SimInvEnsembleGM(self, gm_arr, simobs=simobs)
@@ -382,6 +409,12 @@ class SimInvEnsemble():
     def prescribed_mean_period(self, indranges, param='e'):
         return self.invsim.predens_sim._mean_period(self.invsim.predens_sim.results, indranges, param=param)
 
+    def predicted_mean_depth(self, depthranges, param='e'):
+        return self.invsim.predens._mean_depth(self.invsim.predens.results, depthranges, param=param)
+
+    def prescribed_mean_depth(self, depthranges, param='e'):
+        return self.invsim.predens_sim._mean_depth(self.invsim.predens_sim.results, depthranges, param=param)
+
     @property
     def depth(self):
         return self.invsim.predens.results['depth']
@@ -398,24 +431,30 @@ class SimInvEnsemble():
     def ind_scenes(self):
         return self.invsim.ind_scenes
 
-    def export_metrics(self, fnout, param='e', metrics=None, indranges=None):
+    def export_metrics(self, fnout, param='e', metrics=None, indranges=None, depthranges=None):
         results = {}
         if metrics is None:
             metrics = [
                 ('mean',), ('variance',), ('ensemble_quantile',), ('quantile', (0.1, 0.9))]
         for metric in metrics:
             mr = self._metric(
-                metric[0], param=param, metric_args=metric[1:], indranges=indranges)
+                metric[0], param=param, metric_args=metric[1:], indranges=indranges, 
+                depthranges=depthranges)
             results[metric[0]] = (mr, metric[1:])
         save_object(results, fnout)
 
-    def _metric(self, metric, param='e', metric_args=(), indranges=None):
-        if indranges is None:
+    def _metric(self, metric, param='e', metric_args=(), indranges=None, depthranges=None):
+        if indranges is None and depthranges is None:
             p = self.predictions(param=param)
             ref = self.prescribed(param)
-        else:
+        elif indranges is not None and depthranges is None:
             p = self.predicted_mean_period(indranges, param=param)
             ref = self.prescribed_mean_period(indranges, param=param)
+        elif depthranges is not None and indranges is None:
+            p = self.predicted_mean_depth(depthranges, param=param)
+            ref = self.prescribed_mean_depth(depthranges, param=param)
+        else:
+            raise NotImplementedError("Cannot provide indranges and depthranges")
         if metric == 'mean':
             return self.mean(p=p)
         elif metric == 'variance':
@@ -504,31 +543,55 @@ class SimInvEnsembleGM(SimInvEnsemble):
         self.simobs = simobs
         from inference import GaussianMixtureDistribution
         self.gmd = GaussianMixtureDistribution.from_array(invres)
-    
+
     @property
     def variables(self):
         return self.invsim.variables
-    
-    def _indices_variables(self, param='e', indranges=None):
-        if len(self.variables) > 1: 
-            raise NotImplementedError("variable_indices function needs to be generalized")
-        variable = self.variables[0]
-        assert param == variable[0]
-        if indranges is not None:
-            indices = np.array([variable[1]['indranges'].index(indrange) for indrange in indranges])
-        else:        
+
+    def _indices_variables(self, param='e', indranges=None, depthranges=None):
+        # this is a mess
+        def get_length(v):
+            L = 1
+            if 'indranges' in v[1]: L = len(v[1]['indranges'])
+            if 'depthranges' in v[1]: L = len(v[1]['depthranges'])
+            return L
+        if len(self.variables) > 1:
+            Ls = [get_length(v) for v in self.variables]
+            cumLs = np.concatenate(([0], np.cumsum(Ls))).astype(np.int32)
+            if indranges is not None:
+                l = ['indranges' in v[1] and v[0] == param for v in self.variables]
+            elif depthranges is not None:
+                l = ['depthranges' in v[1] and v[0] == param for v in self.variables]
+            if sum(l) == 1:
+                vindex = l.index(True)
+                indices = [i for i in range(cumLs[vindex], cumLs[vindex+1])]
+            else:
+                raise NotImplementedError("variable_indices function needs to be generalized")
+        else:
             indices = [0]
-        return indices        
-    
-    def _metric(self, metric, param='e', metric_args=(), indranges=None):
-        indices = self._indices_variables(param=param, indranges=indranges)
+        return indices
+
+    def _metric(self, metric, param='e', metric_args=(), indranges=None, depthranges=None):
+        indices = self._indices_variables(param=param, indranges=indranges, depthranges=depthranges)
         if metric == 'mean':
             return self.mean(indices=indices)
         elif metric == 'variance':
             return self.variance(indices=indices)
+        elif metric == 'quantile':
+            return self.quantile(metric_args[0], indices=indices)
+        elif metric == 'ensemble_quantile':
+            if indranges is None and depthranges is None:
+                ref = self.prescribed(param)
+            elif indranges is not None and depthranges is None:
+                ref = self.prescribed_mean_period(indranges, param=param)
+            elif depthranges is not None and indranges is None:
+                ref = self.prescribed_mean_depth(depthranges, param=param)        
+            else:
+                raise ValueError("Cannot provide depthranges and indranges")    
+            return self._ensemble_quantile(ref, indices=indices)
         else:
             raise NotImplementedError(f'{metric} not known')
-                                          
+
     def variance(self, indices=None, p=None, replicate=None):
         if replicate is not None: raise NotImplementedError()
         var = self.gmd.variance(indices=indices)
@@ -538,4 +601,12 @@ class SimInvEnsembleGM(SimInvEnsemble):
         if replicate is not None: raise NotImplementedError()
         _mean = self.gmd.mean(indices=indices)
         return _mean
+
+    def quantile(self, quantiles, indices=None, p=None, replicate=None):
+        if replicate is not None: raise NotImplementedError()
+        return self.gmd.quantile(quantiles, indices=indices)[0, ...]
+
+    def _ensemble_quantile(self, vals_ref, indices=None, replicate=None):
+        if replicate is not None: raise NotImplementedError()
+        return self.gmd.ensemble_quantile(vals_ref, indices=indices)
 
