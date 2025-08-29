@@ -215,7 +215,7 @@ class GaussianMixtureDistribution():
         rep_shape = mus.shape[1:-1]
         search_limits = np.empty((2,) + rep_shape)
         _tempquant = np.zeros((self.K,) + rep_shape)
-        q = np.empty(rep_shape + (len(indices), len(quantiles)))
+        q = np.empty(rep_shape + (len(indices), len(quantiles)))        
         for j_quantile, _quantile in enumerate(quantiles):
             for j_ind, ind in enumerate(indices):
                 scales = np.sqrt(Sigs[..., j_ind, j_ind])
@@ -235,6 +235,21 @@ class GaussianMixtureDistribution():
                     search_limits[1, ind_update] = mid_point[ind_update]
                 mid_point = 0.5 * np.sum(search_limits, axis=0)
                 q[..., j_ind, j_quantile] = mid_point
+        return q
+
+    # misnomer
+    def ensemble_quantile(self, vals_reference, indices=None):
+        # quantile of vals_reference with respect to distribution
+        # p and ref shape (100, 5) (2, 5)
+        if indices is None:
+            indices = self.mu.shape[-1]
+        mus = self.means[..., indices]
+        Sigs = self.covariances[..., indices,:][..., indices]
+        q = np.empty((self.weights.shape[1], vals_reference.shape[0], len(indices)))
+        for j_ind, ind in enumerate(indices):
+            ref = vals_reference[..., j_ind]
+            scales = np.sqrt(Sigs[..., j_ind, j_ind])
+            q[..., j_ind] = np.sum(norm.cdf(ref, loc=mus[..., j_ind], scale=scales) * self.weights, axis=0)    
         return q
 
 if __name__ == '__main__':
@@ -266,5 +281,7 @@ if __name__ == '__main__':
     gmp = gmj.conditional(y_obs, C_obs, method_condition='unobserved')
     # print(gmp.means_.shape)
     indices = [0]
-    q = gmp.quantile((0.1, 0.5, 0.9), indices=indices, steps=8)
+    # q = gmp.quantile((0.1, 0.5, 0.9), indices=indices, steps=8)
+    vals_reference = np.zeros((60, len(indices)))
+    gmp.ensemble_quantile(vals_reference, indices)
 
