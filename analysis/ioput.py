@@ -180,6 +180,11 @@ class Geospatial():
     def save_geotiff(self, arr, fnout, nodata=None):
         save_geotiff(arr, self, fnout, nodata=nodata)
 
+    def _hdf5_attributes(self, nodata=np.nan, dtype='float32'):
+        return assemble_hdf5_attrs(
+            self.crs, self.transform, self.shape[1], 
+            self.shape[0], nodata=nodata, dtype=dtype)        
+
 def read_geotiff(fntif):
     src = rasterio.open(fntif)
     arr = src.read()
@@ -218,15 +223,31 @@ def vectorize_tril(G):
     G_vec = G[ind_]
     return G_vec
 
+def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, overwrite=False):
+    # hardcodes model etc., plan to generalize (using optional kwargs) 
+    from scripts.kivalina_calibration import caldict
+    from analysis.interferometry import (
+        add_nugget, RationalQuadraticSepDiagCovMV, spatial_referencing, length_conversion)
+    unw, geospatial_unw = read_geotiff_geospatial(fnunw)
+    K, geospatial_K = read_K(fnK)
+    P = K.shape[0] + 1
+    var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
+    covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
+    K = add_nugget(K, caldict['nugget_speckle'])
+    unw_cor, K_cor = spatial_referencing(
+        unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, 
+        overwrite=overwrite)
+    s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
+    K = np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))
+    assert geospatial_K == geospatial_unw
+    return {'s_obs': s_obs, 'K': K}, geospatial_K
+
 def read_referenced_motion(
         fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)
     if xy.shape[1] > 1:
         raise NotImplementedError('Only one reference point')
-    def unw_to_motion(unw, wavelength=0.055, flip_sign=True):
-        unw *= wavelength / (4 * np.pi)
-        if flip_sign: unw *= -1
-        return unw
+    from analysis.interferometry import phase_to_length
     geospatial = Geospatial.from_file(fnunw)
     if len(fns_unw_offset) >= 1:
         import geopandas as gpd
@@ -241,7 +262,7 @@ def read_referenced_motion(
     rc = geospatial.rowcol(xy)
     unw_ref = unw[:, rc[0, 0], rc[1, 0]]
     unw -= unw_ref[:, np.newaxis, np.newaxis]
-    m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
+    m = phase_to_length(unw, wavelength=wavelength, flip_sign=flip_sign)
     return m, geospatial
 
 
@@ -300,7 +321,7 @@ def load_object(filename):
     return obj
 
 
-def get_tif_attrs(crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
+def assemble_hdf5_attrs(crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
     if not isinstance(transform, Affine):
         raise ValueError('transform must be a rasterio.transform.Affine')
 
@@ -312,12 +333,11 @@ def get_tif_attrs(crs, transform, width, length, band_description=None, nodata=n
         'X_STEP': float(transform.a),
         'Y_STEP': float(transform.e),
         'DATA_TYPE': dtype,
-        'NoDataValue': float(nodata) if np.isfinite(nodata) else np.nan,
+        'NODATA': float(nodata) if np.isfinite(nodata) else np.nan,
     }
 
     if isinstance(crs, CRS) and crs:
         epsg = crs.to_epsg()
-        print(f'EPSG:{epsg}')
         if epsg is not None:
             attrs['EPSG'] = int(epsg)
             if 32601 <= epsg <= 32660:
@@ -332,7 +352,7 @@ def get_tif_attrs(crs, transform, width, length, band_description=None, nodata=n
     return attrs
 
 
-def tif_attrs(fin_tif):
+def hdf5_attrs_from_tif(fin_tif):
     with rasterio.open(fin_tif) as src:
         h, w = src.height, src.width
         transform = src.transform
@@ -340,14 +360,14 @@ def tif_attrs(fin_tif):
         nodata = src.nodata if src.nodata is not None else np.nan
         dtype = str(np.dtype(src.dtypes[0]).name)
         band_desc = [x if x is not None else '' for x in src.descriptions] if any(src.descriptions) else None
-        return get_tif_attrs(crs, transform, w, h, band_description=band_desc, nodata=nodata, dtype=dtype)
+        return assemble_hdf5_attrs(
+            crs, transform, w, h, band_description=band_desc, nodata=nodata, dtype=dtype)
 
 
-def save_hdf5(data, attrs, data_name, fnout_h5, layer_name=None, layer_info=None):
+def save_hdf5(data, attrs, data_name, fnout, layer_name=None, layer_info=None):
     arr = np.asarray(data, dtype=np.dtype(attrs.get('DATA_TYPE', 'float32')))
-    # data_name = 'timeseries'
     import h5py
-    with h5py.File(fnout_h5, 'w') as f:
+    with h5py.File(fnout, 'w') as f:
         if arr.ndim == 2:
             h, w = arr.shape
             f.create_dataset(
@@ -365,7 +385,7 @@ def save_hdf5(data, attrs, data_name, fnout_h5, layer_name=None, layer_info=None
                 dtype=arr.dtype,
                 chunks=(1, min(512, h), min(512, w)),
                 compression='lzf'
-            )
+            )        
         else:
             raise ValueError('data must be 2D (H,W) or 3D (B,H,W)')
 
@@ -383,8 +403,8 @@ def save_hdf5(data, attrs, data_name, fnout_h5, layer_name=None, layer_info=None
         #     ds = f.create_dataset('dates', (len(labels),), dtype=dt)
         #     ds[:] = np.array(labels, dtype=object)
 
-def geotiff2hdf5(fin_tif, fnout_h5, data_name='data'):
-    attrs = tif_attrs(fin_tif)          # or tif_attrs(...) if that's your helper
+def geotiff_to_hdf5(fin_tif, fnout_h5, data_name='data'):
+    attrs = hdf5_attrs_from_tif(fin_tif)
     with rasterio.open(fin_tif) as src:
         b, h, w = src.count, attrs['LENGTH'], attrs['WIDTH']
         dtype = np.dtype(attrs['DATA_TYPE'])
@@ -466,3 +486,20 @@ def hdf5_to_geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
                 for i, lab in enumerate(labels, start=1):
                     dst.set_band_description(i, lab)
 
+def export_defo_history_hdf5(s_obs, fnout, geospatial, geom, ind_scenes, dailytemp, flip_sign=True):
+    from datetime import timedelta
+    attributes = geospatial._hdf5_attributes()
+    attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi #degrees
+    if flip_sign:
+        s_obs = s_obs * (-1) # so subsidence is negative
+    dates_obs = [
+        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]
+    save_hdf5(s_obs, attributes, 'data', fnout, layer_name='dates', layer_info=dates_obs)
+    
+def read_meta_from_json(fnmeta):
+    import json
+    with open(fnmeta, 'r') as file:
+        meta = json.load(file)
+        meta['geom'] = {'ia': float(meta.pop('ia')) * np.pi / 180} # to radians
+        meta['wavelength'] = float(meta['wavelength'])
+    return meta

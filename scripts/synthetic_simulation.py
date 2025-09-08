@@ -134,17 +134,18 @@ def sagwon_simulation(
     predens_sim.predict(dailytemp)
     predens = PredictionEnsemble(strat, predictor, geom=geom)
     predens.predict(dailytemp)    
+
+    if inversion_types is None: inversion_types = ['IS', 'GM_K1', 'GM_K2', 'GM_K3', 'GM_K5']
     
-    if inversion_types is None: inversion_types = ['is', 'gm']
-    K = 3
+    
     for inversion in inversion_types:
-        if inversion == 'is':
+        _simname = f'{simname}_{inversion}'
+        if inversion == 'IS':
             ism, kwargs = InversionSimulatorIS, {}
         else:
+            assert inversion[0:2] == 'GM'
+            K = int(inversion.split('_')[1][1:])
             ism, kwargs = InversionSimulatorGM, {'K': K}
-        _simname = f'{simname}_{inversion}'
-        if inversion == 'GM':
-            _simname = _simname + f'_{K}' 
         pathout = paths['simulation'] / _simname
         fninvsim = pathout / 'invsim.p'
         enforce_directory(fninvsim)
@@ -183,18 +184,16 @@ if __name__ == '__main__':
                 #     replicates=replicates, C_obs_multiplier=multipliers[accn])
                 pass
     Nbatch = 1
-    N = 500
-    Nsim = 1
-    replicates = 1
+    N = 50000
+    Nsim = 512
+    replicates = 16
     sagwon_simulation(
-        f'sagwon_comparison', N=N, Nsim=Nsim, Nbatch=Nbatch,
-        replicates=replicates, inversion_types=['is', 'gm'])                
-    ress = [load_object('/home/simon/Work/gie/simulation/sagwon_comparison_gm/metrics_e_depthranges.p'),
-            load_object('/home/simon/Work/gie/simulation/sagwon_comparison_is/metrics_e_depthranges.p')]
-    
-    for res in ress:
-        print(res.keys())
-        print(np.mean(res['MAD'], axis=0))
+        f'sagwon_comparison', N=N, Nsim=Nsim, Nbatch=Nbatch, replicates=replicates)                
+    # ress = [load_object('/home/simon/Work/gie/simulation/sagwon_comparison_gm/metrics_e_depthranges.p'),
+    #         load_object('/home/simon/Work/gie/simulation/sagwon_comparison_is/metrics_e_depthranges.p')]
+    # for res in ress:
+    #     print(res.keys())
+    #     print(np.mean(res['MAD'], axis=0))
         # print(res['quantile'].shape)
         # print(res['quantile'][4, :])
         

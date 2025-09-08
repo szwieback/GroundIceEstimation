@@ -17,7 +17,7 @@ from analysis import (
     spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
     InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap,
     MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, MulticlassInversionResultsGM,
-    MulticlassInversionResultsGMMmap)
+    MulticlassInversionResultsGMMmap, hdf5_attrs_from_tif, save_hdf5, export_defo_history_hdf5)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -27,7 +27,7 @@ params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
     'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
     'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},
-    'soil': {'high_horizon': 0.20, 'low_horizon': 0.10, 'organic_above': 0.1,
+    'soil': {'high_horizon': 0.25, 'low_horizon': 0.15, 'organic_above': 0.1,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
 
@@ -56,12 +56,12 @@ def dalton_forcing(fnforcing, year=2022):
     return dailytemp, ind_scenes
 
 def process_dalton(
-        xy_ref, ecotype=False, year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2, 
-        overwrite=True):
+        xy_ref, ecotype=False, year=2019, imethod='IS', rmethod='mintpy', memory=True, K_value=2,
+        N=10000, overwrite=True):
     fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
     site_name = 'dalton'
     ecotypename = 'singleensemble' if not ecotype else 'ecotype'
-    if imethod == 'IS':
+    if imethod in ['IS', 'IS_full']:
         pathout = paths['processed'] / f'{site_name}/{year}/{ecotypename}/{rmethod}_{imethod}'
     else:
         pathout = paths['processed'] / f'{site_name}/{year}/{ecotypename}/{rmethod}_{imethod}_K{K_value}'
@@ -72,7 +72,6 @@ def process_dalton(
 
     geom = {'ia': 38.40 / 180 * np.pi}
     wavelength = 0.055
-    N = 10000
     Nbatch = 1
 
     from scripts.kivalina_calibration import caldict
@@ -96,13 +95,13 @@ def process_dalton(
         ec = reclassify(fnlc, eclasses, geospatial_K, fnout=fnec, overwrite=overwrite)
     else:
         ec = None
-        
+
     dailytemp, ind_scenes = dalton_forcing(fnforcing, year=year)
 
     indranges = [(ind_scenes[-4], ind_scenes[-1])]
     depthranges = [(0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5)]
 
-    if imethod == 'IS':
+    if imethod in ('IS', 'IS_full'):
         IP = InversionProcessorIS
         if not ecotype:
             IR = InversionResultsIS if memory else InversionResultsISMmap
@@ -126,202 +125,41 @@ def process_dalton(
         strats = {sc: StratigraphyMultiple(
             StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
             for sc in multiclass_dist}
+        ec = ec[0, ...]
         predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
-    else:   
+    else:
         strat = StratigraphyMultiple(
             StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
         predens = PredictionEnsemble(strat, predictor, geom=geom)
-    
-    
+        ec = None
+    data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1)),
+            'ec': ec}
+    export_defo_history_hdf5(
+        data['s_obs'], pathout / 'defo_history.h5', geospatial_K, geom, ind_scenes, dailytemp)
+
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
     predens.predict_mean_period(indranges)
-    data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))}
-
-    ip = IP(predens, geospatial=geospatial_K, blocksize=128, **kwargs)
+    ip = IP(predens, geospatial=geospatial_K, blocksize=512, **kwargs)
     ir = ip.results(
-        ind_scenes, data['s_obs'], data['K'], ec=ec, pathout=pathout, n_jobs=-1, memory=memory, 
+        ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, memory=memory,
         overwrite=True)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
+
+    ir.register_dates(dailytemp.index)  # for h5 export
     qdict = {'quantiles': (0.1, 0.9)}
     expecs = [('e_mean_period', 'mean'), ('yf', 'mean'), ('e_mean_depth', 'mean'),
               ('e_mean_period', 'var'), ('e_mean_depth', 'var'), ('e_mean_period', 'quantile', qdict),
               ('e_mean_depth', 'quantile', qdict)]
+
+    if imethod == 'IS_full':
+        expecs = expecs + [('e', 'mean'), ('e', 'var'), ('e', 'quantile', qdict)]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
-        ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
-
-def process_dalton_ecotype(year=2019, imethod='IS', memory=True, rmethod='hadamard'):
-    path0 = paths['stacks'] / f'Dalton_131_363/gie/{year}/proc/{rmethod}/geocoded'
-    fnforcing = paths['forcing'] / 'sagwon/sagwon.csv'
-    pathout = paths['processed'] / f'dalton/{year}/ecotype_{rmethod}_{imethod}_{memory}'
-    fnlc = paths['ancillary'] / 'TNC/ecosystems_northern_alaska_jorgenson_2010.tif'
-
-    fns_unw_offset = {2019: [(7, paths['stacks'] / 'stacks/Dalton_131_363/2019_unw_offset.gpkg')],
-                      2022: [],
-                      2023: []}[year]
-
-    geom = {'ia': 38.40 / 180 * np.pi}
-    wavelength = 0.055
-    var_atmo = (4e-3) ** 2
-    xy_ref = np.array([-148.8063, 69.1616])[:, np.newaxis]
-    N = 10000
-    Nbatch = 1
-
-    from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionProcessorGM,
-        MulticlassInversionResultsIS, MulticlassInversionResultsGM, MulticlassInversionResultsISMmap,
-        MulticlassInversionResultsGMMmap)
-    from scripts.ecotypes import reclassify
-
-    fnunw = path0 / 'unwrapped.geo.tif'
-    fnK = path0 / 'K_vec.geo.tif'
-
-    K, geospatial_K = read_K(fnK)
-    s_obs, geospatial = read_referenced_motion(
-        fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
-
-    if year in (2019, 2022):  # remove first acq because still a lot of snow
-        K = K[1:, 1:, ...]
-        s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
-    K = add_atmospheric_K(K, var_atmo)
-    assert geospatial == geospatial_K
-
-    fnec = pathout / 'ec.tif'
-    ec = reclassify(fnlc, eclasses, geospatial, fnout=fnec)
-
-    dailytemp, ind_scenes = dalton_forcing(fnforcing, year=year)
-    indranges = [(ind_scenes[-4], ind_scenes[-1])]
-    if imethod == 'IS':
-        IP, IR = InversionProcessorIS, MulticlassInversionResultsIS if memory else MulticlassInversionResultsISMmap
-        kwargs = {}
-    elif imethod == 'GM':
-        IP, IR = InversionProcessorGM, MulticlassInversionResultsGM if memory else MulticlassInversionResultsGMMmap
-        kwargs = {'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
-    expecs = [('e_mean_period', 'mean')]
-
-    # predictor = StefanPredictor()
-    # strats = {sc: StratigraphyMultiple(
-    #     StefanStratigraphySmoothingSpline(N=N, dist=multiclass_dist[sc]), Nbatch=Nbatch)
-    #     for sc in multiclass_dist}
-    # predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
-    # predens.predict(dailytemp)
-    # predens.predict_mean_period(indranges)
-    # data = {'s_obs': s_obs, 'K': K, 'ec': ec[0, ...]}
-    # for dname in data.keys():
-    #     data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    # ip = IP(predens, geospatial=geospatial_crop, **kwargs)
-    # ir = ip.results(
-    #     ind_scenes, data['s_obs'], data['K'], ec=data['ec'], pathout=pathout, n_jobs=-1, overwrite=True,
-    #     memory=memory)
-    # ir.save(pathout / 'ir.p')
-    # ip.delete_temporary(pathout)
-    ir = IR.from_file(pathout / 'ir.p')
-
-    for expec in expecs:
-        kwargs = expec[2] if len(expec) == 3 else {}
-        ir.export_expectation(pathout, param=expec[0], etype=expec[1], n_jobs=6, **kwargs)
-
-def compare(p0, bname, suffixl, fname):
-    res = {}
-    for suffix in suffixl:
-        fn = p0 / f'{bname}{suffix}' / fname
-        res[suffix] = np.load(fn)
-    for suffix in suffixl:
-        print(suffix, np.nanmean(np.abs(res[suffix] - res[suffixl[0]])))
-
-# def plot(p0, bname, suffixt, fname, K):
-#     import matplotlib.pyplot as plt
-#     from scripts.plotting import prepare_figure, cmap_e
-#     res = []
-#     for suffix in suffixt:
-#         fn = p0 / f'{bname}{suffix}' / fname
-#         res.append(np.load(fn)[..., 0])
-#     # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-#     r, c = 2, 2
-#     fig_size = (5, 7.5)
-#     fig, axs = plt.subplots(r, c, figsize=fig_size)
-#     axs = axs.flatten()
-#     for jax, r in enumerate(res):
-#         im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-#         axs[jax].set_xticks([])
-#         axs[jax].set_yticks([])
-#         axs[jax].set_title(suffixt[jax], loc='left')
-#     cbar = fig.colorbar(im, ax=axs)
-#     fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
-#     plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-#     plt.show()
-#
-# def plot_comparison(p0, bname, suffixt, fname, K):
-#     import matplotlib.pyplot as plt
-#     from analysis import read_motion
-#     from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
-#     upscale = 32
-#     initialize_matplotlib()
-#     path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
-#     fnunw = path0 / 'ph_history.tif'
-#     arr, geospatial = read_motion(fnunw)
-#
-#     res = []
-#     for suffix in suffixt:
-#         fn = p0 / f'{bname}{suffix}' / fname
-#         res.append(np.load(fn)[..., 0])
-#
-#     # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-#     r, c = 2, 2
-#     fig_size = (5, 7.5)
-#     fig, axs = plt.subplots(r, c, figsize=fig_size)
-#     axs = axs.flatten()
-#     for jax, r in enumerate(res):
-#         im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-#         axs[jax].set_xticks([])
-#         axs[jax].set_yticks([])
-#         axs[jax].set_title(suffixt[jax], loc='left')
-#
-#     add_scalebar(axs[-2], geospatial.upscaled(upscale), length=5000, label='5 km')
-#     cbar = fig.colorbar(im, ax=axs)
-#     fout_fig = os.path.join(fig_path, f'fig_dts_{sensor}_{year}_K{K}.png')
-#     plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-#     plt.show()
-#
-# def plot_comparison_all(p0, bname, suffixt, fname, K):
-    # import matplotlib.pyplot as plt
-    # from analysis import read_motion
-    # from scripts.plotting import prepare_figure, cmap_e, add_scalebar, initialize_matplotlib
-    # upscale = 32
-    # initialize_matplotlib()
-    # path0 = Path(f'/export/data/Experiments/stacks/{site_name}/s1/{sarpath}/mintpy/outputs/{year}')
-    # fnunw = path0 / 'ph_history.tif'
-    # arr, geospatial = read_motion(fnunw)
-    #
-    # res = []
-    # for suffix in suffixt:
-    #     fn = p0 / f'{bname}{suffix}' / fname
-    #     res.append(np.load(fn)[..., 0])
-    # mask = ~np.isnan(res[0])
-    # res_masked = [np.where(mask, arr, np.nan) for arr in res]
-    # # fig, axs = prepare_figure(nrows=2, ncols=2, figsize=(0.8, 1.2), left=0.05, hspace=0.1, remove_spines=False)
-    # r, c = 1, 6
-    # fig_size = (8.5, 2.5)
-    # fig, axs = plt.subplots(r, c, figsize=fig_size)
-    # axs = axs.flatten()
-    # title = ['IS', 'GM_K1', 'GM_K2', 'GM_K3', 'GM_K4', 'GM_K5']
-    # for jax, r in enumerate(res_masked):
-    #     im = axs[jax].imshow(r, cmap=cmap_e, vmin=0.0, vmax=0.5)
-    #     axs[jax].set_xticks([])
-    #     axs[jax].set_yticks([])
-    #     axs[jax].set_title(title[jax], loc='center')
-    #
-    # add_scalebar(axs[0], geospatial.upscaled(upscale), length=5000, label='5 km')
-    # cax = fig.add_axes((0.92, 0.15, 0.02, 0.7))
-    # cbar = fig.colorbar(im, cax=cax)
-    # # cbar = fig.colorbar(im, ax=axs, shrink=0.7)
-    # fout_fig = os.path.join(fig_path, f'beyasian/fig_dts_{sensor}_{year}_K{K}.png')
-    # plt.savefig(fout_fig, bbox_inches='tight', dpi=300)
-    # plt.show()
+        ir.export_expectation(
+            pathout, param=expec[0], etype=expec[1], hdf5=True, overwrite=overwrite, **kwargs)
 
 if __name__ == '__main__':
 
@@ -345,33 +183,41 @@ if __name__ == '__main__':
     # exit()
     year = 2023
     do_gmi = True
-    do_isi = False
+    do_isi = True
+    do_isi_full = True
     rmethod = 'mintpy'
+    N = 50000
     memory = False
     xy_ref = np.array([
                     [430013.0, 7679097.7], [428394.3, 7672731.8], [428334.9, 7667939.1],
                     [428870.3, 7660699.2], [427754.0, 7655680.9]]).T
-    for ecotype in (False, True):            
+    xy_ref = np.array([
+                    [430013.0, 7679097.7],  [427668.9, 7656177.3]]).T
+    for ecotype in (True,):
         if do_gmi:
             imethod = 'GM'
-            for K_value in (1, 2, 3, 5):
+            for K_value in (1, 2, 3, 4, 5):
                 start_is = time.time()
                 process_dalton(
-                    xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, K_value=K_value, 
-                    ecotype=ecotype)
+                    xy_ref, N=N, imethod=imethod, memory=memory, year=year, rmethod=rmethod,
+                    K_value=K_value, ecotype=ecotype)
                 end_is = time.time()
                 t = end_is - start_is
                 print(f"Runtime for {imethod} method, K={K_value}: {t:.2f} seconds")
-                
+
         if do_isi:
             imethod = 'IS'
             start_is = time.time()
             process_dalton(
-                xy_ref, imethod=imethod, memory=memory, year=year, rmethod=rmethod, ecotype=ecotype)
+                xy_ref, N=N, imethod=imethod, memory=memory, year=year, rmethod=rmethod, ecotype=ecotype)
             end_is = time.time()
             t = end_is - start_is
             print(f"Runtime for {imethod} method: {t:.2f} seconds")
-        
+        if do_isi_full:
+            imethod = 'IS_full'
+            N = 10000
+            process_dalton(
+                xy_ref, N=N, imethod=imethod, memory=memory, year=year, rmethod=rmethod, ecotype=ecotype)
     # p0 = Path(
     #     f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
     # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]

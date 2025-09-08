@@ -264,7 +264,6 @@ if __name__ == '__main__':
 
     # fit
     samples = np.concatenate((parms, y_ref), axis=-1)
-    print(samples.shape)
     # gm = fit_gaussian_mixture(samples,k=2)
     gmj = GaussianMixtureDistribution.from_samples(samples, K=1)
     # replicates
@@ -279,7 +278,6 @@ if __name__ == '__main__':
     # mu_pu, Sigma_pu, pi_pu = posterior_gm_mvnormal(y_obs, C_obs, gm, method_condition='unobserved')
     # gmp = gmj.conditional(y_obs, C_obs, method_condition='sqr_unobserved')
     gmp = gmj.conditional(y_obs, C_obs, method_condition='unobserved')
-    # print(gmp.means_.shape)
     indices = [0]
     # q = gmp.quantile((0.1, 0.5, 0.9), indices=indices, steps=8)
     vals_reference = np.zeros((60, len(indices)))

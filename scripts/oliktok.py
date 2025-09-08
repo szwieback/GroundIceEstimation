@@ -9,11 +9,11 @@ import datetime
 import os
 from pathlib import Path
 
-from analysis import StefanPredictor, PredictionEnsemble, enforce_directory
+from analysis import (StefanPredictor, PredictionEnsemble, enforce_directory, read_K, add_atmospheric_K, 
+                      read_referenced_motion, InversionProcessorIS, InversionResultsIS, hdf5_attrs_from_tif,
+                      export_defo_history_hdf5)
 
-from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+from simulation import StefanStratigraphySmoothingSpline, StratigraphyMultiple
 from forcing import read_daily_noaa_forcing, parse_dates
 
 
@@ -29,8 +29,7 @@ params_distribution = {
     'soil': {'high_horizon': 0.15, 'low_horizon': 0.10, 'organic_above': 0.12,
              'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'n_factor': {'high': 1.00, 'low': 0.85, 'alphabeta': 2.0}}
-# ll, ur = (-156.9, 71.25), (-156.6, 71.35)
-# ll, ur = (-149.93, 70.48), (-149.84, 70.506)   # Oliktok
+
 
 datesstr = {
     2023: ('20230603', '20230615', '20230627', '20230709', '20230721',
@@ -40,8 +39,7 @@ datesstr = {
 }
 
 var_atmo = (4e-3) ** 2
-# xy_ref = np.array([-149.83425, 70.49702])[:, np.newaxis]      # WGS84
-# xy_ref = np.array([617875, 7824400])[:, np.newaxis]
+
 
 def oliktok_forcing(fnforcing, year=2023, remove_last=True):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
@@ -72,33 +70,15 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
         fnunw = path0 / 'ph_history_resamp.tif'
         fnK = path0 / 'ph_history_cov_resamp.tif'
 
-    # fns_unw_offset = {2019: [(7, os.path.join('/10TBstorage/Work/stacks/Dalton_131_363/2019_unw_offset.gpkg'))],
-    #                   2022: []}[year]
-
-
-
     N = 10000
     Nbatch = 1
 
-    from analysis import (
-        read_K, add_atmospheric_K, read_referenced_motion, InversionProcessorIS, InversionResultsIS)
-    from analysis import ioput
 
+    s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
+    attrs = hdf5_attrs_from_tif(fnunw)
 
-    s_obs, geospatial = ioput.read_motion(fnunw, wavelength=wavelength)
-    attrs = ioput.tif_attrs(fnunw)
     attrs.pop('BAND_DESCRIPTIONS', None)
-    # s_obs, geospatial = ioput.read_motion(fnunw, xy=xy_ref, wavelength=wavelength)
-    # if rmethod == 'hadamard':
-    #     s_obs, geospatial = ioput.read_motion(fnunw, xy=xy_ref, wavelength=wavelength)
-    #     # s_obs, geospatial = read_referenced_motion(
-    #     #     fnunw, xy=xy_ref, wavelength=wavelength, fns_unw_offset=fns_unw_offset)
-    # else:
-    #     s_obs, geospatial = ioput.read_motion(fnunw, xy=xy_ref, wavelength=wavelength, flip_sign=True)
     K, geospatial_K = read_K(fnK)
-    # if year in (2023, 2024): # remove first acq because still a lot of snow
-    #     K = K[1:, 1:, ...]
-    #     s_obs = s_obs[1:, ...] - s_obs[0, ...][np.newaxis, ...]
     K = add_atmospheric_K(K, var_atmo)
 
     assert geospatial == geospatial_K
@@ -119,54 +99,27 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     predens.predict(dailytemp)
     predens.predict_mean_period(indranges)
 
-    if remove_last:
-        s_obs = s_obs[:-1, ...]
-        K = K[:-1,:-1, ...]
     data = {'s_obs': s_obs, 'K': K}
-
-    # if rmethod == 'hadamard':
-    #     for dname in data.keys():
-    #         data[dname], geospatial_crop = geospatial.crop(data[dname], ll=ll, ur=ur)
-    #     print(f'cropped s_obs: {data['s_obs'].shape}; K: {data['K'].shape}')
-
     ip = InversionProcessorIS(predens, geospatial=geospatial)
     ir = ip.results(
         ind_scenes, data['s_obs'], data['K'], pathout=pathout, n_jobs=-1, overwrite=True)
 
-    ir.save(os.path.join(pathout, 'ir.p'))     # Saving the InversionResults
-    # ip.delete_weight_files(pathout)
+    ir.save(os.path.join(pathout, 'ir.p'))
     ir = InversionResultsIS.from_file(os.path.join(pathout, 'ir.p'))
 
-    # expecs = [
-    #     ('e', 'mean'), ('e', 'var'), ('yf', 'mean'), ('s_los', 'mean'),
-    #     ('s_los', 'var'), ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
-    #     ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
-    #     ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'),
         ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
         ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
-    # expecs = [
-    #     ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
-    #     ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
-
-    # expecs = [
-    #     ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
+    export_defo_history_hdf5(
+        data['s_obs'], pathout / 'defo_history.h5', geospatial, geom, ind_scenes, dailytemp)
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
-        ir.export_expectation(pathout, param=expec[0], etype=expec[1], **kwargs)
-        ir.export_expectation_h5(pathout, attrs, param=expec[0], etype=expec[1],
-                                 dt_strlist=dt_strlist, depth_list=depth_list, **kwargs)
+        ir.export_expectation(pathout, param=expec[0], etype=expec[1], hdf5=True, **kwargs)
 
-    yf_mean_h5 = pathout / 'yf_mean.h5'
-    yf_mean_tif = pathout / 'yf_mean.tif'
-    ioput.hdf52geotiff(yf_mean_h5, yf_mean_tif)
-    emean_h5 = pathout / 'e_mean.h5'
-    emean_tif = pathout / 'e_mean.tif'
-    ioput.hdf52geotiff(emean_h5, emean_tif, dataset='e_mean', layer_name='depth_mm')
+
 if __name__ == '__main__':
-    # stack_method = 'hadamard'
     stack_method = 'mintpy'
     process_oliktok(year=2023, rmethod=stack_method, remove_last=False)
     # process_oliktok(year=2024, rmethod=stack_method, remove_last=False)

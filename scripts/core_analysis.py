@@ -82,8 +82,21 @@ def extract_core(df, method=None, row_max=1024):
                 row = row + 1
     return data
 
-def interpolate_core(data, delta_y=1, depth=150):  # in cm
-    assert delta_y == 1  # for now
+def interpolate_core(data, delta_y=1, depth=150): # in cm
+    e_grid_cm = interpolate_core_cm(data, depth=depth)
+    y_cm = np.arange(depth)
+    if delta_y != 1:
+        y = np.arange(0, depth, delta_y).astype(np.float32)    
+        e_grid = np.ones_like(y) * np.nan
+        for jy, y_start in enumerate(y):
+            ind = np.logical_and(y_cm >= y_start, y_cm < y_start + delta_y)
+            e_grid[jy] = np.nanmean(e_grid_cm[ind])
+    else:
+        e_grid = e_grid_cm
+    return e_grid
+
+
+def interpolate_core_cm(data, depth=150):  # in cm
     y = np.arange(depth).astype(np.float32)
     e_grid = np.empty_like(y)
     e_grid[:] = np.nan
@@ -98,12 +111,12 @@ def bootstrap_percentiles(d, percentiles=(10, 90), seed=1, size=1000):
     d_mean_bs = np.nanmean(d_bs, axis=1)
     return np.nanpercentile(d_mean_bs, percentiles, axis=0)
 
-def read_site(fn, method, version='2022'):
+def read_site(fn, method, version='2022', delta_y=1):
     headers = {'2022': 0, '2024': 1}
     df_dict = pd.read_excel(fn, sheet_name=None, engine='openpyxl', header=headers[version])
     # df_dict = {k: df_dict[k] for k in df_dict if '_' in k and '00' not in k}
     data_dict = {core: extract_core(df_dict[core], method=method) for core in df_dict}
-    e_grid = np.array([interpolate_core(data_dict[core]) for core in df_dict])
+    e_grid = np.array([interpolate_core(data_dict[core], delta_y=delta_y) for core in df_dict])
     return e_grid
 
 def plot_sites(fns_abs, fnout=None):
@@ -197,14 +210,15 @@ if __name__ == '__main__':
     # df_dict = pd.read_excel(fns_abs['IC'], sheet_name=None, engine='openpyxl')
     # data_dict = {core: extract_core(df_dict[core]) for core in df_dict}
     # print(extract_core(df_dict['IC_G']))
-    # e_grid = read_site(fns_abs['HV'])
+    fn, version = fns('HV', 2023)
+    e_grid = read_site(paths['cores'] / fn, method='supernatant', version=version)
     # print(np.nanstd(e_grid, axis=0))
     
     # need to match missing to taliks; check excess water for moss
-    year = 2024
-    fn, version = fns('Tower', year)
-    method = 'watervolume'
-    e_grid = read_site(paths['cores'] / fn, method=method, version=version)
+    # year = 2024
+    # fn, version = fns('Tower', year)
+    # method = 'watervolume'
+    # e_grid = read_site(paths['cores'] / fn, method=method, version=version)
     # print(extract_core(df_dict[core], method=method))
     
     

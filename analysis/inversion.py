@@ -50,8 +50,6 @@ class InversionProcessor():
             return None
         else:
             _fn = ftype if number is None else f'{ftype}_{number}'
-            # print(ext, number)
-            # raise
             return path0 / f'{_fn}.{ext}'
 
     def _overwrite(self, fn, overwrite=False):
@@ -415,36 +413,43 @@ class InversionResults():
         raise NotImplementedError()
 
     def export_expectation(
-            self, pathout, param='e', etype='mean', p=None, fn=None, **kwargs):
-        res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+            self, pathout, param='e', etype='mean', p=None, fn=None, hdf5=False, overwrite=True, **kwargs):
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = pathout / fn
-        np.save(fnout, res)
+        if not fnout.exists() or overwrite:
+            res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+            np.save(fnout, res)
+        else:
+            res = np.load(fnout)
+        if hdf5:
+            fnhdf5 = fnout.with_suffix('.h5')
+            self._export_hdf5(res, fnhdf5, param=param, etype=etype)
 
-    def export_expectation_h5(
-            self, pathout, attrs, param='e', etype='mean', p=None, fn=None,
-            dt_strlist=None, depth_list=None, **kwargs):
-        res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+    def _export_hdf5(
+            self, res, fnh5, param='e', etype='mean'):
+        
         dataset_name = f'{param}_{etype}'
-        if fn is None: fn = f'{dataset_name}.h5'
-        fnout = pathout / fn
-        print(f'{dataset_name}: {res.shape}')
-        if dataset_name in ('e_mean_period_var', 'e_mean_period_mean'):
+        attrs = self.geospatial._hdf5_attributes()
+        if dataset_name in (
+            'e_mean_period_var', 'e_mean_period_mean', 'e_mean_depth_mean', 'e_mean_depth_var'):
             if res.ndim == 3 and res.shape[2] == 1:
                 res = res[:, :, 0]
-            ioput.save_hdf5(res, attrs, dataset_name, fnout)
-        elif dataset_name == 'e_mean_period_quantile':
-            if res.ndim == 4 and res.shape[2] == 1:
-                res = res[:, :, 0, :]
-            ioput.save_hdf5(res, attrs, dataset_name, fnout)
+            ioput.save_hdf5(res, attrs, dataset_name, fnh5)
+        # elif dataset_name in ('e_mean_period_quantile', 'e_mean_depth_quantile'):
+        #     if res.ndim == 4 and res.shape[2] == 1:
+        #         res = res[:, :, 0, :]
+        #     ioput.save_hdf5(res, attrs, dataset_name, fnh5)
         elif dataset_name in ('e_mean', 'e_var', 'frac_thawed_None'):
             layer_name = 'depth_mm'
-            ioput.save_hdf5(res, attrs, dataset_name, fnout, layer_name=layer_name, layer_info=depth_list)
+            dlist = self._depth_mm_list
+            ioput.save_hdf5(res, attrs, dataset_name, fnh5, layer_name=layer_name, layer_info=dlist)
         elif dataset_name in ('yf_mean'):
             layer_name = 'dates'
-            ioput.save_hdf5(res, attrs, dataset_name, fnout, layer_name=layer_name, layer_info=dt_strlist)
+            dtlist = self._dt_strlist
+            ioput.save_hdf5(res, attrs, dataset_name, fnh5, layer_name=layer_name, layer_info=dtlist)
         else:
-            raise NotImplementedError(f"Data type {dataset_name} H5 output not implemented")
+            import warnings
+            warnings.warn(f"Data type {dataset_name} H5 output not implemented")
 
     def _expectation(self, param='e', etype='mean', p=None, **kwargs):
         if etype == 'mean':
@@ -480,6 +485,17 @@ class InversionResults():
         ind = np.arange(self.invres.shape[0], step=max((1, step)))[1:]
         for _invres in np.array_split(self.invres, ind, axis=0):
             yield _invres  # view to avoid memory issues
+
+    def register_dates(self, datelist):
+        self.dates = datelist
+        
+    @property
+    def _dt_strlist(self):
+        return self.dates.strftime('%Y-%m-%d').tolist()
+
+    @property
+    def _depth_mm_list(self):
+        return [f'{int(1000*y)}-{int(1000*(y + self.dy))}' for y in self.ygrid]
 
     def _filename(self, path0, ftype, number=None, ext='npy'):
         _fn = ftype if number is None else f'{ftype}_{number}'
@@ -764,7 +780,6 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         shape = (np.count_nonzero(ind), self.lw.shape[-1])
-        print(ind.shape, shape, self.lw.shape)
         fnmmap = self._filename(self.lwmmap.filename.parent, 'lwmmap', cn)
         mmap = Mmap(fnmmap, self.lwmmap.dtype, shape)
         fp = np.memmap(mmap.filename, dtype=mmap.dtype, mode='w+', shape=mmap.shape)

@@ -321,7 +321,6 @@ if __name__ == '__main__':
         convert_to_length=False, overwrite=False)
     from analysis import assemble_tril
     K_matrix = assemble_tril(K_cor[:, 600, 400])
-    print(K.shape, K_cor.shape, K_matrix.shape, unw.shape, unw_cor.shape)
     dunw = unw_cor - unw
     import matplotlib.pyplot as plt
     # plt.imshow(dunw[-5, ...])
