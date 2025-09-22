@@ -503,7 +503,8 @@ def get_dates_obs_str(dailytemp, ind_scenes):
     from datetime import timedelta
     dates_obs = [
         (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]    
-    
+    return dates_obs
+
 def read_meta_from_json(fnmeta):
     import json
     with open(fnmeta, 'r') as file:

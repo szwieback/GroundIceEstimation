@@ -137,7 +137,7 @@ def process_dalton(
     export_defo_history_hdf5(
         data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
         dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
-
+    
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
     predens.predict_mean_period(indranges)

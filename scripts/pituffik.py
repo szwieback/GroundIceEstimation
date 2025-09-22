@@ -71,7 +71,7 @@ def process_mintpy(
     export_defo_history_hdf5(
         data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
         dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
-    
+
     predens.predict(dailytemp)
     
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -92,7 +92,7 @@ def process_mintpy(
 
 if __name__ == '__main__':
 
-    year = 2019
+    year = 2024
     sitename = 'Pituffik'
     # for 2019 and 2024
     xy_ref = np.array([[508246.3, 8499333.1],
