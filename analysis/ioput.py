@@ -486,15 +486,23 @@ def hdf5_to_geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
                 for i, lab in enumerate(labels, start=1):
                     dst.set_band_description(i, lab)
 
-def export_defo_history_hdf5(s_obs, fnout, geospatial, geom, ind_scenes, dailytemp, flip_sign=True):
-    from datetime import timedelta
+def export_defo_history_hdf5(
+        s_obs, pout, geospatial, geom, dates_obs_str=None, K=None, flip_sign=True, 
+        fn_defo='defo_history.h5', fn_K_diag='defo_history_covariance_diagonal.h5'):
     attributes = geospatial._hdf5_attributes()
     attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi #degrees
     if flip_sign:
         s_obs = s_obs * (-1) # so subsidence is negative
+    save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_name='dates', layer_info=dates_obs_str)
+    if K is not None:
+        K_diag = np.moveaxis(np.diagonal(K), -1, 0) # diagonal insanely messes up the ordering
+        save_hdf5(
+            K_diag, attributes, 'variance', pout / fn_K_diag, layer_name='dates', layer_info=dates_obs_str)
+        
+def get_dates_obs_str(dailytemp, ind_scenes):
+    from datetime import timedelta
     dates_obs = [
-        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]
-    save_hdf5(s_obs, attributes, 'data', fnout, layer_name='dates', layer_info=dates_obs)
+        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]    
     
 def read_meta_from_json(fnmeta):
     import json

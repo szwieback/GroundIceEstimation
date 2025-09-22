@@ -17,7 +17,7 @@ from analysis import (
     spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
     InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap,
     MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, MulticlassInversionResultsGM,
-    MulticlassInversionResultsGMMmap, hdf5_attrs_from_tif, save_hdf5, export_defo_history_hdf5)
+    MulticlassInversionResultsGMMmap, get_dates_obs_str, export_defo_history_hdf5)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -135,7 +135,8 @@ def process_dalton(
     data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1)),
             'ec': ec}
     export_defo_history_hdf5(
-        data['s_obs'], pathout / 'defo_history.h5', geospatial_K, geom, ind_scenes, dailytemp)
+        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
+        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
 
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
@@ -163,34 +164,14 @@ def process_dalton(
 
 if __name__ == '__main__':
 
-    # memory = True
-    #
-    # imethod = 'GM'
-    # # imethod = 'IS'
-    # start_is = time.time()
-    # process_dalton(imethod=imethod, memory=memory, year=year, rmethod=rmethod)
-    # end_is = time.time()
-    # t = end_is - start_is
-    # print(f"Runtime for {imethod} method: {t:.2f} seconds")
-    # exit()
-    # p0 = Path(
-    #     f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
-    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in [False]]
-    # suffixl = ['_IS_False', '_GM_False_K1', '_GM_False_K2', '_GM_False_K3', '_GM_False_K4', '_GM_False_K5']
-    # fname = 'e_mean_period_mean.npy'
-    # plot_comparison_all(p0, rmethod, suffixl, fname, 5)
-    # exit()
+
     year = 2023
-    do_gmi = True
-    do_isi = True
+    do_gmi = False
+    do_isi = False
     do_isi_full = True
     rmethod = 'mintpy'
     N = 50000
     memory = False
-    xy_ref = np.array([
-                    [430013.0, 7679097.7], [428394.3, 7672731.8], [428334.9, 7667939.1],
-                    [428870.3, 7660699.2], [427754.0, 7655680.9]]).T
     xy_ref = np.array([
                     [430013.0, 7679097.7],  [427668.9, 7656177.3]]).T
     for ecotype in (True,):
@@ -218,17 +199,5 @@ if __name__ == '__main__':
             N = 10000
             process_dalton(
                 xy_ref, N=N, imethod=imethod, memory=memory, year=year, rmethod=rmethod, ecotype=ecotype)
-    # p0 = Path(
-    #     f'/export/data/Experiments/gie/processed/{site_name}/{sensor}/{year}')
-    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    # # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in [False]]
-    # suffixl = ['_IS_False', '_GM_False_K1', '_GM_False_K2', '_GM_False_K3', '_GM_False_K4', '_GM_False_K5']
-    # fname = 'e_mean_period_mean.npy'
-    # plot_comparison_all(p0, rmethod, suffixl, fname, 5)
 
-    # bname = 'hadamard'
-    # suffixl = [f'_{x}_{y}' for x in ('IS', 'GM') for y in (True, False)]
-    # fname = 'e_mean_period_mean.npy'
-    # # compare(p0, bname, suffixl, fname)
-    # plot(p0, bname, ('_IS_True', '_GM_True'), fname)
 

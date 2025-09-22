@@ -17,12 +17,12 @@ from simulation import (
 from forcing import load_forcing_merra_subset, parse_dates
 from scripts.pathnames import paths
 
-year = 2019
+year = 2024
 p0 = paths['processed'] / 'Pituffik/Sentinel1/' / str(year) / 'singleensemble'
 import matplotlib.pyplot as plt
 import numpy as np
 yf_mean = np.load(p0 / 'yf_mean.npy')
 e_mean = np.load(p0 / 'e_mean.npy')
-plt.imshow(yf_mean[..., -1])
-plt.imshow(e_mean[..., int(0.5 / 0.002)])
+# plt.imshow(yf_mean[..., -1])
+plt.imshow(e_mean[..., int(0.2 / 0.002)])
 plt.show()

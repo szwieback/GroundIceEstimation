@@ -10,8 +10,8 @@ import os
 from pathlib import Path
 
 from analysis import (StefanPredictor, PredictionEnsemble, enforce_directory, read_K, add_atmospheric_K, 
-                      read_referenced_motion, InversionProcessorIS, InversionResultsIS, hdf5_attrs_from_tif,
-                      export_defo_history_hdf5)
+                      read_motion, InversionProcessorIS, InversionResultsIS, hdf5_attrs_from_tif,
+                      export_defo_history_hdf5, get_dates_obs_str)
 
 from simulation import StefanStratigraphySmoothingSpline, StratigraphyMultiple
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -73,7 +73,6 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     N = 10000
     Nbatch = 1
 
-
     s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
     attrs = hdf5_attrs_from_tif(fnunw)
 
@@ -113,7 +112,9 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
         ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
     export_defo_history_hdf5(
-        data['s_obs'], pathout / 'defo_history.h5', geospatial, geom, ind_scenes, dailytemp)
+        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
+        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
+
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], hdf5=True, **kwargs)

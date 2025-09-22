@@ -11,7 +11,7 @@ from pathlib import Path
 
 from analysis import (StefanPredictor, PredictionEnsemble, enforce_directory, export_defo_history_hdf5,
         read_K, add_atmospheric_K, InversionProcessorIS, InversionResultsIS, read_motion,
-        hdf5_attrs_from_tif)
+        hdf5_attrs_from_tif, get_dates_obs_str)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple,
     StefanStratigraphyConstantE)
@@ -87,8 +87,6 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
 
     dailytemp, ind_scenes = oliktok_forcing(fnforcing, year=year, remove_last=False)
 
-    print(f'daily temperature: {dailytemp.shape}, number of scenes: {len(ind_scenes)}')
-
     indranges = [(ind_scenes[-4], ind_scenes[-1])]  # from Aug 13
 
     predictor = StefanPredictor()
@@ -108,7 +106,10 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     ir = InversionResultsIS.from_file(os.path.join(pathout, 'ir.p'))
     ir.register_dates(dailytemp.index)
     export_defo_history_hdf5(
-        data['s_obs'], pathout / 'defo_history.h5', geospatial, geom, ind_scenes, dailytemp)
+        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
+        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
+
+
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'),
         ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),

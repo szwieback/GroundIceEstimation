@@ -6,13 +6,12 @@ Created on Oct 6, 2022
 '''
 
 import numpy as np
-import pandas as pd
-import datetime
 from pathlib import Path
 
 from analysis import (
-    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS,
-    InversionResultsISMmap, MulticlassInversionResultsISMmap, export_defo_history_hdf5, read_meta_from_json)
+    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS, get_dates_obs_str,
+    InversionResultsISMmap, MulticlassInversionResultsISMmap, export_defo_history_hdf5, read_meta_from_json,
+    )
 from simulation import StefanStratigraphySmoothingSpline
 from forcing import forcing_merra_meta
 from scripts.pathnames import paths
@@ -70,7 +69,9 @@ def process_mintpy(
     # store an atmospherically referenced deformation history
     geospatial.save_geotiff(data['s_obs'], pathout / 's_obs.tif')
     export_defo_history_hdf5(
-        data['s_obs'], pathout / 'defo_history.h5', geospatial, meta['geom'], ind_scenes, dailytemp)
+        data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
+        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
+    
     predens.predict(dailytemp)
     
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -93,6 +94,7 @@ if __name__ == '__main__':
 
     year = 2019
     sitename = 'Pituffik'
+    # for 2019 and 2024
     xy_ref = np.array([[508246.3, 8499333.1],
                       [512951.2, 8496201.6],
                       [513512.1, 8493859.5],

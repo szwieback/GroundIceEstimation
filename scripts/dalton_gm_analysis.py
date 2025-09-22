@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from analysis import load_object
 from scripts.pathnames import paths
-from scripts.plotting import cmap_e, prepare_figure
+from scripts.plotting import cmap_e, prepare_figure, colslist, add_scalebar
 import colorcet as cc
 from matplotlib.colors import ListedColormap
 from collections import namedtuple
@@ -18,10 +18,13 @@ cmap = copy.copy(cmap_e)
 cmap.set_bad(color=c_bad)
 
 MetricSummary = namedtuple('MetricSummary', ['accuracy', 'sharpness', 'coverage'])
-methodlabels = {'GM_K1': 'GM: $K=1$', 'GM_K2': 'GM: $K=2$', 'GM_K3': 'GM: $K=3$', 'GM_K4': 'GM: $K=4$', 
-                'GM_K5': 'GM: $K=5$','IS': 'IS'}
+methodlabels = {'GM_K1': 'GM: $K=1$', 'GM_K2': 'GM: $K=2$', 'GM_K3': 'GM: $K=3$', 'GM_K4': 'GM: $K=4$',
+                'GM_K5': 'GM: $K=5$', 'IS': 'IS'}
 
-jdepth = 2 # which one to show
+jdepth = 2  # which one to show
+
+lonlats = {'HV': (-148.8437, 69.1548), 'IC': (-148.8304, 69.0403), 'HVE': (-148.8373, 69.1559)}
+
 
 def load_results(p0, imethod, ftype, rmethod='mintpy'):
     arr = np.load(p0 / f'{rmethod}_{imethod}' / f'{ftype}.npy')
@@ -42,6 +45,8 @@ def load_geospatial(p0, imethod, rmethod='mintpy'):
 
 def plot_results(p0, imethods, fnout=None):
     from string import ascii_lowercase
+    import matplotlib.patheffects as path_effects
+    
     fig, axs = prepare_figure(
         nrows=2, ncols=5, figsize=(2.00, 1.28), hspace=0.09, bottom=0.02, top=0.96, left=0.07,
         remove_spines=False, sharex=True, sharey=True)
@@ -51,18 +56,25 @@ def plot_results(p0, imethods, fnout=None):
         e_mean = load_results(p0, imethod, 'e_mean_depth_mean')
         axs[1, jim].imshow(e_mean[..., jdepth], vmin=0.0, vmax=0.40, cmap=cmap, interpolation='nearest')
         axs[0, jim].text(
-            0.50, 1.02, methodlabels[imethod], c='k', transform=axs[0, jim].transAxes, ha='center', 
+            0.50, 1.02, methodlabels[imethod], c='k', transform=axs[0, jim].transAxes, ha='center',
             va='baseline')
-    S2 = load_S2(p0)
+    S2, geospatial = load_S2(p0)
     rgb = np.stack([percentile_stretch(S2[b]) for b in [4, 3, 2]], axis=-1)
     axs[1, -1].imshow(rgb)
+    site = 'HV'
+    rc = geospatial.rowcol(lonlats[site], crs='epsg:4326')
+    axs[1, -1].plot(
+        rc[1], rc[0], linestyle='none', marker='o', mec='w', mfc=colslist[0], mew=0.8, ms=3.0)
+    text = axs[1, -1].text(rc[1] - 5, rc[0] + 1, site, ha='right', va='center', c=colslist[0])
+    text.set_path_effects([path_effects.withStroke(linewidth=0.8, foreground='w')])
+    add_scalebar(axs[1, -1], geospatial, length=2000, label='2 km', y=0.97, dx=0.75, ylab=0.94)
+
     axs[0, 0].set_xticks((80,))
     axs[0, 0].set_yticks(np.array(range(4)) * 80 + 40)
     # legend
     ax = axs[0, 4]
     ax.axis('off')
     cbar = plt.colorbar(im, ax=ax, fraction=1.0, aspect=5)
-    # cbar.ax.tick_params(labelsize=8)
     cbar.set_ticks([0.0, 0.1, 0.2, 0.3, 0.4])  # Set specific tick locations
     cbar.ax.text(
         2.05, 0.50, '$\\bar{e}$ or $e$ [$-$]', rotation=270, transform=cbar.ax.transAxes, ha='right',
@@ -70,7 +82,7 @@ def plot_results(p0, imethods, fnout=None):
     cbar.ax.text(
         2.65, 0.50, 'excess ice parameter', rotation=270, transform=cbar.ax.transAxes, ha='right',
         va='center')
-    for ax, label in zip(axs[:, 0], ('time average $\\bar{e}$', 'depth average $e_{40-50}$')):
+    for ax, label in zip(axs[:, 0], ('time average $\\bar{e}$', 'depth average $e_{20-30}$')):
         ax.text(-0.14, 0.50, label, rotation=90, transform=ax.transAxes, c='k', va='center', ha='right')
     for jax, ax in enumerate(axs.flat):
         _c = '#dddddd' if jax != 9 else '#666666'
@@ -80,52 +92,10 @@ def plot_results(p0, imethods, fnout=None):
             _jax = jax if jax < 4 else jax - 1
             label = f'{ascii_lowercase[_jax]})'
             ax.text(0.98, 0.02, label, ha='right', va='baseline', transform=ax.transAxes, c=_c)
-    if fnout is None:
-        plt.show()
-    else:
-        fig.savefig(fnout, dpi=450)
-
-def plot_results_std(p0, imethods, fnout=None):
-    from string import ascii_lowercase
-    fig, axs = prepare_figure(
-        nrows=2, ncols=5, figsize=(2.00, 1.28), hspace=0.09, bottom=0.02, top=0.96, left=0.07,
-        remove_spines=False, sharex=True, sharey=True)
-    for jim, imethod in enumerate(imethods):
-        e_var = load_results(p0, imethod, 'e_mean_period_var')
-        im = axs[0, jim].imshow(
-            np.sqrt(e_var[..., 0]), vmin=0.0, vmax=0.20, cmap=cmap, interpolation='nearest')
-        e_var = load_results(p0, imethod, 'e_mean_depth_var')
-        axs[1, jim].imshow(
-            np.sqrt(e_var[..., jdepth]), vmin=0.0, vmax=0.20, cmap=cmap, interpolation='nearest')
-        axs[0, jim].text(
-            0.50, 1.02, methodlabels[imethod], c='k', transform=axs[0, jim].transAxes, ha='center', 
-            va='baseline')
-    S2 = load_S2(p0)
-    rgb = np.stack([percentile_stretch(S2[b]) for b in [4, 3, 2]], axis=-1)
-    axs[1, -1].imshow(rgb)
-    axs[0, 0].set_xticks((80,))
-    axs[0, 0].set_yticks(np.array(range(4)) * 80 + 40)
-    # legend
-    ax = axs[0, 4]
-    ax.axis('off')
-    cbar = plt.colorbar(im, ax=ax, fraction=1.0, aspect=5)
-    # cbar.ax.tick_params(labelsize=8)
-    cbar.ax.text(
-        2.05, 0.50, '$\\bar{e}$ or $e$ [$-$]', rotation=270, transform=cbar.ax.transAxes, ha='right',
-        va='center')
-    cbar.ax.text(
-        2.65, 0.50, 'excess ice parameter', rotation=270, transform=cbar.ax.transAxes, ha='right',
-        va='center')
-    for ax, label in zip(axs[:, 0], ('time average $\\bar{e}$', 'depth average $e_{40-50}$')):
-        ax.text(-0.14, 0.50, label, rotation=90, transform=ax.transAxes, c='k', va='center', ha='right')
-    for jax, ax in enumerate(axs.flat):
-        _c = '#dddddd' if jax != 9 else '#666666'
-        ax.grid(True, alpha=0.6, color=_c, linewidth=0.5)
-        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-        if jax != 4:
-            _jax = jax if jax < 4 else jax - 1
-            label = f'{ascii_lowercase[_jax]})'
-            ax.text(0.98, 0.02, label, ha='right', va='baseline', transform=ax.transAxes, c=_c)
+    c_ann = '#cccccc'
+    ax = axs[0, 1]
+    ax.text(0.02, 0.27, 'D', c=c_ann, transform=ax.transAxes)
+    ax.text(0.65, 0.47, 'D', c=c_ann, transform=ax.transAxes)
     if fnout is None:
         plt.show()
     else:
@@ -143,16 +113,18 @@ def plot_results_quantile(p0, imethods, fnout=None):
         im = axs[jim].imshow(
             e_q[..., 0, 1] - e_q[..., 0, 0], vmin=0.0, vmax=0.48, cmap=cmap_disp, interpolation='nearest')
         axs[jim].text(
-            0.50, 1.02, methodlabels[imethod], c='k', transform=axs[jim].transAxes, ha='center', 
+            0.50, 1.02, methodlabels[imethod], c='k', transform=axs[jim].transAxes, ha='center',
             va='baseline')
     # legend
     cax = fig.add_axes([0.86, 0.05, 0.02, 0.84])  # [left, bottom, width, height]
     cbar = fig.colorbar(im, cax=cax)
     cbar.ax.tick_params(pad=2)
-    cbar.set_ticks([0.0, 0.2, 0.4])
+    cbar.set_ticks([0.0, 0.2, 0.4])    
     cbar.ax.text(
-        6.80, 0.50, '$\\bar{e}$ 80\% CI width [$-$]', rotation=270, transform=cbar.ax.transAxes, ha='right',
+        6.80, 0.50, '$\\bar{e}$ CI width [$-$]', rotation=270, transform=cbar.ax.transAxes, ha='right',
         va='center')
+    axs[0, 0].set_xticks((80,))
+    axs[0, 0].set_yticks(np.array(range(4)) * 80 + 40)    
     for jax, ax in enumerate(axs.flat):
         _c = '#ffffff' if jax != 9 else '#666666'
         ax.grid(True, alpha=0.6, color=_c, linewidth=0.5)
@@ -174,7 +146,7 @@ def load_S2(p0):
     geospatial = ir['geospatial']
     fnS2 = paths['ancillary'] / 'Sentinel2' / 'S2_composite_Dalton.tif'
     S2 = geospatial.warp_from_file(fnS2)
-    return S2[0]
+    return S2
 
 def plot_comparison(p0, imethods, imethod_ref, fnout=None):
     from scipy.stats import gaussian_kde
@@ -190,12 +162,12 @@ def plot_comparison(p0, imethods, imethod_ref, fnout=None):
     colors = gray_cmap(np.linspace(0.7, 0.0, 256))
     custom_cmap = ListedColormap(colors)
     def add_panel(ax, x, y, variance=None):
-        stride = 37 # prime number to avoid subsampling depths
+        stride = 37  # prime number to avoid subsampling depths
         _xy = np.vstack([x.flatten(), y.flatten()])
-        xy = _xy[:, np.all(np.isfinite(_xy), axis=0)][:,::stride]   
+        xy = _xy[:, np.all(np.isfinite(_xy), axis=0)][:,::stride]
         if variance is not None:
             var = variance.flatten()[np.all(np.isfinite(_xy), axis=0)][::stride]
-            score = np.median(np.abs((xy[1, :] - xy[0, :])) / np.sqrt(var))
+            score = np.median(np.abs((xy[1,:] - xy[0,:])) / np.sqrt(var))
         kde = gaussian_kde(xy)
         density = kde(xy)
         ax.plot(lim, lim, c='#cccccc', lw=0.3, zorder=3)
@@ -294,7 +266,7 @@ def plot_metrics(imethods, fnout=None):
     markersizes = {'GM_K1': 4, 'GM_K2': 4, 'GM_K3': 4, 'GM_K5': 4, 'IS': 8}
     mews = {'GM_K1': 0.9, 'GM_K2': 0.9, 'GM_K3': 0.9, 'GM_K5': 0.9, 'IS': 1.4}
     colors = {
-        'GM_K1': '#cc9999', 'GM_K2': '#cc9999', 'GM_K3': '#99cc99', 'GM_K5': '#9999cc', 'IS': '#999999'}
+        'GM_K1': '#cc9999', 'GM_K2': colslist[2], 'GM_K3': colslist[0], 'GM_K5': colslist[1], 'IS': '#999999'}
     legend_artists = []
     def _plot(ax, mdepth, mind, imethod):
         m = np.concatenate((mdepth, mind))
@@ -331,43 +303,156 @@ def plot_metrics(imethods, fnout=None):
     else:
         fig.savefig(fnout)
 
-def plot_cores():
+def _plot_core(ax, y_grid, e_mean, e_quantile=None, c=None, alpha=1.0, alpha_quantile=0.2, lw=1.1):
+    if c is None: c = 'k'
+    delta_y = y_grid[1] - y_grid[0]
+    if e_quantile is not None:
+        ax.fill_betweenx(
+            y_grid, e_quantile[0,:], e_quantile[1,:], step='post', color=c, alpha=alpha_quantile, ec='none')
+    ax.step(e_mean, y_grid, alpha=alpha, c=c, lw=lw)
+    ax.plot((e_mean[-1],) * 2, (y_grid[-1], y_grid[-1] + delta_y), alpha=alpha, lw=lw, c=c)
+
+def _add_legend_inset(legend_ax, c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q):
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    
+    inset = inset_axes(legend_ax, width=0.25, height=0.30,
+                       bbox_to_anchor=(0.70, 0.75, 0.40, 0.30),
+                       bbox_transform=legend_ax.transAxes, loc='upper right')
+    inset.set_xticks([])
+    inset.set_yticks([])
+    for spine in inset.spines:
+        inset.spines[spine].set_visible(False)
+    x = [0, 1]
+    x_line = [0.00, 0.95]
+    y_is = (0.3, )  * 2
+    y_offset = 0.1
+    x_text = 1.4
+    inset.fill_between(
+        x, (y_is[0] - y_offset, )*2, (y_is[0] + y_offset, )*2, color=c_is, alpha=alpha_shade, ec='none')
+    inset.plot(x_line, y_is, color=c_is, linewidth=lw, alpha=alpha)
+    inset.text(x_text, y_is[0], 'in-situ', va='center', fontsize=7)
+    y_mean = (0.7,)*2
+    y_q1 = (y_mean[0]-y_offset,)*2  
+    y_q2 = (y_mean[0]+y_offset,)*2 
+    inset.plot(x_line, y_mean, color=c_im, linewidth=lw, alpha=alpha)
+    inset.plot(x, y_q1, color=c_im, linewidth=lw_q, alpha=alpha_q)
+    inset.plot(x, y_q2, color=c_im, linewidth=lw_q, alpha=alpha_q)
+    inset.text(x_text, y_mean[0], 'InSAR', va='center', fontsize=7)
+    inset.set_xlim(0, 2.2)
+    inset.set_ylim(0.1, 0.9)
+    
+    
+    
+def plot_cores(imethods, fnout=None):
     from scripts.core_analysis import read_site, bootstrap_percentiles
-    from scripts.plotting import colslist
-    fig, axs = prepare_figure(nrows=2, ncols=5, figsize=(1.00, 1.00))
+    fig, axs = prepare_figure(
+        nrows=2, ncols=4, figsize=(1.00, 0.85), sharex=True, sharey=True, left=0.12, top=0.89, right=0.99,
+        bottom=0.12, wspace=0.40, hspace=0.23)
     method = 'supernatant'
-    # IC: removed two cores with cryoturbated organics
+    site_labels = {'HV': 'Happy Valley: upland', 'HVE': 'Happy Valley: toe slope'}
     version = '2022'
     fns = {
-            'IC': 'FSA_Dalton_IC_2023_20240201.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
+            'HVE': 'FSA_Dalton_HVE_2023_20250909.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
+    y_f_insitu = {'HV': 48.7, 'HVE': 46.9}
     delta_y = 10
     geospatial = load_geospatial(p0, imethod)
-    lonlats = {'HV': (-148.8437, 69.1548), 'IC': (-148.8304, 69.0403)}
-    for jsite, site in enumerate(('HV', 'IC')):
-        print(site)
+    y_grid_im = np.arange(5) * delta_y
+    c_is, c_im = colslist[2], colslist[0]
+    alpha_q, lw_q = 0.5, 0.5
+    alpha, lw, alpha_shade = 0.8, 1.1, 0.2
+    for jsite, site in enumerate(('HV', 'HVE')):
         lonlat = lonlats[site]
         rc = geospatial.rowcol(lonlat, crs='epsg:4326')
-        for _imethod in imethods:
-            e_mean = load_results(p0, _imethod, 'e_mean_depth_mean')
-            e_mean_site = e_mean[rc[0], rc[1], :]
-            yf_mean = load_results(p0, _imethod, 'yf_mean')
-            yf_mean_site = yf_mean[rc[0], rc[1], :]
-            print(_imethod, e_mean_site, yf_mean_site[-1])        
+        e_grid = read_site(paths['cores'] / fns[site], method, version, delta_y)
+        e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
+        print(site, e_grid.shape[0])
+        e_mean = np.nanmean(e_grid, axis=0)
+        y_grid = np.arange(len(e_mean)) * delta_y
+        for jim, _imethod in enumerate(imethods):
+            ax = axs[jsite, jim]
+            e_mean_site_im = load_results(p0, _imethod, 'e_mean_depth_mean')[rc[0], rc[1],:]
+            yf_mean_site_im = load_results(p0, _imethod, 'yf_mean')[rc[0], rc[1], -1]
+            e_quantile_site_im = load_results(p0, _imethod, 'e_mean_depth_quantile')[rc[0], rc[1], ...]
+            rmse = np.sqrt(np.mean(
+                [(e_mean_site_im[jdepth] - e_mean[jdepth])**2 for jdepth in range(len(y_grid_im))]))
+            print('\t', _imethod, f'{rmse:.2f}')
+            _plot_core(
+                ax, y_grid, e_mean, e_quantile=e_q_mean, c=c_is, alpha=alpha, alpha_quantile=alpha_shade)
+            _plot_core(ax, y_grid_im, e_quantile_site_im[..., 0], c=c_im, alpha=alpha_q, lw=lw_q)
+            _plot_core(ax, y_grid_im, e_quantile_site_im[..., 1], c=c_im, alpha=alpha_q, lw=lw_q)
+            _plot_core(ax, y_grid_im, e_mean_site_im, e_quantile=None, c=c_im, alpha=alpha)
+            ax.axhline(y_f_insitu[site], c='#aaaaaa', lw=0.5)
+        ax.text(-1.60, 1.05, site_labels[site], ha='center', va='baseline', transform=ax.transAxes)
+    _add_legend_inset(axs[0, 0], c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q)
+    ax.set_ylim((57, 0))
+    ax.set_xlim((-0.05, 0.65))
+    from string import ascii_lowercase
+    for jax, ax in enumerate(axs.flatten()):
+        ax.text(0.030, 0.025, f'{ascii_lowercase[jax]})', ha='left', va='baseline', transform=ax.transAxes)
+    axs[0, 0].text(1.04, 0.11, 'TD', c='#aaaaaa', transform=axs[0, 0].transAxes, ha='left', va='baseline')
+    for jax, ax in enumerate(axs[:, 0]):
+        ax.text(-0.48, 0.50, 'depth [cm]', rotation=90, va='center', ha='right', transform=ax.transAxes)
+    for jax, ax in enumerate(axs[1, :]):
+        ax.text(0.50, -0.32, '$e$ [-]', va='baseline', ha='center', transform=ax.transAxes)
+    for jax, ax in enumerate(axs[0, :]):
+        ax.text(
+            0.50, 1.20, methodlabels[imethods[jax]], ha='center', va='baseline', c='k', 
+            transform=ax.transAxes)
+    if fnout is None:
+        plt.show()
+    else:
+        fig.savefig(fnout)
+
+def plot_cores_IS(fnout=None):
+    from scripts.core_analysis import read_site, bootstrap_percentiles
+    fig, axs = prepare_figure(
+        nrows=1, ncols=2, figsize=(1.50, 0.85), sharex=True, sharey=True, left=0.10, top=0.89, right=0.92,
+        bottom=0.14, wspace=0.20, hspace=0.23)
+    method = 'supernatant'
+    site_labels = {'HV': 'Happy Valley: upland', 'HVE': 'Happy Valley: toe slope'}
+    version = '2022'
+    fns = {
+            'HVE': 'FSA_Dalton_HVE_2023_20250909.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
+    y_f_insitu = {'HV': 48.7, 'HVE': 46.9}
+    imethod = 'IS_full'
+    geospatial = load_geospatial(p0, imethod)
+    c_is, c_im = colslist[2], colslist[0]
+    alpha_q, lw_q = 0.5, 0.5
+    delta_y = 1.0
+    alpha, lw, alpha_shade = 0.8, 1.1, 0.2
+    for jsite, site in enumerate(('HV', 'HVE')):
+        lonlat = lonlats[site]
+        rc = geospatial.rowcol(lonlat, crs='epsg:4326')
         e_grid = read_site(paths['cores'] / fns[site], method, version, delta_y)
         e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
         e_mean = np.nanmean(e_grid, axis=0)
         y_grid = np.arange(len(e_mean)) * delta_y
-        ylim = (50, 0)
-        ax = axs[jsite, 0]
-        print(e_mean)
-        ax.fill_betweenx(
-            y_grid, e_q_mean[0,:], e_q_mean[1,:], edgecolor='none', facecolor=colslist[1],
-            alpha=0.20)
-        ax.plot(e_grid.T, y_grid, c=colslist[4], alpha=0.15, lw=0.6)
-        ax.plot(e_mean, y_grid, c=colslist[0], lw=1.2)
-        ax.set_ylim(ylim)
-        ax.set_xlim((-0.01, 0.40))    
-    plt.show()    
+        ax = axs[jsite]
+        e_mean_site_im = load_results(p0, imethod, 'e_mean')[rc[0], rc[1],:]
+        yf_mean_site_im = load_results(p0, imethod, 'yf_mean')[rc[0], rc[1], -1]
+        e_quantile_site_im = load_results(p0, imethod, 'e_quantile')[rc[0], rc[1], ...]
+        y_grid_im = np.arange(len(e_mean_site_im)) * 0.2
+        _plot_core(
+            ax, y_grid, e_mean, e_quantile=e_q_mean, c=c_is, alpha=alpha, alpha_quantile=alpha_shade)
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 0], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 1], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_mean_site_im, e_quantile=None, c=c_im, alpha=alpha)
+        ax.axhline(yf_mean_site_im * 100, c='#aaaaaa', lw=0.5)
+        ax.text(0.50, 1.06, site_labels[site], ha='center', va='baseline', transform=ax.transAxes)
+    _add_legend_inset(axs[1], c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q)
+    ax.set_ylim((57, 0))
+    ax.set_xlim((-0.01, 0.65))
+    from string import ascii_lowercase
+
+    axs[0].text(1.04, 0.16, 'TD', c='#aaaaaa', transform=axs[0].transAxes, ha='left', va='baseline')
+    axs[0].text(-0.18, 0.50, 'depth [cm]', rotation=90, va='center', ha='right', transform=axs[0].transAxes)
+    for jax, ax in enumerate(axs.flatten()):
+        ax.text(0.030, 1.025, f'{ascii_lowercase[jax]})', ha='right', va='baseline', transform=ax.transAxes)
+        ax.text(0.50, -0.15, '$e$ [-]', va='baseline', ha='center', transform=ax.transAxes)
+    if fnout is None:
+        plt.show()
+    else:
+        fig.savefig(fnout)
 
 if __name__ == '__main__':
     year = 2023
@@ -376,20 +461,13 @@ if __name__ == '__main__':
     p0 = paths['processed'] / 'dalton' / str(year) / 'ecotype'
     pfig = paths['figures'] / 'dalton'
 
-    imethods = ('GM_K2', 'GM_K3', 'GM_K5', 'IS')
+    imethods = ('GM_K3', 'GM_K2', 'GM_K5', 'IS')
+    imethods_syn = ('GM_K2', 'GM_K3', 'GM_K5', 'IS')
     # plot_results(p0, imethods, fnout=pfig / 'maps.pdf')
-    # plot_results_std(p0, imethods, fnout=pfig / 'maps_std.pdf')
     plot_results_quantile(p0, imethods, fnout=pfig / 'maps_quantile.pdf')
     # plot_comparison(p0, imethods[:-1], 'IS', fnout=pfig / 'comparison.pdf')
-    # plot_comparison_quantile(p0, imethods[:-1], 'IS', fnout=pfig / 'comparison_quantile.pdf')
-    # plot_metrics(imethods, fnout=pfig / 'synthetic.pdf')
-    # plot_cores()
+    # plot_metrics(imethods_syn, fnout=pfig / 'synthetic.pdf')
+    # plot_cores(imethods, fnout=pfig / 'cores.pdf')
     
+    # plot_cores_IS(fnout = pfig / 'cores_IS.pdf')
 
-    
-    
-    
-    
-
-    
-    
