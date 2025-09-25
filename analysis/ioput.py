@@ -449,7 +449,7 @@ def hdf5_to_geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
                 try: crs = CRS.from_wkt(wkt)
                 except Exception: crs = None
 
-        nod = attrs.get('NoDataValue', np.nan)
+        nod = attrs.get('NODATA', np.nan)
         nodata = None if (isinstance(nod, float) and not np.isfinite(nod)) else float(nod)
 
         dtype = str(arr.dtype)
@@ -495,10 +495,11 @@ def export_defo_history_hdf5(
         s_obs = s_obs * (-1) # so subsidence is negative
     save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_name='dates', layer_info=dates_obs_str)
     if K is not None:
-        K_diag = np.moveaxis(np.diagonal(K), -1, 0) # diagonal insanely messes up the ordering
+        K_diag = np.moveaxis(np.diagonal(K), -1, 0).copy() # diagonal insanely messes up the ordering
+        K_diag[np.isnan(s_obs)] = np.nan # needs masking
         save_hdf5(
             K_diag, attributes, 'variance', pout / fn_K_diag, layer_name='dates', layer_info=dates_obs_str)
-        
+    
 def get_dates_obs_str(dailytemp, ind_scenes):
     from datetime import timedelta
     dates_obs = [

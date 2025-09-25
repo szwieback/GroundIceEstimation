@@ -71,7 +71,6 @@ def process_mintpy(
     export_defo_history_hdf5(
         data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
         dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
-
     predens.predict(dailytemp)
     
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -92,18 +91,16 @@ def process_mintpy(
 
 if __name__ == '__main__':
 
-    year = 2024
     sitename = 'Pituffik'
-    # for 2019 and 2024
     xy_ref = np.array([[508246.3, 8499333.1],
                       [512951.2, 8496201.6],
                       [513512.1, 8493859.5],
-                      [503357.5, 8490362.7],
-]
-        ).T
-    ecotype = False  # no ecotype map for Pituffik available
-    pmintpy = Path(f'/10TBstorage/Work/MintPy/Pituffik/processed/{year}')
-    pforcing = paths['forcing'] / 'pituffik'
-    process_mintpy(
-        sitename, year, pmintpy, pforcing, params_distribution, ecotype=ecotype, xy_ref=xy_ref, Tf=Tf,
-        overwrite=True)
+                      [503357.5, 8490362.7]]).T
+
+    for year in [2024, 2019]:
+        ecotype = False  # no ecotype map for Pituffik available
+        pmintpy = Path(f'/10TBstorage/Work/MintPy/Pituffik/processed/{year}')
+        pforcing = paths['forcing'] / 'pituffik'
+        process_mintpy(
+            sitename, year, pmintpy, pforcing, params_distribution, ecotype=ecotype, xy_ref=xy_ref, Tf=Tf,
+            overwrite=True)
