@@ -312,11 +312,13 @@ def _plot_core(ax, y_grid, e_mean, e_quantile=None, c=None, alpha=1.0, alpha_qua
     ax.step(e_mean, y_grid, alpha=alpha, c=c, lw=lw)
     ax.plot((e_mean[-1],) * 2, (y_grid[-1], y_grid[-1] + delta_y), alpha=alpha, lw=lw, c=c)
 
-def _add_legend_inset(legend_ax, c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q):
+def _add_legend_inset(
+        legend_ax, c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q, 
+        bbox_to_anchor=(0.70, 0.75, 0.40, 0.30)):
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     
     inset = inset_axes(legend_ax, width=0.25, height=0.30,
-                       bbox_to_anchor=(0.70, 0.75, 0.40, 0.30),
+                       bbox_to_anchor=bbox_to_anchor,
                        bbox_transform=legend_ax.transAxes, loc='upper right')
     inset.set_xticks([])
     inset.set_yticks([])
@@ -403,7 +405,7 @@ def plot_cores(imethods, fnout=None):
     else:
         fig.savefig(fnout)
 
-def plot_cores_IS(fnout=None):
+def plot_cores_IS(imethod='IS_full', fnout=None):
     from scripts.core_analysis import read_site, bootstrap_percentiles
     fig, axs = prepare_figure(
         nrows=1, ncols=2, figsize=(1.50, 0.85), sharex=True, sharey=True, left=0.10, top=0.89, right=0.92,
@@ -454,6 +456,66 @@ def plot_cores_IS(fnout=None):
     else:
         fig.savefig(fnout)
 
+def plot_cores_IS_HV(imethod='IS_full', fnout=None):
+    from scripts.core_analysis import read_site, bootstrap_percentiles
+    fig, ax = prepare_figure(
+        nrows=1, ncols=1, figsize=(1.00, 0.85), sharex=True, sharey=True, left=0.18, top=0.89, right=0.97,
+        bottom=0.14, wspace=0.20, hspace=0.23)
+    method = 'supernatant'
+    site_labels = {'HV': 'Happy Valley', 'HVE': 'Happy Valley: toe slope'}
+    version = '2022'
+    fns = {
+            'HVE': 'FSA_Dalton_HVE_2023_20250909.xlsx', 'HV': 'FSA_Dalton_HV_2023_20240201.xlsx'}
+    y_f_insitu = {'HV': 48.7, 'HVE': 46.9}
+    geospatial = load_geospatial(p0, imethod)
+    c_is, c_im = colslist[2], colslist[0]
+    alpha_q, lw_q = 0.5, 0.5
+    delta_y = 1.0 if 'IS' in imethod else 10.0 
+    alpha, lw, alpha_shade = 0.8, 1.1, 0.2
+    site = 'HV'
+    lonlat = lonlats[site]
+    rc = geospatial.rowcol(lonlat, crs='epsg:4326')
+    e_grid = read_site(paths['cores'] / fns[site], method, version, delta_y)
+    e_q_mean = bootstrap_percentiles(e_grid, (10, 90))
+    e_mean = np.nanmean(e_grid, axis=0)
+    y_grid = np.arange(len(e_mean)) * delta_y
+    _plot_core(
+        ax, y_grid, e_mean, e_quantile=e_q_mean, c=c_is, alpha=alpha, alpha_quantile=alpha_shade)
+    if 'IS' in imethod:
+        e_mean_site_im = load_results(p0, imethod, 'e_mean')[rc[0], rc[1],:]
+        yf_mean_site_im = load_results(p0, imethod, 'yf_mean')[rc[0], rc[1], -1]
+        e_quantile_site_im = load_results(p0, imethod, 'e_quantile')[rc[0], rc[1], ...]
+        y_grid_im = np.arange(len(e_mean_site_im)) * 0.2
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 0], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 1], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_mean_site_im, e_quantile=None, c=c_im, alpha=alpha)
+    elif 'GM' in imethod:
+        e_mean_site_im = load_results(p0, imethod, 'e_mean_depth_mean')[rc[0], rc[1],:]
+        yf_mean_site_im = load_results(p0, imethod, 'yf_mean')[rc[0], rc[1], -1]
+        e_quantile_site_im = load_results(p0, imethod, 'e_mean_depth_quantile')[rc[0], rc[1], ...]
+        y_grid_im = np.arange(len(e_mean_site_im)) * delta_y
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 0], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_quantile_site_im[..., 1], c=c_im, alpha=alpha_q, lw=lw_q)
+        _plot_core(ax, y_grid_im, e_mean_site_im, e_quantile=None, c=c_im, alpha=alpha)        
+    else:
+        raise ValueError
+    for ymin, ymax in ((0, 7),(44, 60)):
+        ax.axhspan(ymin, ymax, color='#cccccc', zorder=10, alpha=0.3, linewidth=0)
+    ax.text(0.98, 0.98, 'poorly constrained', va='top', ha='right', transform=ax.transAxes, c='#888888')
+    # ax.axhline(yf_mean_site_im * 100, c='#aaaaaa', lw=0.5)
+    ax.text(0.50, 1.06, site_labels[site], ha='center', va='baseline', transform=ax.transAxes)
+    _add_legend_inset(
+        ax, c_is, c_im, alpha, alpha_q, alpha_shade, lw, lw_q, bbox_to_anchor=(0.50, 0.50, 0.40, 0.30))
+    ax.set_ylim((57, 0))
+    ax.set_xlim((-0.01, 0.65))
+    # ax.text(1.04, 0.16, 'TD', c='#aaaaaa', transform=ax.transAxes, ha='left', va='baseline')
+    ax.text(-0.16, 0.50, 'depth [cm]', rotation=90, va='center', ha='right', transform=ax.transAxes)
+    ax.text(0.50, -0.17, '$e$ [-]', va='baseline', ha='center', transform=ax.transAxes)
+    if fnout is None:
+        plt.show()
+    else:
+        fig.savefig(fnout)
+
 if __name__ == '__main__':
     year = 2023
     imethod = 'IS'
@@ -464,10 +526,13 @@ if __name__ == '__main__':
     imethods = ('GM_K3', 'GM_K2', 'GM_K5', 'IS')
     imethods_syn = ('GM_K2', 'GM_K3', 'GM_K5', 'IS')
     # plot_results(p0, imethods, fnout=pfig / 'maps.pdf')
-    plot_results_quantile(p0, imethods, fnout=pfig / 'maps_quantile.pdf')
+    # plot_results_quantile(p0, imethods, fnout=pfig / 'maps_quantile.pdf')
     # plot_comparison(p0, imethods[:-1], 'IS', fnout=pfig / 'comparison.pdf')
     # plot_metrics(imethods_syn, fnout=pfig / 'synthetic.pdf')
-    # plot_cores(imethods, fnout=pfig / 'cores.pdf')
-    
+    # plot_cores(imethods, fnout=pfig / 'cores.pdf')    
     # plot_cores_IS(fnout = pfig / 'cores_IS.pdf')
+    plot_cores_IS_HV(fnout = pfig / 'core_HV_Dave.pdf')
+
+    # plot_cores_IS_HV(imethod='GM_K3', fnout = pfig / 'core_HV_Dave_GM.pdf')
+
 
