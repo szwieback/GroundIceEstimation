@@ -37,8 +37,23 @@ def load_forcing_merra_subset(folder, to_Celsius=True):
         df['T'] = df['T'] - 273.15
     return df
 
+def load_forcing_merra_mintpy(fn_csv):
+    df = pd.read_csv(fn_csv, parse_dates=['time'])
+    df.sort_values(by='time', inplace=True)
+    df = df.set_index('time')
+    df = df[['T2M']].rename(columns={'T2M': 'T'}) # is in Celsius
+    return df
+
 def forcing_merra_meta(pforcing, meta, year=None, dateformat='%Y%m%d'):
-    df = load_forcing_merra_subset(pforcing, to_Celsius=True)
+    if pforcing.is_file: 
+        fn_csv = pforcing
+    else:
+        fn_csv = pforcing / 'merra2_temps.csv'
+    if fn_csv.exists():
+        df = load_forcing_merra_mintpy(fn_csv)
+    else:
+        df = load_forcing_merra_subset(pforcing, to_Celsius=True)
+    
     d0, d1 = parse_dates(meta['date_interval'], strp=dateformat)
     datesdisp = parse_dates(meta['dates_scenes'], strp=dateformat)
     if year is None: year = d0.year
@@ -48,3 +63,5 @@ def forcing_merra_meta(pforcing, meta, year=None, dateformat='%Y%m%d'):
     dailytemp[dailytemp < 0] = 0
     ind_scenes = [int((d - d0).days) for d in datesdisp]
     return dailytemp, ind_scenes
+
+    
