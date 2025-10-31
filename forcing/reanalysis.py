@@ -45,7 +45,7 @@ def load_forcing_merra_mintpy(fn_csv):
     return df
 
 def forcing_merra_meta(pforcing, meta, year=None, dateformat='%Y%m%d'):
-    if pforcing.is_file: 
+    if pforcing.is_file(): 
         fn_csv = pforcing
     else:
         fn_csv = pforcing / 'merra2_temps.csv'
