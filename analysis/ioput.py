@@ -188,6 +188,9 @@ class Geospatial():
 def read_geotiff(fntif):
     src = rasterio.open(fntif)
     arr = src.read()
+    if src.nodata is not None and np.issubdtype(arr.dtype, np.floating):
+        arr = arr.astype(np.float32, copy=False)
+        arr[arr == src.nodata] = np.nan        
     del src
     return arr
 
