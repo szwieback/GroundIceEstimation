@@ -95,8 +95,8 @@ class InversionProcessorIS(InversionProcessor):
     def _logweights_single(self, ind_scenes, _s_obs, _C_obs, _ec=None, normalize=False):
         from inference import lw_mvnormal, psislw, _normalize
         try:
-            s_pred = self._simulated_observations_single(ind_scenes, ec=_ec)
             if np.count_nonzero(np.isnan(_s_obs)) > 0: raise ValueError('Cannot handle NaN')
+            s_pred = self._simulated_observations_single(ind_scenes, ec=_ec)
             lw = lw_mvnormal(
                 _s_obs[np.newaxis,:], _C_obs[np.newaxis, ...], s_pred)
             lw_ps, _ = psislw(lw)
@@ -661,7 +661,8 @@ class MulticlassInversionResultsIS(InversionResultsIS):
             ir, ind = self[cn], (self.ec.flatten() == cn)
             res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
             if res is None:
-                res = np.empty((np.prod(self.invres.shape[:-1]),) + res_cn.shape[1:], dtype=res_cn.dtype)
+                res = np.full(
+                    (np.prod(self.invres.shape[:-1]),) + res_cn.shape[1:], np.nan, dtype=res_cn.dtype)
             res[ind, ...] = res_cn
         res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
         return res

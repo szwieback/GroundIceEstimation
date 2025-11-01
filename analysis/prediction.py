@@ -76,7 +76,7 @@ class PredictionEnsemble():
             for res_batch in rl:
                 for k in res_batch:
                     if k in results:
-                        if not np.isscalar(self.results[k]):
+                        if not np.isscalar(results[k]):
                             results[k] = np.concatenate((results[k], res_batch[k]), axis=0)
                     else:
                         results[k] = res_batch[k]
