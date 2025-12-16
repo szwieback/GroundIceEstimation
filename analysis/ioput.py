@@ -41,6 +41,33 @@ class Geospatial():
         gsp = Geospatial(transform=transform, crs=crs, shape=shape)
         return gsp
 
+    def to_utm(self):
+        from rasterio.warp import calculate_default_transform
+        src_crs = CRS.from_user_input(self.crs)
+        if src_crs.to_epsg() != 4326:
+            raise ValueError("Source CRS must be EPSG:4326")
+        
+        height, width = self.shape
+        bounds = rasterio.transform.array_bounds(height, width, self.transform)
+        
+        center_lon = (bounds[0] + bounds[2]) / 2
+        center_lat = (bounds[1] + bounds[3]) / 2
+        
+        utm_zone = int((center_lon + 180) / 6) + 1
+        hemisphere = 'north' if center_lat >= 0 else 'south'
+        
+        utm_crs = CRS.from_dict({
+            'proj': 'utm',
+            'zone': utm_zone,
+            'south': hemisphere == 'south'
+        })
+        
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src_crs, utm_crs, width, height, *bounds
+        )
+        
+        return Geospatial(dst_transform, utm_crs, (dst_height, dst_width))
+
     @property
     def rowcol_grids(self):
         return (np.arange(self.shape[0]), np.arange(self.shape[1]))
