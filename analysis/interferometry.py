@@ -72,6 +72,16 @@ def compute_distances(xy_point, xy_ref, geospatial):
         return geospatial.distance(xyl.T)
     return np.array([_compute_distance_jref(jref) for jref in range(xy_ref.shape[1])])
 
+def compute_distance_matrix(xy, geospatial):
+    N = xy.shape[1]
+    dist = np.zeros((N, N))
+    for n1 in range(N):
+        for n2 in range(n1, N):
+            xyl = np.stack((xy[:, n1], xy[:, n2]), axis=1)
+            dist[n1, n2] = geospatial.distance(xyl.T)
+            dist[n2, n1] = dist[n1, n2]
+    return dist
+
 def distance_to_ref(
         geospatial, xy_ref, fndist=None, geospatial_ref=None, overwrite=False, njobs=-2, block_size=256):
     # uses projected c.s.; slow, but probably not a bottleneck
@@ -122,7 +132,7 @@ def distance_to_ref(
         distances = dict_res['distances']
     return distances
 
-def extract_reference(K_speckle, unw, dist, geospatial, xy_ref, covmodel):
+def extract_reference(K_speckle, unw, geospatial, xy_ref, covmodel):
     # to do: proper object structure for atmosphere
     # returns phase history and Kronecker-structured covariance (speckle + atmos)
     # get K_ref from xy_ref
@@ -131,9 +141,9 @@ def extract_reference(K_speckle, unw, dist, geospatial, xy_ref, covmodel):
     unw_ref = np.concatenate([unw[..., _r, _c] for _r, _c in rc_ref.T], axis=0)
     P = K_speckle.shape[0] + 1
     K_ref = K_reference_block(K_ref_stacked)
-    # get distances
-    dist_matrix = np.array([dist[_r, _c,:] for _r, _c in rc_ref.T])
-    dist_matrix -= np.diag(np.diag(dist_matrix))  # set diagonals to zero (subpixel localization issue)
+
+    dist_matrix = compute_distance_matrix(xy_ref, geospatial)
+
     C_comb = covmodel.covariance(dist_matrix)
     A_block = _phase_history_matrix(P, blocks=dist_matrix.shape[0])
     # to phase differences (w.r.t first)
@@ -261,7 +271,7 @@ class RationalQuadraticSepDiagCovMV(SepDiagCovMV):
 
 def spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial, n_jobs=7, fnunw=None, fnK=None, fndist=None,
-        wvl=None, convert_to_length=True, overwrite=False):
+        wvl=None, unw_hr=None, K_hr=None, geospatial_hr=None, convert_to_length=True, overwrite=False):
     # covmodel in length; unw_cor, K_cor [speckle only] in rad unless convert_to_length is False
     from joblib import Parallel, delayed
     P = K.shape[0] + 1
@@ -272,7 +282,14 @@ def spatial_referencing(
         unw = phase_to_length(unw, wavelength=wvl, variance=False)
     K_comb = combined_K(K, covmodel)  # speckle and atmo
     dist = distance_to_ref(geospatial, xy_ref, fndist=fndist, overwrite=overwrite)
-    unw_ref, K_ref_comb, _ = extract_reference(K, unw, dist, geospatial, xy_ref, covmodel)
+    if unw_hr is None or K_hr is None or geospatial_hr is None:
+        unw_ref, K_ref_comb, _ = extract_reference(K, unw, dist, geospatial, xy_ref, covmodel)
+    else:
+        # uses a high-resolution file for phase referencing
+        if convert_to_length:
+            K_hr = phase_to_length(K_hr, wavelength=wvl, variance=True)
+            unw_hr = phase_to_length(unw_hr, wavelength=wvl, variance=False)
+        unw_ref, K_ref_comb, _ = extract_reference(K_hr, unw_hr, geospatial_hr, xy_ref, covmodel)
     krig_matrices = kriging_inverses(K_ref_comb, P)
     def _phase_history_reference_row(row):
         _unw = np.moveaxis(unw[:, row,:], 0, 1).copy()
@@ -294,6 +311,8 @@ def spatial_referencing(
     return unw_cor, K_cor
 
 if __name__ == '__main__':
+    pass
+    '''
     from pathlib import Path
     from analysis import (read_K, read_geotiff_geospatial)
     path0 = Path(f'/home/simon/Work/gie/processed/kivalina/2019')
@@ -327,4 +346,4 @@ if __name__ == '__main__':
     # plt.imshow(K[-1, -1, ...] - K_cor[-1, ...])
     plt.imshow(unw_cor[-2, ...], vmin=-11, vmax=3)
     plt.show()
-
+    '''
