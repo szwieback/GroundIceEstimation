@@ -162,17 +162,30 @@ class Geospatial():
         transform = rasterio.Affine(a / _us, b / _us, c, d / _us, e / _us, f)
         return Geospatial(transform, self.crs, shape)
 
+    def downscaled(self, downscale=None):
+        if downscale is None: return self
+        _ds = int(downscale)
+        assert _ds > 0
+        shape = tuple((np.array(self.shape) / _ds).astype(np.uint64))
+        a, b, c, d, e, f, g, h, i = self.transform
+        transform = rasterio.Affine(a * _ds, b * _ds, c, d * _ds, e * _ds, f)
+        return Geospatial(transform, self.crs, shape)
+
     def warp(
-            self, arr_in, geospatial_in, method='bilinear', dtype=np.float32, upscale=None):
+            self, arr_in, geospatial_in, method='bilinear', dtype=np.float32, upscale=None, dst_nodata=None):
         from rasterio.warp import reproject, Resampling
-        rmethods = {'bilinear': Resampling.bilinear, 'nearest': Resampling.nearest, 'mode': Resampling.mode}
+        rmethods = {
+            'bilinear': Resampling.bilinear, 'nearest': Resampling.nearest,
+            'mode': Resampling.mode, 'average': Resampling.average}
         r = rmethods[method]
+        if dst_nodata is None and np.issubdtype(dtype, np.floating):
+            dst_nodata = np.nan
         _gs = self.upscaled(upscale=upscale)
         arr_out = np.zeros(arr_in.shape[:-2] + _gs.shape, dtype=dtype)
         reproject(
             arr_in, arr_out, src_transform=geospatial_in.transform,
             src_crs=geospatial_in.crs, dst_transform=_gs.transform, dst_crs=_gs.crs,
-            resampling=r)
+            resampling=r, dst_nodata=dst_nodata)
         return arr_out, _gs
 
     def warp_from_file(self, fn, method='bilinear', dtype=np.float32, upscale=None):
@@ -252,7 +265,7 @@ def vectorize_tril(G):
     G_vec = G[ind_]
     return G_vec
 
-def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, overwrite=False):
+def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, fnunw_hr=None, fnK_hr=None, overwrite=False):
     # hardcodes model etc., plan to generalize (using optional kwargs) 
     from scripts.kivalina_calibration import caldict
     from analysis.interferometry import (
@@ -263,9 +276,14 @@ def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, ove
     var_atmo = np.ones(P) * (caldict['var_rad'])  # in rad
     covmodel = RationalQuadraticSepDiagCovMV(caldict['l'], var_atmo, alpha=caldict['alpha'])
     K = add_nugget(K, caldict['nugget_speckle'])
+    if fnunw_hr is not None and fnK_hr is not None:
+        unw_hr, geospatial_hr = read_geotiff_geospatial(fnunw_hr)
+        K_hr, _ = read_K(fnK_hr)
+    else:
+        unw_hr, K_hr, geospatial_hr = None, None, None
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, 
-        overwrite=overwrite)
+        unw_hr=unw_hr, K_hr=K_hr, geospatial_hr=geospatial_hr, overwrite=overwrite)
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     K = np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))
     assert geospatial_K == geospatial_unw
