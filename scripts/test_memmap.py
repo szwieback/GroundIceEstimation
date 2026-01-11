@@ -1,13 +1,12 @@
 from analysis import (
     StefanPredictor, InversionSimulatorIS, InversionSimulatorGM, PredictionEnsemble, load_object,
-    enforce_directory, InversionProcessorIS, InversionResultsISMmap)
+    enforce_directory, InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, InversionResults)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from scripts.pathnames import paths
 from scripts.synthetic_simulation import sagwon_forcing, sagwon_covariance
 
 import numpy as np
-import shutil
 
 nrow, ncol = 8, 512
 N = 128
@@ -52,7 +51,7 @@ predens.predict(dailytemp)
 predens.predict_mean_period(indranges)
 
 IP = InversionProcessorIS
-IR = InversionResultsISMmap
+IR = InversionResults
 ip = IP(predens, batch_size=ncol)
 
 invsim = ism(predens=predens, predens_sim=predens_sim)
@@ -62,20 +61,11 @@ ssim = invsim.simulated_observations().T
 ssim = np.broadcast_to(ssim[..., None,:], (ssim.shape[0],) + (nrow, ncol,))
 K = np.broadcast_to(C_obs[..., None, None], C_obs.shape + (nrow, ncol))
 
-# # to skip actualy computing lw files
-# def create_lw_files():
-#     _fn = lambda batch: pathout / f'lw_{batch}.npy'
-#     for n in range(1, nrow):
-#         shutil.copyfile(_fn(0), _fn(n))
-#
-# create_lw_files()
-# raise
-
 # ir = ip.results(
-#         ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False,
-#         overwrite=True)
+#         ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
 # ir.save(pathout / 'ir.p')
 ir = IR.from_file(pathout / 'ir.p')
+# print(ir.memory, type(ir))
 ir.blocksize = 1024
 
 ir_mem = ip.results(
@@ -100,8 +90,7 @@ ir.export_expectation(
 res_mem = ir_mem.expectation(param=expec[0], etype=expec[1], **kwargs)
 res = np.load(pathout / f'{expec[0]}_{expec[1]}.npy', mmap_mode='r')
 print(np.allclose(res_mem, res))
-# then homogenize classes
-# then GM
+# then GM, including IR loading functionality (through _dict)
 # then multiclass
-
+# finally: always load IR in scripts
 

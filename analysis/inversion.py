@@ -368,13 +368,19 @@ class InversionResults():
     # abstract class
     blocksize_default = 1024
     intdims = 1  # internal dimensions
-
+    _subclasses = {} # keep registry of subclasses
+    
     def __init__(self, predens, invres, geospatial=None, blocksize=None):
         self.predens = predens
         self.invres = invres
         self.geospatial = geospatial
         self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
         self.memory = None # governs whether the metric computations are done in memory
+
+    @classmethod # decorator not needed but keeps IDE happy
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        InversionResults._subclasses[cls.__name__] = cls
 
     @property
     def depth(self):
@@ -404,8 +410,10 @@ class InversionResults():
     def _dict_from_file(fn):
         from analysis import load_object
         dictin = load_object(fn)
-        if 'lwmmap' in dictin and not Path(dictin['lwmmap'].filename).exists():
-            dictin['lwmmap'] = None
+        # to enable inspection of inversion results objects without accessing data
+        for mmapkey in ('lwmmap', 'gmpmmap'):
+            if mmapkey in dictin and not Path(dictin[mmapkey].filename).exists():
+                dictin[mmapkey] = None
         return dictin
 
     def save(self, fnout):
@@ -415,13 +423,17 @@ class InversionResults():
     @classmethod
     def from_file(cls, fn):
         dictin = cls._dict_from_file(fn)
+        if 'class' not in dictin:
+            raise ValueError("Cannot identify class_name from file. "\
+                             "If this is an old file, use class-specific method to load.")
         class_name = dictin.pop('class')
-        if class_name == 'InversionResultsIS':
-            return InversionResultsIS(**dictin)
-        elif class_name == 'InversionResultsISMmap':
-            return InversionResultsISMmap(**dictin)
-        else:
+        # _subclasses = {'InversionResultsIS': InversionResultsIS, 'InversionResultsGM': InversionResultsGM,
+        #                'InversionResultsISMmap': InversionResultsISMmap,
+        #                'InversionResultsGMMmap': InversionResultsGMMmap}
+        _subclasses = InversionResults._subclasses
+        if class_name not in _subclasses:
             raise ValueError(f"Cannot load {class_name} object.")
+        return _subclasses[class_name](**dictin)
 
     @abstractmethod
     def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
@@ -614,8 +626,6 @@ class InversionResultsIS(InversionResults):
             return _pq
         postquant = self._parallel(__quantile, fnmmap=fnmmap, n_jobs=n_jobs)
         return postquant
-        # return np.reshape(postquant, self.lw.shape[0:-1] + postquant.shape[1:]
-
 
 class InversionResultsGM(InversionResults):
     intdims = 2  # internal dimensions
@@ -650,12 +660,11 @@ class InversionResultsGM(InversionResults):
     def gmp(self):
         from inference import GaussianMixtureDistribution
         return GaussianMixtureDistribution.from_array(np.moveaxis(self.invres, -2, 0))
-
+        
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
-            'blocksize': self.blocksize, 'variables': self.variables}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'invres': self.invres, 'variables': self.variables})        
         return dictout
 
     def expectation(self, param='e', etype='mean', p=None, **kwargs):
@@ -744,20 +753,21 @@ class MulticlassInversionResultsGM(InversionResultsGM):
 
 class InversionResultsGMMmap(InversionResultsGM):
 
-    def __init__(self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False):
+    def __init__(
+            self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False, 
+            memory=False):
         InversionResultsGM.__init__(
             self, predens, None, geospatial=geospatial, blocksize=blocksize, variables=variables)
         if gmpmmap is not None:
             self.gmpmmap = gmpmmap
             self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
-        self.memory = False
+        self.memory = memory
 
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'gmpmmap': self.gmpmmap, 'predens': self.predens,
-            'blocksize': self.blocksize, 'variables': self.variables}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'gmpmmap': self.gmpmmap, 'variables': self.variables})        
         return dictout
 
     def __del__(self):
@@ -766,18 +776,6 @@ class InversionResultsGMMmap(InversionResultsGM):
                 Path(self.gmpmmap.filename).unlink()
             except:
                 pass
-
-    @staticmethod
-    def _dict_from_file(fn):
-        from analysis import load_object
-        dictin = load_object(fn)
-        if not Path(dictin['gmpmmap'].filename).exists:
-            dictin['gmpmmap'] = None
-        return dictin
-
-    @classmethod
-    def from_file(cls, fn):
-        return cls(**InversionResultsGMMmap._dict_from_file(fn))
 
 class InversionResultsISMmap(InversionResultsIS):
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False, memory=False):
