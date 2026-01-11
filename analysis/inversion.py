@@ -224,7 +224,7 @@ class InversionProcessorGM(InversionProcessor):
             assert 'ind_scene' not in param_dict
             if f'{param}_mean_depth' not in predens.results:
                 predens.predict_mean_depth(param_dict['depthranges'], param=param)
-            p = predens.results[f'{param}_mean_depth']            
+            p = predens.results[f'{param}_mean_depth']
         else:
             p = predens.results[param]
             if 'ind_scene' in param_dict:
@@ -293,11 +293,11 @@ class InversionProcessorGM(InversionProcessor):
         N_nan = np.count_nonzero(np.isnan(s_obs))
         if N_nan > 0:
             ind_invalid = np.any(np.isnan(s_obs), axis=1)
-            s_obs[ind_invalid, :] = 0.0
+            s_obs[ind_invalid,:] = 0.0
         gmp = gmm.conditional(s_obs, C_obs=C_obs, method_condition=self.method_condition)
         gmp_array = gmp.to_array()
         if N_nan > 0:
-            gmp_array[:, ind_invalid, :] = np.nan
+            gmp_array[:, ind_invalid,:] = np.nan
         return np.moveaxis(gmp_array, 0, -2)  # so k axis is at -2
 
     def _posterior_batch(
@@ -319,7 +319,7 @@ class InversionProcessorGM(InversionProcessor):
                         _C_obs_batch_cn = _C_obs_batch[ind, ...]
                         gmp_arr_cn = self._posterior_single(gmm[cn], _s_obs_batch_cn, _C_obs_batch_cn)
                     if gmp_arr is None:
-                        gmp_arr = np.zeros((n1-n0,) + gmp_arr_cn.shape[1:], dtype=gmp_arr_cn.dtype)
+                        gmp_arr = np.zeros((n1 - n0,) + gmp_arr_cn.shape[1:], dtype=gmp_arr_cn.dtype)
                     gmp_arr[ind, ...] = gmp_arr_cn
             else:
                 gmp_arr = self._posterior_single(gmm, _s_obs_batch, _C_obs_batch)  # array
@@ -352,7 +352,7 @@ class InversionProcessorGM(InversionProcessor):
                     variables=self.variables)
             else:
                 return MulticlassInversionResultsGM(
-                    self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial, 
+                    self.predens, np.reshape(_gmp, shape), ec, geospatial=self.geospatial,
                     variables=self.variables)
         else:
             mmap = Mmap(_gmp.filename, _gmp.dtype, shape)
@@ -367,11 +367,13 @@ class InversionResults():
     # abstract class
     blocksize_default = 1024
     intdims = 1  # internal dimensions
+
     def __init__(self, predens, invres, geospatial=None, blocksize=None):
         self.predens = predens
         self.invres = invres
         self.geospatial = geospatial
         self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
+        self.memory = None
 
     @property
     def depth(self):
@@ -409,7 +411,7 @@ class InversionResults():
         return ir
 
     @abstractmethod
-    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
         raise NotImplementedError()
 
     def export_expectation(
@@ -417,23 +419,26 @@ class InversionResults():
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = pathout / fn
         if not fnout.exists() or overwrite:
-            res = self.expectation(param=param, etype=etype, p=p, **kwargs)
-            np.save(fnout, res)
+            if self.memory:
+                res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+                
+                np.save(fnout, res)
+            else:
+                res = self.expectation(param=param, etype=etype, p=p, fnmmap=fnout, **kwargs)
         else:
-            res = np.load(fnout)
+            res = np.load(fnout, memory=self.memory)
         if hdf5:
             fnhdf5 = fnout.with_suffix('.h5')
             self._export_hdf5(res, fnhdf5, param=param, etype=etype)
 
-    def _export_hdf5(
-            self, res, fnh5, param='e', etype='mean'):
-        
+    def _export_hdf5(self, res, fnh5, param='e', etype='mean'):
+        from analysis import hdf5_attributes
         dataset_name = f'{param}_{etype}'
-        attrs = self.geospatial._hdf5_attributes()
+        attrs = hdf5_attributes(geospatial=self.geospatial)
         if dataset_name in (
             'e_mean_period_var', 'e_mean_period_mean', 'e_mean_depth_mean', 'e_mean_depth_var'):
             if res.ndim == 3 and res.shape[2] == 1:
-                res = res[:, :, 0]
+                res = res[:,:, 0]
             ioput.save_hdf5(res, attrs, dataset_name, fnh5)
         # elif dataset_name in ('e_mean_period_quantile', 'e_mean_depth_quantile'):
         #     if res.ndim == 4 and res.shape[2] == 1:
@@ -451,44 +456,48 @@ class InversionResults():
             import warnings
             warnings.warn(f"Data type {dataset_name} H5 output not implemented")
 
-    def _expectation(self, param='e', etype='mean', p=None, **kwargs):
+    def _expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
         if etype == 'mean':
-            return self._mean(param=param, p=p, **kwargs)
+            return self._mean(param=param, p=p, fnmmap=fnmmap, **kwargs)
         elif etype in ('var', 'variance'):
-            return self._variance(param=param, p=p, **kwargs)
+            return self._variance(param=param, p=p, fnmmap=fnmmap, **kwargs)
         elif etype == 'quantile':
             q = kwargs.pop('quantiles')
-            return self._quantile(q, param=param, **kwargs)
+            return self._quantile(q, param=param, p=p, fnmmap=fnmmap, **kwargs)
         elif param in ('frac_thawed'):
             ind_scene = kwargs.pop('ind_scene')
-            return self._frac_thawed(ind_scene=ind_scene, **kwargs)
+            return self._frac_thawed(ind_scene=ind_scene, fnmmap=fnmmap, **kwargs)
         else:
             raise NotImplementedError(f"Expectation type {etype} not recognized.")
 
     @abstractmethod
-    def _moment(self, param='e', power=1, p=None, **kwargs):
+    def _moment(self, param='e', power=1, p=None, fnmmap=None, **kwargs):
         raise NotImplementedError()
 
     @abstractmethod
-    def _variance(self, param='e', p=None, **kwargs):
+    def _variance(self, param='e', p=None, fnmmap=None, **kwargs):
         raise NotImplementedError()
 
-    def _mean(self, param='e', p=None, **kwargs):
-        return self._moment(param=param, power=1, p=p, **kwargs)
+    def _mean(self, param='e', p=None, fnmmap=None, **kwargs):
+        return self._moment(param=param, power=1, p=p, fnmmap=fnmmap, **kwargs)
 
-    def _invres_generator(self, block_size=None):
+    def _invres_indices(self, block_size=None):
+        # where to split array
         if block_size is None:
             block_size = self.blocksize
         iss = self.invres.shape
-        # maybe reshape to make this more general
-        step = block_size if len(iss) == 2 else np.prod(iss[1:-self.intdims]) // block_size
+        step = block_size if len(iss) == self.intdims + 1 else block_size // np.prod(iss[1:-self.intdims])         
         ind = np.arange(self.invres.shape[0], step=max((1, step)))[1:]
+        return ind
+
+    def _invres_generator(self, block_size=None):
+        ind = self._invres_indices(block_size=block_size)
         for _invres in np.array_split(self.invres, ind, axis=0):
             yield _invres  # view to avoid memory issues
 
     def register_dates(self, datelist):
         self.dates = datelist
-        
+
     @property
     def _dt_strlist(self):
         return self.dates.strftime('%Y-%m-%d').tolist()
@@ -502,24 +511,43 @@ class InversionResults():
         return path0 / f'{_fn}.{ext}'
 
 class InversionResultsIS(InversionResults):
+    # todo: merge with InversionResultsISMemory
+    def __init__(self, predens, invres, geospatial=None, blocksize=None):
+        super().__init__(predens, invres, geospatial, blocksize)
+        self.memory = True
 
     @property
     def lw(self):
         return self.invres
 
-    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
         normalize = kwargs['normalize'] if 'normalize' in kwargs else True
-        return self._expectation(param=param, etype=etype, p=p, normalize=normalize, **kwargs)
-
-    def _parallel(self, fun, n_jobs=-1, block_size=None):
-        if n_jobs in (0, 1, None):
-            return fun(self.lw)
+        res = self._expectation(param=param, etype=etype, p=p, normalize=normalize, fnmmap=fnmmap, **kwargs)
+        return res
+    
+    def _parallel(self, fun, n_jobs=-1, block_size=None, fnmmap=None):
+        if n_jobs in (0, 1, None) and fnmmap is None:
+            return fun(self.invres)
         else:
             from joblib import Parallel, delayed
-            res = np.concatenate(
-                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._invres_generator(block_size)),
-                axis=0)
-            return res
+            if fnmmap is None:
+                res = np.concatenate(
+                    Parallel(n_jobs=n_jobs)(
+                        delayed(fun)(_lw) for _lw in self._invres_generator(block_size)),
+                    axis=0)
+            else:
+                res_generator = Parallel(n_jobs=n_jobs, return_as='generator')(
+                    delayed(fun)(_lw) for _lw in self._invres_generator(block_size))
+                res0 = next(res_generator)
+                shape = (self.invres.shape[0],) + res0.shape[1:]
+                # res = np.memmap(fnmmap, dtype=res0.dtype, mode='w+', shape=shape)
+                res = np.lib.format.open_memmap(fnmmap, mode='w+', dtype=res0.dtype, shape=shape)
+                ind_row = res0.shape[0]
+                res[:ind_row] = res0
+                for r in res_generator:
+                    res[ind_row:ind_row + r.shape[0]] = r
+                    ind_row += r.shape[0]
+        return res
 
     def __frac_thawed(self, ind_scene, _lw, normalize=True):
         from inference import _normalize
@@ -532,30 +560,34 @@ class InversionResultsIS(InversionResults):
             frac_thawed[jy, ...] = np.sum(w_ * valid, axis=-1)
         return np.moveaxis(frac_thawed, 0, -1)
 
-    def _frac_thawed(self, ind_scene, normalize=True, n_jobs=-1):
+    def _frac_thawed(self, ind_scene, normalize=True, fnmmap=None, n_jobs=-1):
         def _ft(_lw):
             return self.__frac_thawed(ind_scene, _lw, normalize=normalize)
-        return self._parallel(_ft, n_jobs=n_jobs)
+        return self._parallel(_ft, fnmmap=fnmmap, n_jobs=n_jobs)
 
-    def _moment(self, param='e', power=1, p=None, normalize=True, n_jobs=-1):
+    def _moment(self, param='e', power=1, p=None, normalize=True, fnmmap=None, n_jobs=-1):
         from inference import expectation
         p = self.predictions(param=param, p=p)
         def __moment(_lw):
             _m = expectation(np.power(p, power), _lw, normalize=normalize)
             return _m
-        mom = self._parallel(__moment, n_jobs=n_jobs)
+        mom = self._parallel(__moment, fnmmap=fnmmap, n_jobs=n_jobs)
         return mom
 
-    def _variance(self, param='e', p=None, normalize=True, **kwargs):
+    def _variance(self, param='e', p=None, normalize=True, fnmmap=None, n_jobs=-1, **kwargs):
         # improvement needed to deal with numerical issues
+        from inference import expectation
         p = self.predictions(param=param, p=p)
-        var = (self._moment(param=None, p=p, power=2, normalize=normalize, **kwargs)
-               -self._moment(param=None, p=p, power=1, normalize=normalize, **kwargs) ** 2)
+        def __variance(_lw):
+            _mp = expectation(np.power(p, 2), _lw, normalize=normalize, **kwargs)
+            _mm = expectation(np.power(p, 1), _lw, normalize=normalize, **kwargs) ** 2
+            return _mp - _mm
+        var = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)            
         return var
 
     def _quantile(
-            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection', n_jobs=-1, 
-            **kwargs):
+            self, quantiles, param='e', smooth=None, steps=8, p=None, method='bisection', n_jobs=-1,
+            fnmmap=None, **kwargs):
         from inference import quantile as quant
         p = self.predictions(param=param, p=p)
         def __quantile(_lw):
@@ -563,14 +595,16 @@ class InversionResultsIS(InversionResults):
                 p, _lw, quantiles, method=method, steps=steps, normalize=True,
                 smooth=smooth)
             return _pq
-        postquant = self._parallel(__quantile, n_jobs=n_jobs)
-        return np.reshape(postquant, self.lw.shape[0:-1] + postquant.shape[1:])
+        postquant = self._parallel(__quantile, fnmmap=fnmmap, n_jobs=n_jobs)
+        return postquant
+        # return np.reshape(postquant, self.lw.shape[0:-1] + postquant.shape[1:])
 
 class InversionResultsGM(InversionResults):
     intdims = 2  # internal dimensions
 
     def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None):
         super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
+        self.memory = True
         self.variables = variables
 
     def _indices_variables(self, param='e'):
@@ -582,7 +616,7 @@ class InversionResultsGM(InversionResults):
             return _l
         n_variables = np.array([l(v) for v in self.variables])
         def _name_post(v):
-            if 'indranges' in v[1]: 
+            if 'indranges' in v[1]:
                 np = v[0] + '_mean_period'
             elif 'depthranges' in v[1]:
                 np = v[0] + '_mean_depth'
@@ -628,7 +662,7 @@ class InversionResultsGM(InversionResults):
         if p is not None: raise NotImplementedError()
         indices = self._indices_variables(param=param)
         return self.gmp.variance(indices)
-    
+
     def _quantile(self, quantiles, param='e', p=None, **kwargs):
         if p is not None: raise NotImplementedError()
         indices = self._indices_variables(param=param)
@@ -640,6 +674,7 @@ class MulticlassInversionResultsIS(InversionResultsIS):
         super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
+        self.memory = True
         self.ec = ec
 
     @property
@@ -673,6 +708,7 @@ class MulticlassInversionResultsGM(InversionResultsGM):
         super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
+        self.memory = True
         self.ec = ec
 
     @property
@@ -688,7 +724,6 @@ class MulticlassInversionResultsGM(InversionResultsGM):
         return InversionResultsGM(
             self.predens[cn], _invres, blocksize=self.blocksize, variables=self.variables)
 
-
 class InversionResultsGMMmap(InversionResultsGM):
 
     def __init__(self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False):
@@ -698,6 +733,7 @@ class InversionResultsGMMmap(InversionResultsGM):
             self.gmpmmap = gmpmmap
             self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
+        self.memory = False
 
     @property
     def _dict(self):
@@ -732,6 +768,7 @@ class InversionResultsISMmap(InversionResultsIS):
             self.lwmmap = lwmmap
             self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
+        self.memory = False
 
     @property
     def _dict(self):
@@ -769,6 +806,7 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
             if Path(lwmmap.filename).exists():
                 self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
+        self.memory = False
 
     @property
     def _dict(self):
@@ -776,7 +814,6 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
             'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
             'blocksize': self.blocksize, 'ec': self.ec}
         return dictout
-
 
     def __getitem__(self, cn):
         ind = (self.ec == cn)
@@ -795,7 +832,6 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
             self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
         return ir
 
-
 class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
 
     def __init__(
@@ -808,6 +844,7 @@ class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
                 self.invres = np.memmap(
                     gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
+        self.memory = False
 
     @property
     def _dict(self):
@@ -817,4 +854,4 @@ class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
         return dictout
 
     def __getitem__(self, cn):
-        raise NotImplementedError() # not needed
+        raise NotImplementedError()  # not needed

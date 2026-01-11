@@ -75,7 +75,7 @@ def sagwon_forcing(fnforcing):
     df = read_daily_noaa_forcing(fnforcing, convert_temperature=False)
     d0, d1 = '2019-05-11', '2019-09-17'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean().loc[pd.date_range(start=d0, end=d1)])['T']
     dailytemp[dailytemp < 0] = 0
     datesstr = ('20190521', '20190602', '20190614', '20190626', '20190708', '20190720',
                 '20190801', '20190813', '20190825', '20190906')
