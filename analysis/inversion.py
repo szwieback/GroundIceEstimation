@@ -421,15 +421,14 @@ class InversionResults():
         save_object(self._dict, fnout)
 
     @classmethod
-    def from_file(cls, fn):
+    def from_file(cls, fn, ):
         dictin = cls._dict_from_file(fn)
         if 'class' not in dictin:
-            raise ValueError("Cannot identify class_name from file. "\
-                             "If this is an old file, use class-specific method to load.")
+            import warnings
+            warnings.warn("Cannot identify class_name from file. "\
+                          "If this is an old file, use class-specific method to load.")
+            class_name = cls.__name__
         class_name = dictin.pop('class')
-        # _subclasses = {'InversionResultsIS': InversionResultsIS, 'InversionResultsGM': InversionResultsGM,
-        #                'InversionResultsISMmap': InversionResultsISMmap,
-        #                'InversionResultsGMMmap': InversionResultsGMMmap}
         _subclasses = InversionResults._subclasses
         if class_name not in _subclasses:
             raise ValueError(f"Cannot load {class_name} object.")
