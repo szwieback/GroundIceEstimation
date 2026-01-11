@@ -9,7 +9,7 @@ from analysis.interferometry import (
     add_atmospheric_K, RationalQuadraticSepDiagCovMV, spatial_referencing, extract_reference,
     distance_to_ref, add_nugget, length_conversion, phase_to_length)
 from analysis.inversion import (
-    InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, thaw_depth,
+    InversionProcessorIS, InversionResults, InversionResultsIS, InversionResultsISMmap, thaw_depth,
     MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, InversionProcessorGM,
     InversionResultsGM, InversionResultsGMMmap, MulticlassInversionResultsGM,
     MulticlassInversionResultsGMMmap)
