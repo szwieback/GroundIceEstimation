@@ -437,19 +437,20 @@ class InversionResults():
         return _subclasses[class_name](**dictin)
 
     @abstractmethod
-    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         raise NotImplementedError()
 
     def export_expectation(
-            self, pathout, param='e', etype='mean', p=None, fn=None, hdf5=False, overwrite=True, **kwargs):
+            self, pathout, param='e', etype='mean', p=None, fn=None, hdf5=False, overwrite=True, 
+            n_jobs=-1, **kwargs):
         if fn is None: fn = f'{param}_{etype}.npy'
         fnout = pathout / fn
         if not fnout.exists() or overwrite:
             if self.memory:
-                res = self.expectation(param=param, etype=etype, p=p, **kwargs)
+                res = self.expectation(param=param, etype=etype, p=p, n_jobs=n_jobs, **kwargs)
                 np.save(fnout, res)
             else:
-                res = self.expectation(param=param, etype=etype, p=p, fnmmap=fnout, **kwargs)
+                res = self.expectation(param=param, etype=etype, p=p, fnmmap=fnout, n_jobs=n_jobs, **kwargs)
         else:
             res = np.load(fnout, memory=self.memory)
         if hdf5:
@@ -481,17 +482,17 @@ class InversionResults():
             import warnings
             warnings.warn(f"Data type {dataset_name} H5 output not implemented")
 
-    def _expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
+    def _expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         if etype == 'mean':
-            return self._mean(param=param, p=p, fnmmap=fnmmap, **kwargs)
+            return self._mean(param=param, p=p, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
         elif etype in ('var', 'variance'):
-            return self._variance(param=param, p=p, fnmmap=fnmmap, **kwargs)
+            return self._variance(param=param, p=p, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
         elif etype == 'quantile':
             q = kwargs.pop('quantiles')
-            return self._quantile(q, param=param, p=p, fnmmap=fnmmap, **kwargs)
+            return self._quantile(q, param=param, p=p, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
         elif param in ('frac_thawed'):
             ind_scene = kwargs.pop('ind_scene')
-            return self._frac_thawed(ind_scene=ind_scene, fnmmap=fnmmap, **kwargs)
+            return self._frac_thawed(ind_scene=ind_scene, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
         else:
             raise NotImplementedError(f"Expectation type {etype} not recognized.")
 
@@ -519,15 +520,15 @@ class InversionResults():
         return res
 
     @abstractmethod
-    def _moment(self, param='e', power=1, p=None, fnmmap=None, **kwargs):
+    def _moment(self, param='e', power=1, p=None, fnmmap=None, n_jobs=-1, **kwargs):
         raise NotImplementedError()
 
     @abstractmethod
-    def _variance(self, param='e', p=None, fnmmap=None, **kwargs):
+    def _variance(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         raise NotImplementedError()
 
-    def _mean(self, param='e', p=None, fnmmap=None, **kwargs):
-        return self._moment(param=param, power=1, p=p, fnmmap=fnmmap, **kwargs)
+    def _mean(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
+        return self._moment(param=param, power=1, p=p, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
 
     def _invres_indices(self, block_size=None):
         # where to split array
@@ -572,9 +573,10 @@ class InversionResultsIS(InversionResults):
     def lw(self):
         return self.invres
 
-    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         normalize = kwargs['normalize'] if 'normalize' in kwargs else True
-        res = self._expectation(param=param, etype=etype, p=p, normalize=normalize, fnmmap=fnmmap, **kwargs)
+        res = self._expectation(
+            param=param, etype=etype, p=p, normalize=normalize, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
         return res
 
     def __frac_thawed(self, ind_scene, _lw, normalize=True):
@@ -667,8 +669,8 @@ class InversionResultsGM(InversionResults):
         dictout.update({'invres': self.invres, 'variables': self.variables})
         return dictout
 
-    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
-        return self._expectation(param=param, etype=etype, p=p, fnmmap=fnmmap, **kwargs)
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
+        return self._expectation(param=param, etype=etype, p=p, fnmmap=fnmmap, n_jobs=n_jobs, **kwargs)
 
     def _check_p(self, p):
         if p is not None:
@@ -721,7 +723,7 @@ class MulticlassInversionResultsIS(InversionResultsIS):
         ir = InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize, memory=self.memory)
         return ir
 
-    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         res = None
         if p is not None: raise ValueError("p input not supported")
         for cn in self.predens.classnames:
@@ -730,7 +732,8 @@ class MulticlassInversionResultsIS(InversionResultsIS):
             _fnmmap = None
             if fnmmap is not None:
                 _fnmmap = fnmmap.parent / f'{fnmmap.stem}_{cn}{fnmmap.suffix}'
-            res_cn = ir._expectation(param=param, etype=etype, p=None, fnmmap=_fnmmap, **kwargs)
+            res_cn = ir._expectation(
+                param=param, etype=etype, p=None, fnmmap=_fnmmap, n_jobs=n_jobs, **kwargs)
             if res is None:
                 shape = self.invres.shape[:-1] + res_cn.shape[1:]
                 if fnmmap is None:

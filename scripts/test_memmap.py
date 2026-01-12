@@ -60,7 +60,7 @@ predens.predict(dailytemp)
 predens.predict_mean_period(indranges)
 
 IP = InversionProcessorIS
-# IP = InversionProcessorGM
+IP = InversionProcessorGM
 IR = InversionResults
 
 if IP.__name__ == 'InversionProcessorGM':
@@ -106,6 +106,3 @@ ir.export_expectation(
 res_mem = ir_mem.expectation(param=expec[0], etype=expec[1], **kwargs)
 res = np.load(pathout / f'{expec[0]}_{expec[1]}.npy', mmap_mode='r')
 print(np.allclose(res_mem, res))
-
-# then multiclass gm (same as is)
-# chase down n_jobs
