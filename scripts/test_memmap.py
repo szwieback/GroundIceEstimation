@@ -1,6 +1,7 @@
 from analysis import (
     StefanPredictor, InversionSimulatorIS, InversionSimulatorGM, PredictionEnsemble, load_object,
-    enforce_directory, InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, InversionResults)
+    enforce_directory, InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, InversionResults,
+    InversionProcessorGM)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from scripts.pathnames import paths
@@ -51,8 +52,17 @@ predens.predict(dailytemp)
 predens.predict_mean_period(indranges)
 
 IP = InversionProcessorIS
+# IP = InversionProcessorGM
 IR = InversionResults
-ip = IP(predens, batch_size=ncol)
+
+if IP.__name__ == 'InversionProcessorGM':
+    kwargs = {'K': 2,
+        'variables': (('e', {'indranges': indranges}),
+                      ('yf', {'ind_scene': [(ind_scenes[-1])]}),
+                      )}
+else:
+    kwargs = {}
+ip = IP(predens, batch_size=ncol, **kwargs)
 
 invsim = ism(predens=predens, predens_sim=predens_sim)
 invsim.register_observations(ind_scenes, C_obs)
@@ -61,15 +71,14 @@ ssim = invsim.simulated_observations().T
 ssim = np.broadcast_to(ssim[..., None,:], (ssim.shape[0],) + (nrow, ncol,))
 K = np.broadcast_to(C_obs[..., None, None], C_obs.shape + (nrow, ncol))
 
-# ir = ip.results(
-#         ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
-# ir.save(pathout / 'ir.p')
+ir = ip.results(
+        ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
+ir.save(pathout / 'ir.p')
 ir = IR.from_file(pathout / 'ir.p')
-# print(ir.memory, type(ir))
 ir.blocksize = 1024
 
 ir_mem = ip.results(
-        ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=True, overwrite=False)
+        ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
 # print(np.allclose(ir.lw, ir_mem.lw))
 # ip.delete_temporary(pathout)
 
@@ -77,11 +86,12 @@ expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ('e_mean_period', 'mean')
           ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
           ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)}),
           ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-expec = expecs[1]
+expec = expecs[3]
 kwargs = expec[2] if len(expec) == 3 else {}
 ir.register_dates(dailytemp.index)
 ir.export_expectation(
     pathout, param=expec[0], etype=expec[1], hdf5=True, overwrite=True, **kwargs)
+
 # e_var = ir.expectation(param='e', etype='var')
 # print(e_var.shape)
 # e_var_mem = ir_mem.expectation(param='e', etype='var')
@@ -90,7 +100,8 @@ ir.export_expectation(
 res_mem = ir_mem.expectation(param=expec[0], etype=expec[1], **kwargs)
 res = np.load(pathout / f'{expec[0]}_{expec[1]}.npy', mmap_mode='r')
 print(np.allclose(res_mem, res))
-# then GM, including IR loading functionality (through _dict)
+# then GM
 # then multiclass
 # finally: always load IR in scripts
 
+# check p is None not implemented error in GM

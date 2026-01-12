@@ -206,6 +206,7 @@ class InversionProcessorGM(InversionProcessor):
             warnings.warn("No variables defined in InversionProcessorGM")
 
     def predicted_variables(self, ec=None):
+        if len(self.variables) == 0: raise ValueError("No variables defined in InversionProcessorGM")
         unobserved_list = [self._predicted_variable(*v, ec=ec) for v in self.variables]
         unobserved = np.concatenate(unobserved_list, axis=-1)
         return unobserved
@@ -445,7 +446,6 @@ class InversionResults():
         if not fnout.exists() or overwrite:
             if self.memory:
                 res = self.expectation(param=param, etype=etype, p=p, **kwargs)
-                
                 np.save(fnout, res)
             else:
                 res = self.expectation(param=param, etype=etype, p=p, fnmmap=fnout, **kwargs)
@@ -493,6 +493,29 @@ class InversionResults():
             return self._frac_thawed(ind_scene=ind_scene, fnmmap=fnmmap, **kwargs)
         else:
             raise NotImplementedError(f"Expectation type {etype} not recognized.")
+
+    def _parallel(self, fun, n_jobs=-1, block_size=None, fnmmap=None):
+        if n_jobs in (0, 1, None) and fnmmap is None:
+            return fun(self.invres)
+        else:
+            from joblib import Parallel, delayed
+            if fnmmap is None:
+                res = np.concatenate(
+                    Parallel(n_jobs=n_jobs)(
+                        delayed(fun)(_ir) for _ir in self._invres_generator(block_size)),
+                    axis=0)
+            else:
+                res_generator = Parallel(n_jobs=n_jobs, return_as='generator')(
+                    delayed(fun)(_ir) for _ir in self._invres_generator(block_size))
+                res0 = next(res_generator)
+                shape = (self.invres.shape[0],) + res0.shape[1:]
+                res = np.lib.format.open_memmap(fnmmap, mode='w+', dtype=res0.dtype, shape=shape)
+                ind_row = res0.shape[0]
+                res[:ind_row] = res0
+                for r in res_generator:
+                    res[ind_row:ind_row + r.shape[0]] = r
+                    ind_row += r.shape[0]
+        return res
 
     @abstractmethod
     def _moment(self, param='e', power=1, p=None, fnmmap=None, **kwargs):
@@ -553,29 +576,6 @@ class InversionResultsIS(InversionResults):
         normalize = kwargs['normalize'] if 'normalize' in kwargs else True
         res = self._expectation(param=param, etype=etype, p=p, normalize=normalize, fnmmap=fnmmap, **kwargs)
         return res
-    
-    def _parallel(self, fun, n_jobs=-1, block_size=None, fnmmap=None):
-        if n_jobs in (0, 1, None) and fnmmap is None:
-            return fun(self.invres)
-        else:
-            from joblib import Parallel, delayed
-            if fnmmap is None:
-                res = np.concatenate(
-                    Parallel(n_jobs=n_jobs)(
-                        delayed(fun)(_lw) for _lw in self._invres_generator(block_size)),
-                    axis=0)
-            else:
-                res_generator = Parallel(n_jobs=n_jobs, return_as='generator')(
-                    delayed(fun)(_lw) for _lw in self._invres_generator(block_size))
-                res0 = next(res_generator)
-                shape = (self.invres.shape[0],) + res0.shape[1:]
-                res = np.lib.format.open_memmap(fnmmap, mode='w+', dtype=res0.dtype, shape=shape)
-                ind_row = res0.shape[0]
-                res[:ind_row] = res0
-                for r in res_generator:
-                    res[ind_row:ind_row + r.shape[0]] = r
-                    ind_row += r.shape[0]
-        return res
 
     def __frac_thawed(self, ind_scene, _lw, normalize=True):
         from inference import _normalize
@@ -628,10 +628,11 @@ class InversionResultsIS(InversionResults):
 
 class InversionResultsGM(InversionResults):
     intdims = 2  # internal dimensions
+    blocksize_default = 16384 # large, because scikit implementation is efficient
 
-    def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None):
+    def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None, memory=True):
         super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
-        self.memory = True
+        self.memory = memory
         self.variables = variables
 
     def _indices_variables(self, param='e'):
@@ -655,44 +656,51 @@ class InversionResultsGM(InversionResults):
         st = np.sum(n_variables[:ind_v])
         return np.arange(st, st + n_variables[ind_v], dtype=np.int64)
 
-    @property
-    def gmp(self):
+    def init_gmp(self, invres=None):
         from inference import GaussianMixtureDistribution
-        return GaussianMixtureDistribution.from_array(np.moveaxis(self.invres, -2, 0))
-        
+        if invres is None:
+            invres = self.invres
+        return GaussianMixtureDistribution.from_array(np.moveaxis(invres, -2, 0))
+                
     @property
     def _dict(self):
         dictout = InversionResults._dict.fget(self)
         dictout.update({'invres': self.invres, 'variables': self.variables})        
         return dictout
 
-    def expectation(self, param='e', etype='mean', p=None, **kwargs):
-        return self._expectation(param=param, etype=etype, p=p, **kwargs)
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
+        return self._expectation(param=param, etype=etype, p=p, fnmmap=fnmmap, **kwargs)
 
-    def _parallel(self, fun, n_jobs=-1, block_size=None):
-        if n_jobs in (0, 1, None):
-            return fun(self.lw)
-        else:
-            from joblib import Parallel, delayed
-            res = np.concatenate(
-                Parallel(n_jobs=n_jobs)(delayed(fun)(_lw) for _lw in self._invres_generator(block_size)),
-                axis=0)
-            return res
+    def _check_p(self, p):
+        if p is not None:
+            import warnings
+            warnings.warn("Argument p provided to Gaussian Mixture inference will be ignored.")
 
-    def _mean(self, param='e', p=None, **kwargs):
-        if p is not None: raise NotImplementedError()
+    def _mean(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
+        self._check_p(p)
         indices = self._indices_variables(param=param)
-        return self.gmp.mean(indices)
+        # return self.init_gmp().mean(indices)  # for testing; skip parallel processing        
+        def __mean(invres):
+            return self.init_gmp(invres).mean(indices)
+        m = self._parallel(__mean, fnmmap=fnmmap, n_jobs=n_jobs)            
+        return m
 
-    def _variance(self, param='e', p=None, **kwargs):
-        if p is not None: raise NotImplementedError()
+    def _variance(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
+        self._check_p(p)        
         indices = self._indices_variables(param=param)
-        return self.gmp.variance(indices)
-
-    def _quantile(self, quantiles, param='e', p=None, **kwargs):
-        if p is not None: raise NotImplementedError()
+        def __variance(invres):
+            return self.init_gmp(invres).variance(indices)
+        m = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)            
+        return m
+    
+    def _quantile(self, quantiles, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
+        self._check_p(p)        
         indices = self._indices_variables(param=param)
-        return self.gmp.quantile(quantiles, indices, **kwargs)
+        def __quantile(invres):
+            return self.init_gmp(invres).quantile(quantiles, indices, **kwargs)
+        m = self._parallel(__quantile, fnmmap=fnmmap, n_jobs=n_jobs)            
+        return m        
+        # return self.init_gmp().quantile(quantiles, indices, **kwargs) # for testing; skip parallel proc.
 
 class MulticlassInversionResultsIS(InversionResultsIS):
 
@@ -761,8 +769,8 @@ class InversionResultsGMMmap(InversionResultsGM):
             self.gmpmmap = gmpmmap
             self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
-        self.memory = memory
-
+        self.memory = memory        
+        
     @property
     def _dict(self):
         dictout = InversionResults._dict.fget(self)
