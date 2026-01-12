@@ -172,7 +172,7 @@ class InversionProcessorIS(InversionProcessor):
     def results(
             self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
             overwrite=False, **kwargs):
-        # memory determines whether a memmap is created; the default is used for the InversionResults object 
+        # memory determines whether a memmap is created; the default is used for the InversionResults object
         if 'normalize' not in kwargs: kwargs['normalize'] = False
         _lw = self.inference(
             ind_scenes, s_obs, C_obs, ec=ec, n_jobs=n_jobs, pathout=pathout,
@@ -369,16 +369,16 @@ class InversionResults():
     # abstract class
     blocksize_default = 1024
     intdims = 1  # internal dimensions
-    _subclasses = {} # keep registry of subclasses
-    
-    def __init__(self, predens, invres, geospatial=None, blocksize=None):
+    _subclasses = {}  # keep registry of subclasses
+
+    def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=None):
         self.predens = predens
         self.invres = invres
         self.geospatial = geospatial
         self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
-        self.memory = None # governs whether the metric computations are done in memory
+        self.memory = memory  # Boolean: governs whether the metric computations are done in memory
 
-    @classmethod # decorator not needed but keeps IDE happy
+    @classmethod  # decorator not needed but keeps IDE happy
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         InversionResults._subclasses[cls.__name__] = cls
@@ -422,14 +422,15 @@ class InversionResults():
         save_object(self._dict, fnout)
 
     @classmethod
-    def from_file(cls, fn, ):
+    def from_file(cls, fn,):
         dictin = cls._dict_from_file(fn)
         if 'class' not in dictin:
             import warnings
             warnings.warn("Cannot identify class_name from file. "\
                           "If this is an old file, use class-specific method to load.")
             class_name = cls.__name__
-        class_name = dictin.pop('class')
+        else:
+            class_name = dictin.pop('class')
         _subclasses = InversionResults._subclasses
         if class_name not in _subclasses:
             raise ValueError(f"Cannot load {class_name} object.")
@@ -533,7 +534,7 @@ class InversionResults():
         if block_size is None:
             block_size = self.blocksize
         iss = self.invres.shape
-        step = block_size if len(iss) == self.intdims + 1 else block_size // np.prod(iss[1:-self.intdims])         
+        step = block_size if len(iss) == self.intdims + 1 else block_size // np.prod(iss[1:-self.intdims])
         ind = np.arange(self.invres.shape[0], step=max((1, step)))[1:]
         return ind
 
@@ -559,15 +560,14 @@ class InversionResults():
 
 class InversionResultsIS(InversionResults):
     def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=True):
-        super().__init__(predens, invres, geospatial, blocksize)
-        self.memory = memory
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
 
     @property
     def _dict(self):
         dictout = InversionResults._dict.fget(self)
         dictout['invres'] = self.invres
         return dictout
-    
+
     @property
     def lw(self):
         return self.invres
@@ -610,7 +610,7 @@ class InversionResultsIS(InversionResults):
             _mp = expectation(np.power(p, 2), _lw, normalize=normalize, **kwargs)
             _mm = expectation(np.power(p, 1), _lw, normalize=normalize, **kwargs) ** 2
             return _mp - _mm
-        var = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)            
+        var = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)
         return var
 
     def _quantile(
@@ -628,11 +628,10 @@ class InversionResultsIS(InversionResults):
 
 class InversionResultsGM(InversionResults):
     intdims = 2  # internal dimensions
-    blocksize_default = 16384 # large, because scikit implementation is efficient
+    blocksize_default = 16384  # large, because scikit implementation is efficient
 
     def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None, memory=True):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
-        self.memory = memory
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
         self.variables = variables
 
     def _indices_variables(self, param='e'):
@@ -661,11 +660,11 @@ class InversionResultsGM(InversionResults):
         if invres is None:
             invres = self.invres
         return GaussianMixtureDistribution.from_array(np.moveaxis(invres, -2, 0))
-                
+
     @property
     def _dict(self):
         dictout = InversionResults._dict.fget(self)
-        dictout.update({'invres': self.invres, 'variables': self.variables})        
+        dictout.update({'invres': self.invres, 'variables': self.variables})
         return dictout
 
     def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
@@ -679,77 +678,87 @@ class InversionResultsGM(InversionResults):
     def _mean(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         self._check_p(p)
         indices = self._indices_variables(param=param)
-        # return self.init_gmp().mean(indices)  # for testing; skip parallel processing        
+        # return self.init_gmp().mean(indices)  # for testing; skip parallel processing
         def __mean(invres):
             return self.init_gmp(invres).mean(indices)
-        m = self._parallel(__mean, fnmmap=fnmmap, n_jobs=n_jobs)            
+        m = self._parallel(__mean, fnmmap=fnmmap, n_jobs=n_jobs)
         return m
 
     def _variance(self, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
-        self._check_p(p)        
+        self._check_p(p)
         indices = self._indices_variables(param=param)
         def __variance(invres):
             return self.init_gmp(invres).variance(indices)
-        m = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)            
+        m = self._parallel(__variance, fnmmap=fnmmap, n_jobs=n_jobs)
         return m
-    
+
     def _quantile(self, quantiles, param='e', p=None, fnmmap=None, n_jobs=-1, **kwargs):
-        self._check_p(p)        
+        self._check_p(p)
         indices = self._indices_variables(param=param)
         def __quantile(invres):
             return self.init_gmp(invres).quantile(quantiles, indices, **kwargs)
-        m = self._parallel(__quantile, fnmmap=fnmmap, n_jobs=n_jobs)            
-        return m        
+        m = self._parallel(__quantile, fnmmap=fnmmap, n_jobs=n_jobs)
+        return m
         # return self.init_gmp().quantile(quantiles, indices, **kwargs) # for testing; skip parallel proc.
 
 class MulticlassInversionResultsIS(InversionResultsIS):
 
-    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize)
+    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, memory=True):
+        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
-        self.memory = True
         self.ec = ec
 
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
-            'blocksize': self.blocksize, 'ec': self.ec}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'invres': self.invres, 'ec': self.ec})
         return dictout
 
     def __getitem__(self, cn):
         ind = (self.ec == cn)
         _invres = self.invres[ind, ...]
-        return InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize)
+        ir = InversionResultsIS(self.predens[cn], _invres, blocksize=self.blocksize, memory=self.memory)
+        return ir
 
-    def expectation(self, param='e', etype='mean', p=None, **kwargs):
+    def expectation(self, param='e', etype='mean', p=None, fnmmap=None, **kwargs):
         res = None
-        if p is not None: raise ValueError('p input not supported')
+        if p is not None: raise ValueError("p input not supported")
         for cn in self.predens.classnames:
             ir, ind = self[cn], (self.ec.flatten() == cn)
-            res_cn = ir._expectation(param=param, etype=etype, p=None, **kwargs)
+            unraveled_ind = np.unravel_index(np.where(ind)[0], self.invres.shape[:-1])            
+            _fnmmap = None
+            if fnmmap is not None:
+                _fnmmap = fnmmap.parent / f'{fnmmap.stem}_{cn}{fnmmap.suffix}'
+            res_cn = ir._expectation(param=param, etype=etype, p=None, fnmmap=_fnmmap, **kwargs)
             if res is None:
-                res = np.full(
-                    (np.prod(self.invres.shape[:-1]),) + res_cn.shape[1:], np.nan, dtype=res_cn.dtype)
-            res[ind, ...] = res_cn
-        res = np.reshape(res, self.invres.shape[:-1] + res.shape[1:])
+                shape = self.invres.shape[:-1] + res_cn.shape[1:]
+                if fnmmap is None:
+                    res = np.zeros(shape, dtype=res_cn.dtype)
+                else:
+                    res = np.lib.format.open_memmap(
+                        fnmmap, mode='w+', dtype=res_cn.dtype, shape=shape)
+            for _ind in range(0, len(unraveled_ind[0]), self.blocksize):
+                chunk_indices = tuple(idx[_ind:_ind + self.blocksize] for idx in unraveled_ind)
+                res[chunk_indices] = res_cn[_ind:_ind + self.blocksize]
+            if _fnmmap is not None:
+                del res_cn
+                _fnmmap.unlink()
         return res
 
 class MulticlassInversionResultsGM(InversionResultsGM):
 
-    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, variables=None):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables)
+    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, variables=None, memory=True):
+        super().__init__(
+            predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables, memory=memory)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
-        self.memory = True
         self.ec = ec
 
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'invres': self.invres, 'predens': self.predens,
-            'blocksize': self.blocksize, 'ec': self.ec, 'variables': self.variables}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'invres': self.invres, 'ec': self.ec, 'variables': self.variables})
         return dictout
 
     def __getitem__(self, cn):
@@ -761,20 +770,20 @@ class MulticlassInversionResultsGM(InversionResultsGM):
 class InversionResultsGMMmap(InversionResultsGM):
 
     def __init__(
-            self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False, 
+            self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False,
             memory=False):
         InversionResultsGM.__init__(
-            self, predens, None, geospatial=geospatial, blocksize=blocksize, variables=variables)
+            self, predens, None, geospatial=geospatial, blocksize=blocksize, variables=variables,
+            memory=memory)
         if gmpmmap is not None:
             self.gmpmmap = gmpmmap
             self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
-        self.memory = memory        
-        
+
     @property
     def _dict(self):
         dictout = InversionResults._dict.fget(self)
-        dictout.update({'gmpmmap': self.gmpmmap, 'variables': self.variables})        
+        dictout.update({'gmpmmap': self.gmpmmap, 'variables': self.variables})
         return dictout
 
     def __del__(self):
@@ -786,12 +795,12 @@ class InversionResultsGMMmap(InversionResultsGM):
 
 class InversionResultsISMmap(InversionResultsIS):
     def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False, memory=False):
-        InversionResultsIS.__init__(self, predens, None, geospatial=geospatial, blocksize=blocksize)
+        InversionResultsIS.__init__(
+            self, predens, None, geospatial=geospatial, blocksize=blocksize, memory=memory)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
-        self.memory = memory
 
     @property
     def _dict(self):
@@ -806,24 +815,21 @@ class InversionResultsISMmap(InversionResultsIS):
         except:
             pass
 
-
 class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
 
-    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False):
+    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False, memory=False):
         MulticlassInversionResultsIS.__init__(
-            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize)
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, memory=memory)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             if Path(lwmmap.filename).exists():
                 self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
         self.temporary = temporary
-        self.memory = False
 
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'lwmmap': self.lwmmap, 'predens': self.predens,
-            'blocksize': self.blocksize, 'ec': self.ec}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'lwmmap': self.lwmmap, 'ec': self.ec})
         return dictout
 
     def __getitem__(self, cn):
@@ -840,28 +846,28 @@ class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
         fp.flush()
         del fp
         ir = InversionResultsISMmap(
-            self.predens[cn], mmap, blocksize=self.blocksize, temporary=True)
+            self.predens[cn], mmap, blocksize=self.blocksize, temporary=True, memory=self.memory)
         return ir
 
 class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
 
     def __init__(
-            self, predens, gmpmmap, ec, geospatial=None, blocksize=None, temporary=False, variables=None):
+            self, predens, gmpmmap, ec, geospatial=None, blocksize=None, temporary=False, variables=None,
+            memory=False):
         MulticlassInversionResultsGM.__init__(
-            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, variables=variables)
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, variables=variables,
+            memory=memory)
         if gmpmmap is not None:
             self.gmpmmap = gmpmmap
             if Path(gmpmmap.filename).exists():
                 self.invres = np.memmap(
                     gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
         self.temporary = temporary
-        self.memory = False
 
     @property
     def _dict(self):
-        dictout = {
-            'geospatial': self.geospatial, 'gmpmmap': self.gmpmmap, 'predens': self.predens,
-            'blocksize': self.blocksize, 'ec': self.ec, 'variables': self.variables}
+        dictout = InversionResults._dict.fget(self)
+        dictout.update({'gmpmmap': self.gmpmmap, 'ec': self.ec, 'variables': self.variables})
         return dictout
 
     def __getitem__(self, cn):

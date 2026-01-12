@@ -1,7 +1,7 @@
 from analysis import (
     StefanPredictor, InversionSimulatorIS, InversionSimulatorGM, PredictionEnsemble, load_object,
     enforce_directory, InversionProcessorIS, InversionResultsIS, InversionResultsISMmap, InversionResults,
-    InversionProcessorGM)
+    InversionProcessorGM, MulticlassPredictionEnsemble)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from scripts.pathnames import paths
@@ -35,7 +35,6 @@ var_atmo = (4e-3) ** 2
 wavelength = 0.055
 ism = {'gm': InversionSimulatorGM, 'is': InversionSimulatorIS}[inversion]
 
-
 dailytemp, ind_scenes = sagwon_forcing(fnforcing)
 indranges = [(ind_scenes[-4], ind_scenes[-1])]
 variables = (('e', {'indranges': indranges}),)
@@ -45,9 +44,18 @@ predictor = StefanPredictor()
 strat = StratigraphyMultiple(
     StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
 strat_sim = StefanStratigraphySmoothingSpline(N=ncol, seed=114)
+
+ec = np.ones((nrow, ncol))
+ec[2:4, 5:9] = 0
+# ec = None
+if ec is not None:
+    strats = {sc: strat for sc in [0, 1]}
+    predens = MulticlassPredictionEnsemble(strats, predictor, geom=geom)
+else:
+    predens = PredictionEnsemble(strat, predictor, geom=geom)
+
 predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
 predens_sim.predict(dailytemp)
-predens = PredictionEnsemble(strat, predictor, geom=geom)
 predens.predict(dailytemp)
 predens.predict_mean_period(indranges)
 
@@ -62,7 +70,6 @@ if IP.__name__ == 'InversionProcessorGM':
                       )}
 else:
     kwargs = {}
-ip = IP(predens, batch_size=ncol, **kwargs)
 
 invsim = ism(predens=predens, predens_sim=predens_sim)
 invsim.register_observations(ind_scenes, C_obs)
@@ -71,17 +78,17 @@ ssim = invsim.simulated_observations().T
 ssim = np.broadcast_to(ssim[..., None,:], (ssim.shape[0],) + (nrow, ncol,))
 K = np.broadcast_to(C_obs[..., None, None], C_obs.shape + (nrow, ncol))
 
+ip = IP(predens, batch_size=ncol, **kwargs)
 ir = ip.results(
-        ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
+        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=False, overwrite=True)
 ir.save(pathout / 'ir.p')
 ir = IR.from_file(pathout / 'ir.p')
 ir.blocksize = 1024
 
 ir_mem = ip.results(
-        ind_scenes, ssim, K, pathout=pathout, n_jobs=-1, memory=False, overwrite=True)
+        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=True, overwrite=True)
 # print(np.allclose(ir.lw, ir_mem.lw))
 # ip.delete_temporary(pathout)
-
 expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ('e_mean_period', 'mean'),
           ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
           ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)}),
@@ -91,7 +98,6 @@ kwargs = expec[2] if len(expec) == 3 else {}
 ir.register_dates(dailytemp.index)
 ir.export_expectation(
     pathout, param=expec[0], etype=expec[1], hdf5=True, overwrite=True, **kwargs)
-
 # e_var = ir.expectation(param='e', etype='var')
 # print(e_var.shape)
 # e_var_mem = ir_mem.expectation(param='e', etype='var')
@@ -100,8 +106,6 @@ ir.export_expectation(
 res_mem = ir_mem.expectation(param=expec[0], etype=expec[1], **kwargs)
 res = np.load(pathout / f'{expec[0]}_{expec[1]}.npy', mmap_mode='r')
 print(np.allclose(res_mem, res))
-# then GM
-# then multiclass
-# finally: always load IR in scripts
 
-# check p is None not implemented error in GM
+# then multiclass gm (same as is)
+# chase down n_jobs
