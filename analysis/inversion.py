@@ -320,9 +320,9 @@ class InversionProcessorGM(InversionProcessor):
                         _s_obs_batch_cn = _s_obs_batch[ind, ...]
                         _C_obs_batch_cn = _C_obs_batch[ind, ...]
                         gmp_arr_cn = self._posterior_single(gmm[cn], _s_obs_batch_cn, _C_obs_batch_cn)
-                    if gmp_arr is None:
-                        gmp_arr = np.zeros((n1 - n0,) + gmp_arr_cn.shape[1:], dtype=gmp_arr_cn.dtype)
-                    gmp_arr[ind, ...] = gmp_arr_cn
+                        if gmp_arr is None:
+                            gmp_arr = np.zeros((n1 - n0,) + gmp_arr_cn.shape[1:], dtype=gmp_arr_cn.dtype)
+                        gmp_arr[ind, ...] = gmp_arr_cn
             else:
                 gmp_arr = self._posterior_single(gmm, _s_obs_batch, _C_obs_batch)  # array
             if _fn is not None:
