@@ -762,10 +762,7 @@ class MulticlassInversionResultsGM(InversionResultsGM):
         return dictout
 
     def __getitem__(self, cn):
-        ind = (self.ec == cn)
-        _invres = self.invres[ind, ...]
-        return InversionResultsGM(
-            self.predens[cn], _invres, blocksize=self.blocksize, variables=self.variables)
+        raise NotImplementedError() # not needed
 
 class InversionResultsGMMmap(InversionResultsGM):
 
