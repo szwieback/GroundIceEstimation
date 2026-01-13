@@ -741,6 +741,7 @@ class MulticlassInversionResultsIS(InversionResultsIS):
                 else:
                     res = np.lib.format.open_memmap(
                         fnmmap, mode='w+', dtype=res_cn.dtype, shape=shape)
+                res[:] = np.nan
             for _ind in range(0, len(unraveled_ind[0]), self.blocksize):
                 chunk_indices = tuple(idx[_ind:_ind + self.blocksize] for idx in unraveled_ind)
                 res[chunk_indices] = res_cn[_ind:_ind + self.blocksize]

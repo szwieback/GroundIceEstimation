@@ -325,12 +325,11 @@ def assemble_hdf5_attrs(
         crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
     if not isinstance(transform, Affine) and transform is not None:
         raise ValueError('transform must be a rasterio.transform.Affine')
-
     attrs = {
         'WIDTH': int(width) if width is not None else None,
         'LENGTH': int(length) if length is not None else None,
         'DATA_TYPE': dtype,
-        'NODATA': float(nodata) if np.isfinite(nodata) else np.nan,
+        'NODATA': nodata,
     }
     
     if transform is not None:
@@ -524,7 +523,7 @@ def hdf5_attributes(nodata=np.nan, dtype='float32', geospatial=None):
 def export_defo_history_hdf5(
         s_obs, pout, geospatial, geom, dates_obs_str=None, K=None, flip_sign=True,
         fn_defo='defo_history.h5', fn_K_diag='defo_history_covariance_diagonal.h5'):
-    attributes = hdf5_attributes(geospatial)
+    attributes = hdf5_attributes(geospatial=geospatial)
     attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi  # degrees
     if flip_sign:
         s_obs = s_obs * (-1)  # so subsidence is negative
