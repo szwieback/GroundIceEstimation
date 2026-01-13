@@ -39,7 +39,7 @@ def pokerflats_forcing(fnforcing, year=2022):
     d0 = {2024: '2024-05-14'}[year]
     d1 = {2024: '2024-09-28'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesdisp = [datetime.datetime.strptime(d, '%Y%m%d') for d in datesstr[year]]
     ind_scenes = [int((d - d0_).days) for d in datesdisp]

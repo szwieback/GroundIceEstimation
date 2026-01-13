@@ -36,7 +36,7 @@ def kivalina_dates(year=2019):
 def kivalina_forcing(folder_forcing, year=2019):
     df = load_forcing_merra_subset(folder_forcing)
     dd, datesdisp, ind_scenes = kivalina_dates(year)
-    dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=dd[0], end=dd[1])]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=dd[0], end=dd[1])]
     dailytemp[dailytemp < 0] = 0
     return dailytemp, ind_scenes
 

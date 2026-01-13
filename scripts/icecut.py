@@ -27,7 +27,7 @@ def icecut_forcing(fnforcing, year=2022):
     d0 = {2024: '2024-06-09', 2023: '2023-05-25', 2022: '2022-05-24', 2021: '2021-05-25', 2019: '2019-05-11'}[year]
     d1 = {2024: '2024-09-16', 2023: '2023-09-22', 2022: '2022-09-16', 2021: '2021-09-14', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesstr = {
         2024: ('20240611', '20240623', '20240705', '20240717', '20240729', '20240810', '20240822',

@@ -27,7 +27,7 @@ def happyvalley_forcing(fnforcing, year=2022):
     d0 = {2023: '2023-05-31', 2022: '2022-06-06', 2019: '2019-05-18'}[year]
     d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesstr = {2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
                        '20230816', '20230828', '20230909'),

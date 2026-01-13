@@ -40,8 +40,7 @@ def utqiagvik_forcing(fnforcing, year=2023, remove_last=True):
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
     ind_scenes = [int((d - d0_).days) for d in datesdisp]
     if remove_last: ind_scenes = ind_scenes[:-1]
-    # dailytemp = (df.resample('D').mean())['T'][pd.date_range(start=d0, end=d1)]
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     return dailytemp, ind_scenes
 

@@ -21,7 +21,7 @@ def toolik_sensitivity(fnout):
     df = read_toolik_forcing(fnforcing)
     d0, d1 = '2019-05-20', '2019-09-15'
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())['air_temp_5m'][pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['air_temp_5m'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     geom = {'ia': 0.0}
     e_sim = [0.05],  # [0.01, 0.1]

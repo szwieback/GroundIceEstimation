@@ -39,6 +39,8 @@ dailytemp, ind_scenes = sagwon_forcing(fnforcing)
 indranges = [(ind_scenes[-4], ind_scenes[-1])]
 variables = (('e', {'indranges': indranges}),)
 
+print(type(dailytemp), dailytemp)
+
 C_obs = sagwon_covariance(fnK, var_atmo, wavelength=wavelength)
 predictor = StefanPredictor()
 strat = StratigraphyMultiple(
