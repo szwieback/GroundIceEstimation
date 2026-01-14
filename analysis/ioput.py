@@ -11,7 +11,7 @@ import zlib
 import rasterio
 from rasterio.crs import CRS
 from rasterio.transform import Affine
-from collections.abc import Iterable   
+from collections.abc import Iterable
 
 class Geospatial():
     def __init__(self, transform, crs, shape=None):
@@ -144,7 +144,7 @@ class Geospatial():
         shape = (r[1] - r[0], c[1] - c[0])
         geospatial_out = Geospatial(transform=transform, crs=self.crs, shape=shape)
         return geospatial_out
-        
+
     def crop(self, arr, ll=None, ur=None):
         if ll is None and ur is None:
             return arr, self
@@ -220,11 +220,6 @@ class Geospatial():
     def save_geotiff(self, arr, fnout, nodata=None):
         save_geotiff(arr, self, fnout, nodata=nodata)
 
-    def _hdf5_attributes(self, nodata=np.nan, dtype='float32'):
-        return assemble_hdf5_attrs(
-            self.crs, self.transform, self.shape[1], 
-            self.shape[0], nodata=nodata, dtype=dtype)        
-
 def read_geotiff(fntif):
     src = rasterio.open(fntif)
     arr = src.read()
@@ -284,6 +279,7 @@ def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, fnu
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, 
         unw_hr=unw_hr, K_hr=K_hr, geospatial_hr=geospatial_hr, overwrite=overwrite)
+
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     K = np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))
     assert geospatial_K == geospatial_unw
@@ -312,7 +308,6 @@ def read_referenced_motion(
     m = phase_to_length(unw, wavelength=wavelength, flip_sign=flip_sign)
     return m, geospatial
 
-
 def read_motion(
         fnunw, xy=None, wavelength=0.055, flip_sign=True, fns_unw_offset=()):
     unw = read_geotiff(fnunw)
@@ -339,6 +334,7 @@ def read_motion(
         unw -= unw_ref[:, np.newaxis, np.newaxis]
     m = unw_to_motion(unw, wavelength=wavelength, flip_sign=flip_sign)
     return m, geospatial
+
 def K_from_K_vec(K_vec):
     return np.moveaxis(assemble_tril(np.moveaxis(K_vec, 0, -1)), (0, 1), (-2, -1))
 
@@ -359,29 +355,37 @@ def save_object(obj, filename):
         with open(pfn, 'wb') as f:
             f.write(zlib.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)))
 
-def load_object(filename):
+def load_object(filename, memory=False):
     pfn = Path(filename)
     if pfn.suffix == '.npy':
-        return np.load(filename)
-    with open(filename, 'rb') as f:
-        obj = pickle.loads(zlib.decompress(f.read()))
+        if memory:  # reads it into memory
+            obj = np.load(filename)
+        else:
+            obj = np.load(filename, mmap_mode='r')  # read-only memory map
+    else:
+        with open(filename, 'rb') as f:
+            obj = pickle.loads(zlib.decompress(f.read()))
     return obj
 
-
-def assemble_hdf5_attrs(crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
-    if not isinstance(transform, Affine):
+def assemble_hdf5_attrs(
+        crs, transform, width, length, band_description=None, nodata=np.nan, dtype='float32'):
+    if not isinstance(transform, Affine) and transform is not None:
         raise ValueError('transform must be a rasterio.transform.Affine')
-
     attrs = {
-        'WIDTH': int(width),
-        'LENGTH': int(length),
-        'X_FIRST': float(transform.c),
-        'Y_FIRST': float(transform.f),
-        'X_STEP': float(transform.a),
-        'Y_STEP': float(transform.e),
+        'WIDTH': int(width) if width is not None else None,
+        'LENGTH': int(length) if length is not None else None,
         'DATA_TYPE': dtype,
-        'NODATA': float(nodata) if np.isfinite(nodata) else np.nan,
+        'NODATA': nodata,
     }
+    
+    if transform is not None:
+        attrs_transform = {
+            'X_FIRST': float(transform.c),
+            'Y_FIRST': float(transform.f),
+            'X_STEP': float(transform.a),
+            'Y_STEP': float(transform.e)
+        }
+        attrs.update(attrs_transform)
 
     if isinstance(crs, CRS) and crs:
         epsg = crs.to_epsg()
@@ -398,7 +402,6 @@ def assemble_hdf5_attrs(crs, transform, width, length, band_description=None, no
         attrs['BAND_DESCRIPTIONS'] = band_description
     return attrs
 
-
 def hdf5_attrs_from_tif(fin_tif):
     with rasterio.open(fin_tif) as src:
         h, w = src.height, src.width
@@ -410,45 +413,38 @@ def hdf5_attrs_from_tif(fin_tif):
         return assemble_hdf5_attrs(
             crs, transform, w, h, band_description=band_desc, nodata=nodata, dtype=dtype)
 
-
-def save_hdf5(data, attrs, data_name, fnout, layer_name=None, layer_info=None):
-    arr = np.asarray(data, dtype=np.dtype(attrs.get('DATA_TYPE', 'float32')))
+def save_hdf5(data, attrs, data_name, fnout, layer_dict=None, blocksize=512):
     import h5py
+    dtype = np.dtype(attrs.get('DATA_TYPE', 'float32'))
+    
     with h5py.File(fnout, 'w') as f:
-        if arr.ndim == 2:
-            h, w = arr.shape
-            f.create_dataset(
-                data_name,
-                data=arr,
-                dtype=arr.dtype,
-                chunks=(min(512, h), min(512, w)),
-                compression='lzf'
-            )
-        elif arr.ndim == 3:
-            b, h, w = arr.shape
-            f.create_dataset(
-                data_name,
-                data=arr,
-                dtype=arr.dtype,
-                chunks=(1, min(512, h), min(512, w)),
-                compression='lzf'
-            )        
-        else:
-            raise ValueError('data must be 2D (H,W) or 3D (B,H,W)')
+        chunks = _get_chunks(data, blocksize=blocksize)
+        ds = f.create_dataset(data_name, shape=data.shape, dtype=dtype, 
+                              chunks=chunks, compression='lzf')
+        _write_data(ds, data, dtype, chunks)
+        _write_attrs(f, attrs)
+        
+        if layer_dict is not None:
+            for layer_name, layer_info in layer_dict.items():
+                layer_ds = f.create_dataset(layer_name, (len(layer_info),), 
+                                            dtype=h5py.string_dtype())
+                layer_ds[:] = np.array(layer_info, dtype=object)
 
-        for k, v in attrs.items():
-            if k != 'BAND_DESCRIPTIONS':
-                f.attrs[k] = v
-        if layer_info is not None:
-            dt = h5py.string_dtype()
-            ds = f.create_dataset(layer_name, (len(layer_info),), dtype=dt)
-            ds[:] = np.array(layer_info, dtype=object)
-        # if 'BAND_DESCRIPTIONS' in attrs:
-        #     labels = list(attrs['BAND_DESCRIPTIONS'])
-        #     # dt = h5py.string_dtype(encoding='utf-8')
-        #     dt = h5py.string_dtype()
-        #     ds = f.create_dataset('dates', (len(labels),), dtype=dt)
-        #     ds[:] = np.array(labels, dtype=object)
+def _get_chunks(data, blocksize=512):
+    return (min(blocksize, data.shape[0]),) + data.shape[1:]
+
+def _write_data(ds, data, dtype, chunks):
+    if isinstance(data, np.memmap) and data.dtype != dtype:
+        chunk_size = chunks[0]
+        for i in range(0, data.shape[0], chunk_size):
+            ds[i:i + chunk_size] = data[i:i + chunk_size].astype(dtype)
+    else:
+        ds[:] = data
+
+def _write_attrs(f, attrs):
+    for k, v in attrs.items():
+        if k != 'BAND_DESCRIPTIONS' and v is not None:
+            f.attrs[k] = v
 
 def geotiff_to_hdf5(fin_tif, fnout_h5, data_name='data'):
     attrs = hdf5_attrs_from_tif(fin_tif)
@@ -533,30 +529,40 @@ def hdf5_to_geotiff(fin_h5, fout_tif, dataset='yf_mean', layer_name='dates'):
                 for i, lab in enumerate(labels, start=1):
                     dst.set_band_description(i, lab)
 
+def hdf5_attributes(nodata=np.nan, dtype='float32', geospatial=None):
+    if geospatial is not None:
+        attrs = assemble_hdf5_attrs(
+            geospatial.crs, geospatial.transform, geospatial.shape[1], geospatial.shape[0], 
+            nodata=nodata, dtype=dtype)
+    else:
+        attrs = assemble_hdf5_attrs(
+            None, None, None, None, nodata=nodata, dtype=dtype)
+    return attrs
+        
 def export_defo_history_hdf5(
-        s_obs, pout, geospatial, geom, dates_obs_str=None, K=None, flip_sign=True, 
+        s_obs, pout, geospatial, geom, dates_obs_str=None, K=None, flip_sign=True,
         fn_defo='defo_history.h5', fn_K_diag='defo_history_covariance_diagonal.h5'):
-    attributes = geospatial._hdf5_attributes()
-    attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi #degrees
+    attributes = hdf5_attributes(geospatial=geospatial)
+    attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi  # degrees
     if flip_sign:
-        s_obs = s_obs * (-1) # so subsidence is negative
+        s_obs = s_obs * (-1)  # so subsidence is negative
     save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_name='dates', layer_info=dates_obs_str)
     if K is not None:
-        K_diag = np.moveaxis(np.diagonal(K), -1, 0).copy() # diagonal insanely messes up the ordering
-        K_diag[np.isnan(s_obs)] = np.nan # needs masking
+        K_diag = np.moveaxis(np.diagonal(K), -1, 0).copy()  # diagonal insanely messes up the ordering
+        K_diag[np.isnan(s_obs)] = np.nan  # needs masking
         save_hdf5(
             K_diag, attributes, 'variance', pout / fn_K_diag, layer_name='dates', layer_info=dates_obs_str)
-    
+
 def get_dates_obs_str(dailytemp, ind_scenes):
     from datetime import timedelta
     dates_obs = [
-        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]    
+        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]
     return dates_obs
 
 def read_meta_from_json(fnmeta):
     import json
     with open(fnmeta, 'r') as file:
         meta = json.load(file)
-        meta['geom'] = {'ia': float(meta.pop('ia')) * np.pi / 180} # to radians
+        meta['geom'] = {'ia': float(meta.pop('ia')) * np.pi / 180}  # to radians
         meta['wavelength'] = float(meta['wavelength'])
     return meta

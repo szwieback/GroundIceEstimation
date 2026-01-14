@@ -13,11 +13,12 @@ N = 8192
 Nsim = 5
 Nbatch = 1
 simname = 'test_spline'
-inversion = 'gm'
+inversion = 'is'
 
 fnforcing =  paths['forcing'] / 'sagwon/sagwon.csv'
 # fnK = Path(f'/10TBstorage/Work/stacks/Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif')
 fnK = paths['stacks']/ 'Dalton_131_363/gie/2019/proc/hadamard/geocoded/K_vec.geo.tif'
+
 pathout = paths['simulation'] / simname
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
@@ -44,6 +45,7 @@ strat = StratigraphyMultiple(
 strat_sim = StefanStratigraphySmoothingSpline(N=Nsim, seed=114)
 predens_sim = PredictionEnsemble(strat_sim, predictor, geom=geom)
 predens_sim.predict(dailytemp)
+
 predens = PredictionEnsemble(strat, predictor, geom=geom)
 predens.predict(dailytemp)
 invsim = ism(predens=predens, predens_sim=predens_sim)
@@ -52,9 +54,9 @@ invsim.register_variables(variables)
 invsim.export(fninvsim)
 
 invsim = ism.from_file(fninvsim)
-indranges = [(invsim.ind_scenes[-4], invsim.ind_scenes[-1])]
 invsim.inference(replicates=replicates, pathout=pathout)
 metrics = [('mean',), ('variance',)]
+invsim.export_metrics(pathout, param='e', metrics_ind=metrics)
 invsim.export_metrics(
     pathout, param=variables[0][0], indranges=variables[0][1]['indranges'], metrics_ind=metrics)
 

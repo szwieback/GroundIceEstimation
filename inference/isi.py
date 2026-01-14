@@ -277,7 +277,7 @@ def quantile(vals, lw, q, steps=7, method='bisection', normalize=True, smooth=No
         if len(lw.shape) == 1:
             valq = valq[0,:]
         elif len(lw.shape) > 2:
-            valq = valq.reshape((lw_.shape[:-1] + (valq.shape[-1],)))
+            valq = valq.reshape((lw.shape[:-1] + (valq.shape[-1],)))
         return valq
     else:
         def _quantile(q_):

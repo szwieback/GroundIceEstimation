@@ -27,7 +27,7 @@ def happyvalley_forcing(fnforcing, year=2022):
     d0 = {2023: '2023-05-31', 2022: '2022-06-06', 2019: '2019-05-18'}[year]
     d1 = {2023: '2023-09-22', 2022: '2022-09-16', 2019: '2019-09-17'}[year]
     d0_, d1_ = parse_dates((d0, d1), strp='%Y-%m-%d')
-    dailytemp = (df.resample('D').mean())[pd.date_range(start=d0, end=d1)]
+    dailytemp = (df.resample('D').mean())['T'].loc[pd.date_range(start=d0, end=d1)]
     dailytemp[dailytemp < 0] = 0
     datesstr = {2023: ('20230605', '20230617', '20230629', '20230711', '20230723', '20230804',
                        '20230816', '20230828', '20230909'),
@@ -79,7 +79,7 @@ def process_happyvalley(year=2019, imethod='IS', memory=True, rmethod='hadamard'
     elif imethod == 'GM':
         IP, IR = InversionProcessorGM, InversionResultsGM if memory else InversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
+                                ('yf', {'inds': [(ind_scenes[-1])]}))}
 
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
@@ -160,7 +160,7 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', memory=True, rmethod='h
     elif imethod == 'GM':
         IP, IR = InversionProcessorGM, MulticlassInversionResultsGM if memory else MulticlassInversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
+                                ('yf', {'inds': [(ind_scenes[-1])]}))}
     expecs = [('e_mean_period', 'mean')]
         
     # predictor = StefanPredictor()
