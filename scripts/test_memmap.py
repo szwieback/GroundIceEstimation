@@ -36,10 +36,8 @@ wavelength = 0.055
 ism = {'gm': InversionSimulatorGM, 'is': InversionSimulatorIS}[inversion]
 
 dailytemp, ind_scenes = sagwon_forcing(fnforcing)
-indranges = [(ind_scenes[-4], ind_scenes[-1])]
+indranges = [(ind_scenes[-4], ind_scenes[-1]), (ind_scenes[-3], ind_scenes[-1]), (ind_scenes[-2], ind_scenes[-1])]
 variables = (('e', {'indranges': indranges}),)
-
-print(type(dailytemp), dailytemp)
 
 C_obs = sagwon_covariance(fnK, var_atmo, wavelength=wavelength)
 predictor = StefanPredictor()
@@ -68,7 +66,7 @@ IR = InversionResults
 if IP.__name__ == 'InversionProcessorGM':
     kwargs = {'K': 2,
         'variables': (('e', {'indranges': indranges}),
-                      ('yf', {'ind_scene': [(ind_scenes[-1])]}),
+                      ('yf', {'inds': [(ind_scenes[-1])]}),
                       )}
 else:
     kwargs = {}
@@ -82,29 +80,44 @@ K = np.broadcast_to(C_obs[..., None, None], C_obs.shape + (nrow, ncol))
 
 ip = IP(predens, batch_size=ncol, **kwargs)
 ir = ip.results(
-        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=False, overwrite=True)
+        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=False, overwrite=False)
 ir.save(pathout / 'ir.p')
 ir = IR.from_file(pathout / 'ir.p')
 ir.blocksize = 1024
 
 ir_mem = ip.results(
-        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=True, overwrite=True)
+        ind_scenes, ssim, K, pathout=pathout, ec=ec, n_jobs=-1, memory=True, overwrite=False)
 # print(np.allclose(ir.lw, ir_mem.lw))
 # ip.delete_temporary(pathout)
 expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ('e_mean_period', 'mean'),
           ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
           ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)}),
           ('e', 'quantile', {'quantiles': (0.1, 0.9)})]
-expec = expecs[3]
+expec = expecs[0]#expecs[5]
 kwargs = expec[2] if len(expec) == 3 else {}
-ir.register_dates(dailytemp.index)
+
 ir.export_expectation(
     pathout, param=expec[0], etype=expec[1], hdf5=True, overwrite=True, **kwargs)
 # e_var = ir.expectation(param='e', etype='var')
 # print(e_var.shape)
 # e_var_mem = ir_mem.expectation(param='e', etype='var')
 # print(np.allclose(e_var, e_var_mem))
-
 res_mem = ir_mem.expectation(param=expec[0], etype=expec[1], **kwargs)
 res = np.load(pathout / f'{expec[0]}_{expec[1]}.npy', mmap_mode='r')
 print(np.allclose(res_mem, res))
+
+import h5py
+
+with h5py.File(pathout / f'{expec[0]}_{expec[1]}.h5', 'r') as f:
+    print("Datasets:", list(f.keys()))
+    print("\nAttributes:", dict(f.attrs))
+    for name in f.keys():
+        ds = f[name]
+        print(f"\n{name}: shape={ds.shape}, dtype={ds.dtype}, chunks={ds.chunks}")
+    res_h5 = f[f'{expec[0]}_{expec[1]}'][:]
+    # print(f['periods'][:])
+    print(f['dates'][:])
+print(res.shape, res_h5.shape)
+print(np.nanstd(res - res_h5))
+print(np.count_nonzero(np.isfinite(res)), np.count_nonzero(np.isfinite(res_h5)))
+        

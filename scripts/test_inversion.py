@@ -79,7 +79,7 @@ def process_happyvalley(year=2019, imethod='IS', memory=True, rmethod='hadamard'
     elif imethod == 'GM':
         IP, IR = InversionProcessorGM, InversionResultsGM if memory else InversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
+                                ('yf', {'inds': [(ind_scenes[-1])]}))}
 
     predictor = StefanPredictor()
     strat = StratigraphyMultiple(
@@ -160,7 +160,7 @@ def process_happyvalley_ecotype(year=2019, imethod='IS', memory=True, rmethod='h
     elif imethod == 'GM':
         IP, IR = InversionProcessorGM, MulticlassInversionResultsGM if memory else MulticlassInversionResultsGMMmap
         kwargs = {'variables': (('e', {'indranges': indranges}),
-                                ('yf', {'ind_scene': [(ind_scenes[-1])]}))}
+                                ('yf', {'inds': [(ind_scenes[-1])]}))}
     expecs = [('e_mean_period', 'mean')]
         
     # predictor = StefanPredictor()

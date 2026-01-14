@@ -117,7 +117,7 @@ def process_dalton(
         kwargs = {'K': K_value,
             'variables': (('e', {'indranges': indranges}),
                           ('e', {'depthranges': depthranges}),
-                          ('yf', {'ind_scene': [(ind_scenes[-1])]}),
+                          ('yf', {'inds': [(ind_scenes[-1])]}),
                           )}
 
     predictor = StefanPredictor()

@@ -47,19 +47,22 @@ class StefanPredictor(Predictor):
         return stefandict
 
 class PredictionEnsemble():
-    def __init__(self, strat, predictor, geom=None, results=None):
+    def __init__(self, strat, predictor, geom=None, results=None, meta=None):
         self.strat = strat
         self.predictor = predictor
         self.geom = geom
         self.results = results
+        self.meta = meta if meta is not None else {}
 
     @property
     def N(self):
         return self.strat.N
 
-    def predict(self, forcing, n_jobs=-8, **kwargs):
+    def predict(self, forcing, n_jobs=-8, register=True, **kwargs):
         strat = self.strat
         self.results = self._predict(strat, forcing, n_jobs=n_jobs, **kwargs)
+        if register:
+            self.meta['dates'] = forcing.index
 
     def _predict(self, strat, forcing, n_jobs=-8, **kwargs):
         results = {}
@@ -82,21 +85,25 @@ class PredictionEnsemble():
                         results[k] = res_batch[k]
         return results
 
-    def predict_mean_period(self, indranges, param='e'):
+    def predict_mean_period(self, indranges, param='e', register=True):
         if isinstance(param, str):
             self._predict_mean_period(indranges, param=param)
         else:
             for _p in param: self.predict_mean_period(indranges, _p)
+        if register:
+            self.meta['indranges'] = indranges
 
     def _predict_mean_period(self, indranges, param='e'):
         mp = self._mean_period(self.results, indranges, param=param)
         self.results[f'{param}_mean_period'] = mp
 
-    def predict_mean_depth(self, depthranges, param='e'):
+    def predict_mean_depth(self, depthranges, param='e', register=True):
         if isinstance(param, str):
             self._predict_mean_depth(depthranges, param=param)
         else:
             for _p in param: self.predict_mean_depth(depthranges, _p)
+        if register:
+            self.meta['depthranges'] = depthranges
 
     def _predict_mean_depth(self, depthranges, param='e'):
         md = self._mean_depth(self.results, depthranges, param=param)
@@ -171,13 +178,14 @@ class PredictionEnsemble():
         return s
 
 class MulticlassPredictionEnsemble(PredictionEnsemble):
-    def __init__(self, strats, predictor, geom=None, results=None):
+    def __init__(self, strats, predictor, geom=None, results=None, meta=None):
         # strats is dictionary of stratigraphies
         self._check_strats(strats)
         self.strats = strats
         self.predictor = predictor
         self.geom = geom
         self.results = results
+        self.meta = meta if meta is not None else {}
 
     @property
     def classnames(self):
@@ -221,10 +229,12 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
             mp = self._mean_depth(results, depthranges, param=param)
             self.results[sc][f'{param}_mean_depth'] = mp
 
-    def predict(self, forcing, n_jobs=-8, **kwargs):
+    def predict(self, forcing, n_jobs=-8, register=True, **kwargs):
         self.results = {}
         for sc in self.strats:
             self.results[sc] = self._predict(self.strats[sc], forcing, n_jobs=n_jobs, **kwargs)
+        if register:
+            self.meta['dates'] = forcing.index
 
     def extract_predictions(
             self, indices, field='s_los', C_obs=None, rng=None, reference_only=False, **kwargs):

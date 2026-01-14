@@ -318,7 +318,7 @@ class InversionSimulatorGM(InversionSimulator):
 
     def register_variables(self, variables=None):
         if variables is None:
-            variables = (('yf', {'ind_scene': [self.ind_scenes[-1]]}),
+            variables = (('yf', {'inds': [self.ind_scenes[-1]]}),
                          ('e', {'indranges': [(self.ind_scenes[-4], self.ind_scenes[-1])]}))
         self.variables = variables
 

@@ -4,7 +4,7 @@ Created on Sep 14, 2022
 @author: simon
 '''
 
-from analysis import enforce_directory, MulticlassPredictionEnsemble, ioput
+from analysis import enforce_directory, MulticlassPredictionEnsemble, save_hdf5
 
 import numpy as np
 from pathlib import Path
@@ -218,19 +218,19 @@ class InversionProcessorGM(InversionProcessor):
         else:
             predens = self.predens[ec]
         if 'indranges' in param_dict:
-            assert 'ind_scene' not in param_dict
+            assert 'ind_scenes' not in param_dict
             if f'{param}_mean_period' not in predens.results:
                 predens.predict_mean_period(param_dict['indranges'], param=param)
             p = predens.results[f'{param}_mean_period']
         elif 'depthranges' in param_dict:
-            assert 'ind_scene' not in param_dict
+            assert 'ind_scenes' not in param_dict
             if f'{param}_mean_depth' not in predens.results:
                 predens.predict_mean_depth(param_dict['depthranges'], param=param)
             p = predens.results[f'{param}_mean_depth']
         else:
             p = predens.results[param]
-            if 'ind_scene' in param_dict:
-                p = p[:, param_dict['ind_scene']]
+            if 'ind_scenes' in param_dict:
+                p = p[:, param_dict['ind_scenes']]
         return p
 
     @property
@@ -371,12 +371,14 @@ class InversionResults():
     intdims = 1  # internal dimensions
     _subclasses = {}  # keep registry of subclasses
 
-    def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=None):
+    def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=None, meta=None):
         self.predens = predens
         self.invres = invres
         self.geospatial = geospatial
         self.blocksize = blocksize if blocksize is not None else InversionResults.blocksize_default
         self.memory = memory  # Boolean: governs whether the metric computations are done in memory
+        self.meta = predens.meta
+        self.meta.update(meta if meta is not None else {})
 
     @classmethod  # decorator not needed but keeps IDE happy
     def __init_subclass__(cls, **kwargs):
@@ -402,9 +404,10 @@ class InversionResults():
 
     @property
     def _dict(self):
+        meta = getattr(self, 'meta', None)
         dictout = {
-            'geospatial': self.geospatial, 'predens': self.predens,
-            'blocksize': self.blocksize, 'memory': self.memory, 'class': self.__class__.__name__}
+            'geospatial': self.geospatial, 'predens': self.predens, 'blocksize': self.blocksize, 
+            'meta': meta, 'memory': self.memory, 'class': self.__class__.__name__}
         return dictout
 
     @staticmethod
@@ -455,32 +458,29 @@ class InversionResults():
             res = np.load(fnout, memory=self.memory)
         if hdf5:
             fnhdf5 = fnout.with_suffix('.h5')
-            self._export_hdf5(res, fnhdf5, param=param, etype=etype)
+            self._export_hdf5(res, fnhdf5, param=param, etype=etype, blocksize=self.blocksize, **kwargs)
 
-    def _export_hdf5(self, res, fnh5, param='e', etype='mean'):
+    def _export_hdf5(self, res, fnh5, param='e', etype='mean', blocksize=512, **kwargs):
         from analysis import hdf5_attributes
         dataset_name = f'{param}_{etype}'
         attrs = hdf5_attributes(geospatial=self.geospatial)
-        if dataset_name in (
-            'e_mean_period_var', 'e_mean_period_mean', 'e_mean_depth_mean', 'e_mean_depth_var'):
-            if res.ndim == 3 and res.shape[2] == 1:
-                res = res[:,:, 0]
-            ioput.save_hdf5(res, attrs, dataset_name, fnh5)
-        # elif dataset_name in ('e_mean_period_quantile', 'e_mean_depth_quantile'):
-        #     if res.ndim == 4 and res.shape[2] == 1:
-        #         res = res[:, :, 0, :]
-        #     ioput.save_hdf5(res, attrs, dataset_name, fnh5)
-        elif dataset_name in ('e_mean', 'e_var', 'frac_thawed_None'):
-            layer_name = 'depth_mm'
-            dlist = self._depth_mm_list
-            ioput.save_hdf5(res, attrs, dataset_name, fnh5, layer_name=layer_name, layer_info=dlist)
-        elif dataset_name in ('yf_mean'):
-            layer_name = 'dates'
-            dtlist = self._dt_strlist
-            ioput.save_hdf5(res, attrs, dataset_name, fnh5, layer_name=layer_name, layer_info=dtlist)
-        else:
-            import warnings
-            warnings.warn(f"Data type {dataset_name} H5 output not implemented")
+        layer_dict = {}
+        if param in ['e', 'frac_thawed']:
+            layer_dict['depth_mm'] = self._depth_mm_list
+        elif param in ['yf']:
+            if res.shape[-1] == len(self.dates):
+                layer_dict['dates'] = self._dt_strlist
+            else:
+                layer_dict['dates'] = self._indsyf_dt_strlist
+        elif param in ['e_mean_period']:
+            layer_dict['periods'] = self._indranges_dt_strlist
+        elif param in ['e_mean_depth']:
+            layer_dict['depthranges_mm'] = self._depthranges_mm_list 
+        if etype == 'quantile':
+            layer_dict['quantile'] = [str(q) for q in kwargs['quantiles']]
+        if param == 'frac_thawed' and 'ind_scene' in kwargs:
+            attrs['date'] = str(self.dates[kwargs['ind_scene']])
+        save_hdf5(res, attrs, dataset_name, fnh5, layer_dict=layer_dict, blocksize=blocksize)
 
     def _expectation(self, param='e', etype='mean', p=None, fnmmap=None, n_jobs=-1, **kwargs):
         if etype == 'mean':
@@ -544,24 +544,70 @@ class InversionResults():
         for _invres in np.array_split(self.invres, ind, axis=0):
             yield _invres  # view to avoid memory issues
 
-    def register_dates(self, datelist):
-        self.dates = datelist
+    def _get_meta(self, key):
+        if key in self.meta:
+            return self.meta[key]
+        else:
+            raise ValueError(f"Variable {key} has not been registered")
+
+    def _set_meta(self, key, value, overwrite=False, warn=True):
+        if key in self.meta and warn:
+            import warnings
+            warnings.warn(f"Metadata {key} already registered; overwrite = {overwrite}")
+        if key not in self.meta or overwrite:
+            self.meta[key] = value
+
+    @property
+    def dates(self):
+        return self._get_meta('dates')
+    
+    @property
+    def depthranges(self):
+        return self._get_meta('depthranges')
+    
+    @property
+    def indranges(self):
+        return self._get_meta('indranges')
+    
+    def register_dates(self, datelist, overwrite=True, warn=True):
+        self._set_meta('dates', datelist, overwrite=overwrite, warn=warn)
+
+    def register_indranges(self, indranges, overwrite=True, warn=True):
+        self._set_meta('indranges', indranges, overwrite=overwrite, warn=warn)
+
+    def register_depthranges(self, depthranges, overwrite=True, warn=True):
+        self._set_meta('depthranges', depthranges, overwrite=overwrite, warn=warn)
 
     @property
     def _dt_strlist(self):
         return self.dates.strftime('%Y-%m-%d').tolist()
 
     @property
+    def _indranges_dt_strlist(self):
+        dt_list = self._dt_strlist
+        return [f'{dt_list[indr[0]]}:{dt_list[indr[1]]}' for indr in self.indranges]
+
+    @property
+    def _indsyf_dt_strlist(self):
+        raise NotImplementedError() # only for GMM subclasses
+
+    @property
     def _depth_mm_list(self):
         return [f'{int(1000*y)}-{int(1000*(y + self.dy))}' for y in self.ygrid]
+
+    @property
+    def _depthranges_mm_list(self):
+        raise
+        return [f'{int(1000*dr[0])}-{int(1000*(dr[1]))}' for dr in self.depthranges]
 
     def _filename(self, path0, ftype, number=None, ext='npy'):
         _fn = ftype if number is None else f'{ftype}_{number}'
         return path0 / f'{_fn}.{ext}'
 
 class InversionResultsIS(InversionResults):
-    def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=True):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
+    def __init__(self, predens, invres, geospatial=None, blocksize=None, memory=True, meta=None):
+        super().__init__(
+            predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory, meta=meta)
 
     @property
     def _dict(self):
@@ -632,16 +678,33 @@ class InversionResultsGM(InversionResults):
     intdims = 2  # internal dimensions
     blocksize_default = 16384  # large, because scikit implementation is efficient
 
-    def __init__(self, predens, invres, geospatial=None, blocksize=None, variables=None, memory=True):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
+    def __init__(
+            self, predens, invres, geospatial=None, blocksize=None, variables=None, memory=True, meta=None):
+        super().__init__(
+            predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory, meta=meta)
         self.variables = variables
+        for vn, vdict in variables:
+            if vn == 'e' and 'depthranges' in vdict:
+                self.register_depthranges(vdict['depthranges'], overwrite=True, warn=False)
+            if vn == 'e' and 'indranges' in vdict:
+                self.register_indranges(vdict['indranges'], overwrite=True, warn=False)
+            if vn == 'yf' and 'inds' in vdict:
+                self.register_indsyf(vdict['inds'], overwrite=True, warn=False)
+
+    def register_indsyf(self, inds, overwrite=True, warn=True):
+        self._set_meta('indsyf', inds, overwrite=overwrite, warn=warn)
+        
+    @property
+    def _indsyf_dt_strlist(self):
+        dt_list = self._dt_strlist
+        return [f'{dt_list[ind]}' for ind in self._get_meta('indsyf')]
 
     def _indices_variables(self, param='e'):
         def l(v):
             _l = 1
             if 'indranges' in v[1]: _l = len(v[1]['indranges'])
             if 'depthranges' in v[1]: _l = len(v[1]['depthranges'])
-            if 'ind_scene' in v[1]: _l = len(v[1]['ind_scene'])
+            if 'inds' in v[1]: _l = len(v[1]['inds'])
             return _l
         n_variables = np.array([l(v) for v in self.variables])
         def _name_post(v):
@@ -705,8 +768,9 @@ class InversionResultsGM(InversionResults):
 
 class MulticlassInversionResultsIS(InversionResultsIS):
 
-    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, memory=True):
-        super().__init__(predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory)
+    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, memory=True, meta=None):
+        super().__init__(
+            predens, invres, geospatial=geospatial, blocksize=blocksize, memory=memory, meta=meta)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
         self.ec = ec
@@ -752,9 +816,12 @@ class MulticlassInversionResultsIS(InversionResultsIS):
 
 class MulticlassInversionResultsGM(InversionResultsGM):
 
-    def __init__(self, predens, invres, ec, geospatial=None, blocksize=None, variables=None, memory=True):
+    def __init__(
+            self, predens, invres, ec, geospatial=None, blocksize=None, variables=None, memory=True, 
+            meta=None):
         super().__init__(
-            predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables, memory=memory)
+            predens, invres, geospatial=geospatial, blocksize=blocksize, variables=variables, memory=memory,
+            meta=meta)
         if not issubclass(type(predens), MulticlassPredictionEnsemble):
             raise ValueError("Prediction ensemble incompatible with MuticlassInversionResults")
         self.ec = ec
@@ -772,10 +839,10 @@ class InversionResultsGMMmap(InversionResultsGM):
 
     def __init__(
             self, predens, gmpmmap, geospatial=None, blocksize=None, variables=None, temporary=False,
-            memory=False):
+            memory=False, meta=None):
         InversionResultsGM.__init__(
             self, predens, None, geospatial=geospatial, blocksize=blocksize, variables=variables,
-            memory=memory)
+            memory=memory, meta=meta)
         if gmpmmap is not None:
             self.gmpmmap = gmpmmap
             self.invres = np.memmap(gmpmmap.filename, dtype=gmpmmap.dtype, mode='r', shape=gmpmmap.shape)
@@ -795,9 +862,11 @@ class InversionResultsGMMmap(InversionResultsGM):
                 pass
 
 class InversionResultsISMmap(InversionResultsIS):
-    def __init__(self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False, memory=False):
+    def __init__(
+            self, predens, lwmmap, geospatial=None, blocksize=None, temporary=False, memory=False, 
+            meta=None):
         InversionResultsIS.__init__(
-            self, predens, None, geospatial=geospatial, blocksize=blocksize, memory=memory)
+            self, predens, None, geospatial=geospatial, blocksize=blocksize, memory=memory, meta=meta)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             self.invres = np.memmap(lwmmap.filename, dtype=lwmmap.dtype, mode='r', shape=lwmmap.shape)
@@ -818,9 +887,11 @@ class InversionResultsISMmap(InversionResultsIS):
 
 class MulticlassInversionResultsISMmap(MulticlassInversionResultsIS):
 
-    def __init__(self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False, memory=False):
+    def __init__(
+            self, predens, lwmmap, ec, geospatial=None, blocksize=None, temporary=False, memory=False,
+            meta=None):
         MulticlassInversionResultsIS.__init__(
-            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, memory=memory)
+            self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, memory=memory, meta=meta)
         if lwmmap is not None:
             self.lwmmap = lwmmap
             if Path(lwmmap.filename).exists():
@@ -854,10 +925,10 @@ class MulticlassInversionResultsGMMmap(MulticlassInversionResultsGM):
 
     def __init__(
             self, predens, gmpmmap, ec, geospatial=None, blocksize=None, temporary=False, variables=None,
-            memory=False):
+            memory=False, meta=None):
         MulticlassInversionResultsGM.__init__(
             self, predens, None, ec, geospatial=geospatial, blocksize=blocksize, variables=variables,
-            memory=memory)
+            memory=memory, meta=meta)
         if gmpmmap is not None:
             self.gmpmmap = gmpmmap
             if Path(gmpmmap.filename).exists():

@@ -367,65 +367,67 @@ def hdf5_attrs_from_tif(fin_tif):
         return assemble_hdf5_attrs(
             crs, transform, w, h, band_description=band_desc, nodata=nodata, dtype=dtype)
 
+
 # def save_hdf5(data, attrs, data_name, fnout, layer_name=None, layer_info=None):
-#     arr = np.asarray(data, dtype=np.dtype(attrs.get('DATA_TYPE', 'float32')))
 #     import h5py
+#     dtype = np.dtype(attrs.get('DATA_TYPE', 'float32'))
 #     with h5py.File(fnout, 'w') as f:
-#         if arr.ndim == 2:
-#             h, w = arr.shape
-#             f.create_dataset(
-#                 data_name,
-#                 data=arr,
-#                 dtype=arr.dtype,
-#                 chunks=(min(512, h), min(512, w)),
-#                 compression='lzf'
-#             )
-#         elif arr.ndim == 3:
-#             b, h, w = arr.shape
-#             f.create_dataset(
-#                 data_name,
-#                 data=arr,
-#                 dtype=arr.dtype,
-#                 chunks=(1, min(512, h), min(512, w)),
-#                 compression='lzf'
-#             )
+#         if data.ndim == 2:
+#             h, w = data.shape
+#             chunks = (min(512, h), min(512, w))
+#         elif data.ndim == 3:
+#             b, h, w = data.shape
+#             chunks = (1, min(512, h), min(512, w))
 #         else:
 #             raise ValueError('data must be 2D (H,W) or 3D (B,H,W)')
 #
+#         ds = f.create_dataset(data_name, shape=data.shape, dtype=dtype, chunks=chunks, compression='lzf')
+#         if isinstance(data, np.memmap) and data.dtype != dtype:
+#             chunk_size = chunks[0]
+#             for i in range(0, data.shape[0], chunk_size):
+#                 ds[i:i + chunk_size] = data[i:i + chunk_size].astype(dtype)
+#         else:
+#             ds[:] = data
 #         for k, v in attrs.items():
-#             if k != 'BAND_DESCRIPTIONS':
+#             if k != 'BAND_DESCRIPTIONS' and v is not None:
 #                 f.attrs[k] = v
 #         if layer_info is not None:
-#             dt = h5py.string_dtype()
-#             ds = f.create_dataset(layer_name, (len(layer_info),), dtype=dt)
-#             ds[:] = np.array(layer_info, dtype=object)
+#             layer_ds = f.create_dataset(layer_name, (len(layer_info),), dtype=h5py.string_dtype())
+#             layer_ds[:] = np.array(layer_info, dtype=object)
 
-def save_hdf5(data, attrs, data_name, fnout, layer_name=None, layer_info=None):
+
+def save_hdf5(data, attrs, data_name, fnout, layer_dict=None, blocksize=512):
     import h5py
     dtype = np.dtype(attrs.get('DATA_TYPE', 'float32'))
+    
     with h5py.File(fnout, 'w') as f:
-        if data.ndim == 2:
-            h, w = data.shape
-            chunks = (min(512, h), min(512, w))
-        elif data.ndim == 3:
-            b, h, w = data.shape
-            chunks = (1, min(512, h), min(512, w))
-        else:
-            raise ValueError('data must be 2D (H,W) or 3D (B,H,W)')
+        chunks = _get_chunks(data, blocksize=blocksize)
+        ds = f.create_dataset(data_name, shape=data.shape, dtype=dtype, 
+                              chunks=chunks, compression='lzf')
+        _write_data(ds, data, dtype, chunks)
+        _write_attrs(f, attrs)
+        
+        if layer_dict is not None:
+            for layer_name, layer_info in layer_dict.items():
+                layer_ds = f.create_dataset(layer_name, (len(layer_info),), 
+                                            dtype=h5py.string_dtype())
+                layer_ds[:] = np.array(layer_info, dtype=object)
 
-        ds = f.create_dataset(data_name, shape=data.shape, dtype=dtype, chunks=chunks, compression='lzf')
-        if isinstance(data, np.memmap) and data.dtype != dtype:
-            chunk_size = chunks[0]
-            for i in range(0, data.shape[0], chunk_size):
-                ds[i:i + chunk_size] = data[i:i + chunk_size].astype(dtype)
-        else:
-            ds[:] = data
-        for k, v in attrs.items():
-            if k != 'BAND_DESCRIPTIONS' and v is not None:
-                f.attrs[k] = v
-        if layer_info is not None:
-            layer_ds = f.create_dataset(layer_name, (len(layer_info),), dtype=h5py.string_dtype())
-            layer_ds[:] = np.array(layer_info, dtype=object)
+def _get_chunks(data, blocksize=512):
+    return (min(blocksize, data.shape[0]),) + data.shape[1:]
+
+def _write_data(ds, data, dtype, chunks):
+    if isinstance(data, np.memmap) and data.dtype != dtype:
+        chunk_size = chunks[0]
+        for i in range(0, data.shape[0], chunk_size):
+            ds[i:i + chunk_size] = data[i:i + chunk_size].astype(dtype)
+    else:
+        ds[:] = data
+
+def _write_attrs(f, attrs):
+    for k, v in attrs.items():
+        if k != 'BAND_DESCRIPTIONS' and v is not None:
+            f.attrs[k] = v
 
 def geotiff_to_hdf5(fin_tif, fnout_h5, data_name='data'):
     attrs = hdf5_attrs_from_tif(fin_tif)
