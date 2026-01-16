@@ -86,7 +86,7 @@ if __name__ == '__main__':
 
     sitename = 'utqiagvik2'
     # 2023 has major unwrapping issues
-    for year in [2023]:#[2024]:
+    for year in [2023, 2024]:#[2024]:
         if year == 2024:
             xy_ref = np.array([[575172.0, 7905233.4]]).T
         elif year == 2023:

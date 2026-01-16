@@ -50,6 +50,9 @@ def process_mintpy_downscaled(
     unw_hr, _ = geospatial_utm_hr.warp_from_file(fnunw_raw)
     save_geotiff(unw_hr, geospatial_utm_hr, fnunw_hr)
     K_hr, _ = geospatial_utm_hr.warp_from_file(fnK_raw)
+    from warnings import warn
+    warn("Applying scale factor to deal with MintPy bug (not fixed, but export through MintPyAPI for this dataset did not deal with it.")
+    K_hr *= meta['wavelength'] / (4 * np.pi)
     save_geotiff(K_hr, geospatial_utm_hr, fnK_hr)
     del unw_hr, K_hr
 
@@ -63,9 +66,12 @@ def process_mintpy_downscaled(
     save_geotiff(K, geospatial, fnK)
 
     if xy_ref is not None:
+        # data, geospatial = read_referenced_InSAR(
+        #     fnunw, fnK, xy_ref, wavelength=meta['wavelength'], fndist=pathout / 'distance_cal.p',
+        #     fnunw_hr=fnunw_hr, fnK_hr=fnK_hr, overwrite=overwrite)
         data, geospatial = read_referenced_InSAR(
             fnunw, fnK, xy_ref, wavelength=meta['wavelength'], fndist=pathout / 'distance_cal.p',
-            fnunw_hr=fnunw_hr, fnK_hr=fnK_hr, overwrite=overwrite)
+            overwrite=overwrite)        
     else:
         raise NotImplementedError("xy_ref needed")
 
@@ -94,7 +100,7 @@ def process_mintpy_downscaled(
     export_defo_history_hdf5(
         data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
         dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
-
+    
     predens.predict(dailytemp)
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
     ir = ip.results(
@@ -203,7 +209,14 @@ if __name__ == '__main__':
 
     # xy_ref = np.array([[573445.8, 7902347.9], [583009.8, 7915563.0], [588067.5, 7905825.9]]).T # full resolution
     # xy_ref = np.array([[573445.8, 7902347.9], [581455.2, 7914007.1], [588067.5, 7905825.9]]).T #okay
-    xy_ref = np.array([[573509.7, 7902352.7], [581398.4, 7913988.2], [588067.5, 7905825.9]]).T  # okay
+    # xy_ref = np.array([[573509.7, 7902352.7], [581398.4, 7913988.2], [588067.5, 7905825.9]]).T  # okay
+    # reprocessed data
+    # xy_ref = np.array([[580349.2, 7911352.1], [587462.7, 7906246.4]]).T
+    xy_ref = np.array([[583008.7, 7915513.2], [574034.2, 7903403.5], [587557.5, 7904630.7]]).T#[579849.3, 7911152.9]]).T
+    xy_ref = np.array([[583008.7, 7915513.2], [575643.0, 7905235.0], [587557.5, 7904630.7], [580360.6, 7911357.0]]).T
+    xy_ref = np.array([[583008.7, 7915513.2], [576948.2, 7906320.7], [587605.0, 7904553.6], [580360.6, 7911357.0]]).T
+
+    
 
     ecotype = False
     pmintpy = Path(f'/10TBstorage/Work/MintPy/utqiagvik/alos2/{year}')

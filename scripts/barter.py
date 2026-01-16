@@ -108,10 +108,11 @@ if __name__ == '__main__':
     sitename = 'barter_island'
     # ecotype map is many issues in this area; not used because of that
     # maybe use that as example in report, and process both
+    xy_ref = np.array([[400713.0, 7782974.0]]).T
+
     for year in [2019, 2023, 2024]:  # [2024]:
-        xy_ref = np.array([[400713.0, 7782974.0]]).T
-        ecotype = True
-        pmintpy = Path(f'/10TBstorage/Work/MintPy/{sitename}/s1/160/{year}')
-        process_mintpy(
-            sitename, year, pmintpy, pmintpy, params_distribution, ecotype=ecotype, xy_ref=xy_ref,
-            overwrite=True)
+        for ecotype in (True, False):
+            pmintpy = Path(f'/10TBstorage/Work/MintPy/{sitename}/s1/160/{year}')
+            process_mintpy(
+                sitename, year, pmintpy, pmintpy, params_distribution, ecotype=ecotype, xy_ref=xy_ref,
+                overwrite=True)
