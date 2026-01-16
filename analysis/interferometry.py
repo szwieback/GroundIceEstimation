@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 from analysis import save_object, load_object, save_geotiff
 
-wvl0 = 0.055
+wvl0 = np.nan#0.055
 
 def phase_to_length_factor(wavelength=wvl0):
     # two-way prop
@@ -283,7 +283,7 @@ def spatial_referencing(
     K_comb = combined_K(K, covmodel)  # speckle and atmo
     dist = distance_to_ref(geospatial, xy_ref, fndist=fndist, overwrite=overwrite)
     if unw_hr is None or K_hr is None or geospatial_hr is None:
-        unw_ref, K_ref_comb, _ = extract_reference(K, unw, dist, geospatial, xy_ref, covmodel)
+        unw_ref, K_ref_comb, _ = extract_reference(K, unw, geospatial, xy_ref, covmodel)
     else:
         # uses a high-resolution file for phase referencing
         if convert_to_length:

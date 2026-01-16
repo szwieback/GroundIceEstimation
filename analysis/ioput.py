@@ -260,7 +260,8 @@ def vectorize_tril(G):
     G_vec = G[ind_]
     return G_vec
 
-def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, fnunw_hr=None, fnK_hr=None, overwrite=False):
+def read_referenced_InSAR(
+        fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, fnunw_hr=None, fnK_hr=None, overwrite=False):
     # hardcodes model etc., plan to generalize (using optional kwargs) 
     from scripts.kivalina_calibration import caldict
     from analysis.interferometry import (
@@ -279,7 +280,7 @@ def read_referenced_InSAR(fnunw, fnK, xy_ref, wavelength=0.055, fndist=None, fnu
     unw_cor, K_cor = spatial_referencing(
         unw, K, covmodel, xy_ref, geospatial_K, fndist=fndist, convert_to_length=False, 
         unw_hr=unw_hr, K_hr=K_hr, geospatial_hr=geospatial_hr, overwrite=overwrite)
-
+    
     s_obs, K_s = length_conversion(unw_cor, K_cor, wavelength=wavelength, flip_sign=True)
     K = np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1))
     assert geospatial_K == geospatial_unw
@@ -546,12 +547,12 @@ def export_defo_history_hdf5(
     attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi  # degrees
     if flip_sign:
         s_obs = s_obs * (-1)  # so subsidence is negative
-    save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_name='dates', layer_info=dates_obs_str)
+    save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_dict={'dates': dates_obs_str})
     if K is not None:
         K_diag = np.moveaxis(np.diagonal(K), -1, 0).copy()  # diagonal insanely messes up the ordering
         K_diag[np.isnan(s_obs)] = np.nan  # needs masking
         save_hdf5(
-            K_diag, attributes, 'variance', pout / fn_K_diag, layer_name='dates', layer_info=dates_obs_str)
+            K_diag, attributes, 'variance', pout / fn_K_diag, layer_dict={'dates': dates_obs_str})
 
 def get_dates_obs_str(dailytemp, ind_scenes):
     from datetime import timedelta

@@ -62,7 +62,7 @@ class PredictionEnsemble():
         strat = self.strat
         self.results = self._predict(strat, forcing, n_jobs=n_jobs, **kwargs)
         if register:
-            self.meta['dates'] = forcing.index
+            self.meta['dates'] = list(forcing.index)
 
     def _predict(self, strat, forcing, n_jobs=-8, **kwargs):
         results = {}
@@ -234,7 +234,7 @@ class MulticlassPredictionEnsemble(PredictionEnsemble):
         for sc in self.strats:
             self.results[sc] = self._predict(self.strats[sc], forcing, n_jobs=n_jobs, **kwargs)
         if register:
-            self.meta['dates'] = forcing.index
+            self.meta['dates'] = list(forcing.index)
 
     def extract_predictions(
             self, indices, field='s_los', C_obs=None, rng=None, reference_only=False, **kwargs):

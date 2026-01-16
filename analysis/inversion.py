@@ -551,9 +551,13 @@ class InversionResults():
             raise ValueError(f"Variable {key} has not been registered")
 
     def _set_meta(self, key, value, overwrite=False, warn=True):
-        if key in self.meta and warn:
-            import warnings
-            warnings.warn(f"Metadata {key} already registered; overwrite = {overwrite}")
+        if key in self.meta and warn: # already in metadata
+            # test whether they are different
+            vd, vn = list(self.meta[key]), list(value)
+            equal = vd == vn
+            if not equal:
+                import warnings
+                warnings.warn(f"Metadata {key} already registered; overwrite = {overwrite}")
         if key not in self.meta or overwrite:
             self.meta[key] = value
 
@@ -570,7 +574,7 @@ class InversionResults():
         return self._get_meta('indranges')
     
     def register_dates(self, datelist, overwrite=True, warn=True):
-        self._set_meta('dates', datelist, overwrite=overwrite, warn=warn)
+        self._set_meta('dates', list(datelist), overwrite=overwrite, warn=warn) # force list
 
     def register_indranges(self, indranges, overwrite=True, warn=True):
         self._set_meta('indranges', indranges, overwrite=overwrite, warn=warn)
