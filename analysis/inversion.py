@@ -4,7 +4,9 @@ Created on Sep 14, 2022
 @author: simon
 '''
 
-from analysis import enforce_directory, MulticlassPredictionEnsemble, save_hdf5
+from analysis import (
+    enforce_directory, MulticlassPredictionEnsemble, save_hdf5, load_object, dateformat, 
+    export_deformation_hdf5)
 
 import numpy as np
 from pathlib import Path
@@ -67,7 +69,7 @@ class InversionProcessor():
     @abstractmethod
     def results(
             self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
-            overwrite=False, **kwargs):
+            overwrite=False, deformation_h5=True, **kwargs):
         raise NotImplementedError()
 
     def delete_temporary(self, pathout):
@@ -89,6 +91,14 @@ class InversionProcessor():
     @property
     def ygrid(self):
         return self.predens.ygrid
+
+    def export_deformation_h5(self, ind_scenes, s_obs, C_obs=None, pathout=None):
+        if pathout is not None and self.geospatial is not None:
+            dates_obs = [self.predens.date(ind) for ind in ind_scenes]
+            export_deformation_hdf5(
+                s_obs, pathout, self.geospatial, self.predens.geom, K=C_obs,
+                dates_obs=dates_obs)
+
 
 class InversionProcessorIS(InversionProcessor):
     fname = 'lw'
@@ -171,9 +181,11 @@ class InversionProcessorIS(InversionProcessor):
 
     def results(
             self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
-            overwrite=False, **kwargs):
+            overwrite=False, deformation_h5=True, **kwargs):
         # memory determines whether a memmap is created; the default is used for the InversionResults object
         if 'normalize' not in kwargs: kwargs['normalize'] = False
+        if pathout is not None and deformation_h5:
+            self.export_deformation_h5(ind_scenes, s_obs, C_obs=C_obs, pathout=pathout)
         _lw = self.inference(
             ind_scenes, s_obs, C_obs, ec=ec, n_jobs=n_jobs, pathout=pathout,
             memory=memory, overwrite=overwrite, **kwargs)
@@ -342,7 +354,9 @@ class InversionProcessorGM(InversionProcessor):
 
     def results(
             self, ind_scenes, s_obs, C_obs, ec=None, n_jobs=8, pathout=None, memory=True,
-            overwrite=False, **kwargs):
+            overwrite=False, deformation_h5=True, **kwargs):
+        if pathout is not None and deformation_h5:
+            self.export_deformation_h5(ind_scenes, s_obs, C_obs=C_obs, pathout=pathout)
         _gmp = self.inference(
             ind_scenes, s_obs, C_obs, ec=ec, n_jobs=n_jobs, pathout=pathout, memory=memory,
             overwrite=overwrite)
@@ -455,7 +469,7 @@ class InversionResults():
             else:
                 res = self.expectation(param=param, etype=etype, p=p, fnmmap=fnout, n_jobs=n_jobs, **kwargs)
         else:
-            res = np.load(fnout, memory=self.memory)
+            res = load_object(fnout, memory=self.memory)
         if hdf5:
             fnhdf5 = fnout.with_suffix('.h5')
             self._export_hdf5(res, fnhdf5, param=param, etype=etype, blocksize=self.blocksize, **kwargs)
@@ -584,8 +598,8 @@ class InversionResults():
 
     @property
     def _dt_strlist(self):
-        return self.dates.strftime('%Y-%m-%d').tolist()
-
+        return [d.strftime(dateformat) for d in self.dates]
+        
     @property
     def _indranges_dt_strlist(self):
         dt_list = self._dt_strlist

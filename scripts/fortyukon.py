@@ -7,10 +7,10 @@ import numpy as np
 from pathlib import Path
 
 from analysis import (
-    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS, get_dates_obs_str,
-    InversionResultsISMmap, MulticlassInversionResultsISMmap, export_defo_history_hdf5, read_meta_from_json,
+    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS,
+    InversionResultsISMmap, MulticlassInversionResultsISMmap, read_meta_from_json,
     MulticlassPredictionEnsemble)
-from simulation import StefanStratigraphySmoothingSpline, StratigraphyMultiple
+from simulation import StefanStratigraphySmoothingSpline
 from forcing import forcing_merra_meta
 from scripts.pathnames import paths
 
@@ -81,11 +81,8 @@ def process_mintpy(
         predens = PredictionEnsemble(strat, predictor, geom=meta['geom'])
     data['ec'] = ec
 
-    # store an atmospherically referenced deformation history
+    # store an atmospherically referenced deformation history; for internal appraisal of data quality
     geospatial.save_geotiff(data['s_obs'], pathout / 's_obs.tif')
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
     
     predens.predict(dailytemp)
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -96,7 +93,6 @@ def process_mintpy(
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
 
-    ir.register_dates(dailytemp.index)  # for h5 export
     expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ]
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}

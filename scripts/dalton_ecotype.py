@@ -17,7 +17,7 @@ from analysis import (
     spatial_referencing, length_conversion, InversionProcessorIS, InversionResultsISMmap,
     InversionResultsIS, InversionProcessorGM, InversionResultsGM, InversionResultsGMMmap,
     MulticlassInversionResultsIS, MulticlassInversionResultsISMmap, MulticlassInversionResultsGM,
-    MulticlassInversionResultsGMMmap, get_dates_obs_str, export_defo_history_hdf5)
+    MulticlassInversionResultsGMMmap)
 from simulation import (
     StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -132,11 +132,9 @@ def process_dalton(
             StefanStratigraphySmoothingSpline(N=N, dist=params_distribution), Nbatch=Nbatch)
         predens = PredictionEnsemble(strat, predictor, geom=geom)
         ec = None
+
     data = {'s_obs': s_obs, 'K': np.moveaxis(assemble_tril(np.moveaxis(K_s, 0, -1)), (0, 1), (-2, -1)),
             'ec': ec}
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
 
     predens.predict(dailytemp)
     predens.predict_mean_depth(depthranges)
@@ -149,7 +147,6 @@ def process_dalton(
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
 
-    ir.register_dates(dailytemp.index)  # for h5 export
     qdict = {'quantiles': (0.1, 0.9)}
     expecs = [('e_mean_period', 'mean'), ('yf', 'mean'), ('e_mean_depth', 'mean'),
               ('e_mean_period', 'var'), ('e_mean_depth', 'var'), ('e_mean_period', 'quantile', qdict),

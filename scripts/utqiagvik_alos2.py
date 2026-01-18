@@ -7,11 +7,11 @@ import numpy as np
 from pathlib import Path
 
 from analysis import (
-    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS, get_dates_obs_str,
-    InversionResultsISMmap, MulticlassInversionResultsISMmap, export_defo_history_hdf5, read_meta_from_json,
+    StefanPredictor, PredictionEnsemble, read_referenced_InSAR, InversionProcessorIS,
+    InversionResultsISMmap, MulticlassInversionResultsISMmap, read_meta_from_json,
     )
 from simulation import StefanStratigraphySmoothingSpline
-from forcing import forcing_merra_meta, forcing_daily_noaa_meta
+from forcing import forcing_daily_noaa_meta
 from scripts.pathnames import paths
 
 params_distribution = {
@@ -97,9 +97,6 @@ def process_mintpy_downscaled(
 
     # store an atmospherically referenced deformation history
     geospatial.save_geotiff(data['s_obs'], pathout / 's_obs.tif')
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
     
     predens.predict(dailytemp)
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -110,7 +107,6 @@ def process_mintpy_downscaled(
     ip.delete_temporary(pathout)
     ir = IR.from_file(pathout / 'ir.p')
 
-    ir.register_dates(dailytemp.index)  # for h5 export
     # qdict = {'quantiles': (0.1, 0.9)}#('e', 'quantile', qdict)
     expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ]
     for expec in expecs:
@@ -144,7 +140,7 @@ def process_mintpy_old(
     meta = read_meta_from_json(fnmeta)
     dailytemp, ind_scenes = forcing_daily_noaa_meta(pforcing, meta, year=year, convert_temperature=False)
 
-    '''
+    
     if xy_ref is not None:
         data, geospatial = read_referenced_InSAR(
             fnunw, fnK, xy_ref, wavelength=meta['wavelength'], fndist=pathout / 'distance_cal.p',
@@ -156,14 +152,14 @@ def process_mintpy_old(
         ec = None
     else:
         raise NotImplementedError("ecotype input requires special consideration")
-    '''
+    
     IP = InversionProcessorIS
     if not ecotype:
         IR = InversionResultsISMmap
     else:
         IR = MulticlassInversionResultsISMmap
     kwargs = {}
-    '''
+    
     predictor = StefanPredictor()
 
     strat = StefanStratigraphySmoothingSpline(N=N, dist=params_distribution)
@@ -174,9 +170,6 @@ def process_mintpy_old(
 
     # store an atmospherically referenced deformation history
     geospatial.save_geotiff(data['s_obs'], pathout / 's_obs.tif')
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial, meta['geom'], K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
     
     predens.predict(dailytemp)
     ip = IP(predens, geospatial=geospatial, blocksize=512, **kwargs)
@@ -185,10 +178,9 @@ def process_mintpy_old(
         overwrite=overwrite)
     ir.save(pathout / 'ir.p')
     ip.delete_temporary(pathout)
-    '''
+    
     ir = IR.from_file(pathout / 'ir.p')
 
-    ir.register_dates(dailytemp.index)  # for h5 export
     # qdict = {'quantiles': (0.1, 0.9)}#('e', 'quantile', qdict)
     expecs = [('yf', 'mean'), ('e', 'mean'), ('e', 'var'), ]
     

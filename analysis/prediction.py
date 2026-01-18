@@ -147,6 +147,10 @@ class PredictionEnsemble():
     def ygrid(self):
         return np.arange(0, self.depth, step=self.dy)
 
+    def date(self, ind):
+        dates = self.meta['dates']
+        return dates[ind]
+
     def extract_predictions(
             self, indices, field='s_los', C_obs=None, rng=None, reference_only=False, **kwargs):
         # need kwargs for downstream compatibility

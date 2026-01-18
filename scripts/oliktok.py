@@ -9,9 +9,8 @@ import datetime
 import os
 from pathlib import Path
 
-from analysis import (StefanPredictor, PredictionEnsemble, enforce_directory, read_K, add_atmospheric_K, 
-                      read_motion, InversionProcessorIS, InversionResultsIS, hdf5_attrs_from_tif,
-                      export_defo_history_hdf5, get_dates_obs_str)
+from analysis import (StefanPredictor, PredictionEnsemble, read_K, add_atmospheric_K, 
+                      read_motion, InversionProcessorIS, InversionResultsIS)
 
 from simulation import StefanStratigraphySmoothingSpline, StratigraphyMultiple
 from forcing import read_daily_noaa_forcing, parse_dates
@@ -73,9 +72,10 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     Nbatch = 1
 
     s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
-    attrs = hdf5_attrs_from_tif(fnunw)
 
-    attrs.pop('BAND_DESCRIPTIONS', None)
+    # store an atmospherically referenced deformation history; for internal appraisal of data quality
+    geospatial.save_geotiff(s_obs, pathout / 's_obs.tif')
+
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric_K(K, var_atmo)
 
@@ -83,8 +83,6 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     print(f's_obs: {s_obs.shape}; K: {K.shape}')
 
     dailytemp, ind_scenes = oliktok_forcing(fnforcing, year=year, remove_last=False)
-    dt_strlist = dailytemp.index.strftime('%Y-%m-%d').tolist()
-    depth_list = [f'{i}-{i+2}' for i in range(0, 1500, 2)]
 
     print(f'daily temperature: {dailytemp.shape}, number of scenes: {len(ind_scenes)}')
 
@@ -110,9 +108,6 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
         ('frac_thawed', None, {'ind_scene': ind_scenes[-1]}),
         ('e_mean_period', 'var'), ('e_mean_period', 'mean'),
         ('e_mean_period', 'quantile', {'quantiles': (0.1, 0.9)})]
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
 
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}

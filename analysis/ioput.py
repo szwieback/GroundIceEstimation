@@ -13,6 +13,8 @@ from rasterio.crs import CRS
 from rasterio.transform import Affine
 from collections.abc import Iterable
 
+dateformat = '%Y%m%d'
+
 class Geospatial():
     def __init__(self, transform, crs, shape=None):
         self.transform = transform
@@ -540,25 +542,21 @@ def hdf5_attributes(nodata=np.nan, dtype='float32', geospatial=None):
             None, None, None, None, nodata=nodata, dtype=dtype)
     return attrs
         
-def export_defo_history_hdf5(
-        s_obs, pout, geospatial, geom, dates_obs_str=None, K=None, flip_sign=True,
+def export_deformation_hdf5(
+        s_obs, pout, geospatial, geom, dates_obs=None, K=None, flip_sign=True, 
         fn_defo='defo_history.h5', fn_K_diag='defo_history_covariance_diagonal.h5'):
     attributes = hdf5_attributes(geospatial=geospatial)
     attributes['INC_ANGLE'] = geom['ia'] * 180 / np.pi  # degrees
     if flip_sign:
         s_obs = s_obs * (-1)  # so subsidence is negative
+    if dates_obs is not None: # takes precedence
+        dates_obs_str = [d.strftime(dateformat) for d in dates_obs]
     save_hdf5(s_obs, attributes, 'data', pout / fn_defo, layer_dict={'dates': dates_obs_str})
     if K is not None:
         K_diag = np.moveaxis(np.diagonal(K), -1, 0).copy()  # diagonal insanely messes up the ordering
         K_diag[np.isnan(s_obs)] = np.nan  # needs masking
         save_hdf5(
             K_diag, attributes, 'variance', pout / fn_K_diag, layer_dict={'dates': dates_obs_str})
-
-def get_dates_obs_str(dailytemp, ind_scenes):
-    from datetime import timedelta
-    dates_obs = [
-        (dailytemp.index[0] + timedelta(days=ind_scene)).strftime('%Y%m%d') for ind_scene in ind_scenes]
-    return dates_obs
 
 def read_meta_from_json(fnmeta):
     import json

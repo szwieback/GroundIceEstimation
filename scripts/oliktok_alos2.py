@@ -9,22 +9,18 @@ import datetime
 import os
 from pathlib import Path
 
-from analysis import (StefanPredictor, PredictionEnsemble, enforce_directory, export_defo_history_hdf5,
-        read_K, add_atmospheric_K, InversionProcessorIS, InversionResultsIS, read_motion,
-        hdf5_attrs_from_tif, get_dates_obs_str)
-from simulation import (
-    StefanStratigraphySmoothingSpline, StratigraphyMultiple,
-    StefanStratigraphyConstantE)
+from analysis import (StefanPredictor, PredictionEnsemble, read_K, add_atmospheric_K, InversionProcessorIS, 
+                      InversionResultsIS, read_motion)
+from simulation import (StefanStratigraphySmoothingSpline, StratigraphyMultiple)
 from forcing import read_daily_noaa_forcing, parse_dates
-
 
 geom = {'ia': 31.61 / 180 * np.pi}
 wavelength = 0.236
 
 params_distribution = {
     'Nb': 12, 'expb': 2.0, 'b0': 0.10, 'bm': 0.80,
-    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean': -3, 'coeff_std': 3, 'coeff_corr': 0.7},
-    'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},   # low_above 0.5/0.6/0.7
+    'e': {'low': 0.00, 'high': 0.95, 'coeff_mean':-3, 'coeff_std': 3, 'coeff_corr': 0.7},
+    'wsat': {'low_above': 0.4, 'high_above': 0.8, 'low_below': 0.8, 'high_below': 1.0},  # low_above 0.5/0.6/0.7
     # 'soil': {'high_horizon': 0.20, 'low_horizon': 0.15, 'organic_above': 0.1,
     #          'mineral_above': 0.00, 'mineral_below': 0.35, 'organic_below': 0.05},
     'soil': {'high_horizon': 0.15, 'low_horizon': 0.10, 'organic_above': 0.12,
@@ -73,17 +69,16 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     N = 10000
     Nbatch = 1
 
-
-
     print(f'wavelength is {wavelength} cm')
     s_obs, geospatial = read_motion(fnunw, wavelength=wavelength)
-    attrs = hdf5_attrs_from_tif(fnunw)
-    attrs.pop('BAND_DESCRIPTIONS', None)
     K, geospatial_K = read_K(fnK)
     K = add_atmospheric_K(K, var_atmo)
 
     assert geospatial == geospatial_K
     print(f's_obs: {s_obs.shape}; K: {K.shape}')
+
+    # store an atmospherically referenced deformation history; for internal appraisal of data quality
+    geospatial.save_geotiff(s_obs, pathout / 's_obs.tif')
 
     dailytemp, ind_scenes = oliktok_forcing(fnforcing, year=year, remove_last=False)
 
@@ -104,11 +99,6 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
 
     ir.save(os.path.join(pathout, 'ir.p'))
     ir = InversionResultsIS.from_file(os.path.join(pathout, 'ir.p'))
-    ir.register_dates(dailytemp.index)
-    export_defo_history_hdf5(
-        data['s_obs'], pathout, geospatial_K, geom, K=data['K'],
-        dates_obs_str=get_dates_obs_str(dailytemp, ind_scenes))
-
 
     expecs = [
         ('e', 'mean'), ('e', 'var'), ('yf', 'mean'),
@@ -119,9 +109,8 @@ def process_oliktok(year=2023, rmethod='hadamard', sensor='s1', remove_last=True
     for expec in expecs:
         kwargs = expec[2] if len(expec) == 3 else {}
         ir.export_expectation(pathout, param=expec[0], etype=expec[1], hdf5=True, **kwargs)
-    
+
 if __name__ == '__main__':
     stack_method = 'mintpy'
     process_oliktok(year=2024, rmethod=stack_method, sensor='alos2', remove_last=False)
-
 
